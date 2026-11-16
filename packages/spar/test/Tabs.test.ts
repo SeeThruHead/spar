@@ -7,7 +7,6 @@ import {
   Fiber,
   Function,
   Layer,
-  Option,
   Predicate,
   PubSub,
   Ref,
@@ -65,10 +64,14 @@ const browser = Effect.gen(function* () {
   })
 })
 
-const openTabIn = Effect.fnUntraced(function* (tabs: Tabs.Tabs, scope: Scope.Scope) {
+const openTabIn = Effect.fnUntraced(function* (
+  tabs: Tabs.Tabs,
+  scope: Scope.Scope,
+  reactions: ReadonlyArray<Store.Reaction<State>> = [],
+) {
   const stored = yield* KeyValueStore.KeyValueStore
   const built = yield* Layer.buildWithScope(
-    Ledger.layerDurable({ state: State, compactAfter: 3 }).pipe(
+    Ledger.layerDurable({ state: State, compactAfter: 3 }, reactions).pipe(
       Layer.provide(SecureRandom.layerWebCrypto),
       Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, stored)),
       Layer.provide(Layer.succeed(Tabs.Tabs, tabs)),
@@ -79,7 +82,10 @@ const openTabIn = Effect.fnUntraced(function* (tabs: Tabs.Tabs, scope: Scope.Sco
   return Context.get(built, Ledger)
 })
 
-const openTab = (tabs: Tabs.Tabs) => Effect.flatMap(Effect.scope, (scope) => openTabIn(tabs, scope))
+const openTabWith = (tabs: Tabs.Tabs, reactions: ReadonlyArray<Store.Reaction<State>>) =>
+  Effect.flatMap(Effect.scope, (scope) => openTabIn(tabs, scope, reactions))
+
+const openTab = (tabs: Tabs.Tabs) => openTabWith(tabs, [])
 
 const pendingKeys = Effect.gen(function* () {
   const stored = yield* KeyValueStore.KeyValueStore
@@ -107,8 +113,16 @@ const tabThatStalls = Effect.fnUntraced(function* (tabs: Tabs.Tabs) {
   const asking = yield* Effect.forkChild(tab.commands.added({ amount: 4 }), {
     startImmediately: true,
   })
+  const alsoAsking = yield* Effect.forkChild(tab.commands.added({ amount: 3 }), {
+    startImmediately: true,
+  })
 
-  return { close: Effect.andThen(Fiber.interrupt(asking), Scope.close(scope, Exit.void)) }
+  return {
+    close: Fiber.interrupt(asking).pipe(
+      Effect.andThen(Fiber.interrupt(alsoAsking)),
+      Effect.andThen(Scope.close(scope, Exit.void)),
+    ),
+  }
 })
 
 const twoTabs = Effect.gen(function* () {
@@ -197,14 +211,27 @@ describe("a store kept on the device with several tabs open", () => {
       const tabs = yield* browser
       const closing = yield* tabThatStalls(tabs("closing"))
 
-      expect(yield* pendingKeys).toHaveLength(1)
+      expect(yield* pendingKeys).toHaveLength(2)
 
       yield* closing.close
 
-      const next = yield* openTab(tabs("next"))
+      const seen = yield* Ref.make<ReadonlyArray<number>>([])
+      const next = yield* openTabWith(tabs("next"), [
+        Store.after(Ledger.actions.added, ({ amount }) =>
+          Ref.update(seen, (all) => [...all, amount]),
+        ),
+      ])
 
-      expect(yield* next.select.total.get).toBe(4)
-      expect((yield* next.log.get).map((entry) => entry.action)).toEqual(["added"])
+      yield* next.commands.noted({ text: "a note is not an amount" })
+      yield* Effect.yieldNow
+
+      expect(yield* next.select.total.get).toBe(7)
+      expect(yield* Ref.get(seen)).toEqual([4, 3])
+      expect((yield* next.log.get).map((entry) => entry.action)).toEqual([
+        "added",
+        "added",
+        "noted",
+      ])
       expect(yield* pendingKeys).toEqual([])
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )
@@ -216,7 +243,7 @@ describe("a store kept on the device with several tabs open", () => {
       const other = yield* openTab(tabs("other"))
 
       expect(yield* other.select.total.get).toBe(0)
-      expect(yield* pendingKeys).toHaveLength(1)
+      expect(yield* pendingKeys).toHaveLength(2)
 
       yield* slow.close
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
@@ -245,6 +272,26 @@ describe("a store kept on the device with several tabs open", () => {
         'Abandoned: An earlier tab asked test/Ledger for "added" and closed before it was done. This version cannot carry it out, so it was dropped.',
       ])
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
+  it.live("with devtools on, what another tab did can be stepped back to", () =>
+    Effect.gen(function* () {
+      const { first, second } = yield* twoTabs
+
+      yield* first.commands.added({ amount: 5 })
+      yield* second.commands.added({ amount: 2 })
+      yield* reaches(first, 7)
+      yield* first.travelTo(1)
+
+      expect((yield* first.state.get).total).toBe(5)
+
+      yield* first.travelTo(2)
+
+      expect((yield* first.state.get).total).toBe(7)
+    }).pipe(
+      Effect.provideService(Store.Inspector, { keepStates: 10, register: () => Effect.void }),
+      Effect.provide(KeyValueStore.layerMemory),
+    ),
   )
 
   it.live("a tab opened later starts from everything already done", () =>
@@ -359,6 +406,19 @@ describe("tabs in a browser", () => {
     }).pipe(Effect.provide(Tabs.layerBrowser)),
   )
 
+  it.live("when the browser cannot say which tabs are open, every tab counts as still open", () =>
+    Effect.gen(function* () {
+      const locks = vi.spyOn(navigator, "locks", "get").mockReturnValue({
+        ...queueingLocks(),
+        query: () => Promise.reject(new Error("the lock manager is gone")),
+      })
+      const tabs = yield* Tabs.Tabs
+
+      expect(yield* tabs.here("ledger/tab/a")).toBe(true)
+      locks.mockRestore()
+    }).pipe(Effect.provide(Tabs.layerBrowser)),
+  )
+
   it.live("where the browser has no locks the work still runs", () =>
     Effect.gen(function* () {
       const tabs = yield* Tabs.Tabs
@@ -378,9 +438,12 @@ describe("tabs in a browser", () => {
         Effect.sync(() => new BroadcastChannel("spar/tabs")),
         (channel) => Effect.sync(() => channel.close()),
       )
-      const told = yield* Effect.forkChild(Stream.runHead(tabs.announced("ledger")), {
-        startImmediately: true,
-      })
+      const times = yield* Ref.make(0)
+      const closed = vi.spyOn(BroadcastChannel.prototype, "close")
+      const told = yield* Effect.forkChild(
+        Stream.runForEach(tabs.announced("ledger"), () => Ref.update(times, (count) => count + 1)),
+        { startImmediately: true },
+      )
 
       yield* Effect.sync(() =>
         neighbour.addEventListener("message", (event) =>
@@ -392,7 +455,19 @@ describe("tabs in a browser", () => {
       yield* Effect.sync(() => neighbour.postMessage("ledger"))
 
       expect(yield* Deferred.await(heard)).toBe("ledger")
-      expect(Option.isSome(yield* Fiber.join(told))).toBe(true)
+
+      yield* Effect.sleep("10 millis")
+      yield* Fiber.interrupt(told)
+
+      expect(yield* Ref.get(times)).toBe(1)
+      expect(closed.mock.calls).toHaveLength(0)
+
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          expect(closed.mock.calls.length).toBeGreaterThan(0)
+          closed.mockRestore()
+        }),
+      )
     }).pipe(Effect.provide(Tabs.layerBrowser)),
   )
 

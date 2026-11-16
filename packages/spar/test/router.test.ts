@@ -1,6 +1,6 @@
-import { describe, expect, it } from "@effect/vitest"
+import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
-import { Effect, Layer, Option, Ref, Schema, pipe } from "effect"
+import { Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
 import { Handle, Router, View } from "spar"
 import * as Testing from "spar/testing"
 import {
@@ -37,12 +37,12 @@ const at = (url: string): Router.Location => {
 const paramsAt = <Params>(target: Router.Route<Params>, url: string) =>
   Option.map(target.parse(at(url)), (matched) => matched.params)
 
-const Thread = (loads: Ref.Ref<ReadonlyArray<string>>) =>
+const Thread = (loads: Ref.Ref<ReadonlyArray<string>>, server: Latch.Latch) =>
   pipe(
     View.connect(
       Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
         yield* Ref.update(loads, (all) => [...all, id])
-        yield* Effect.sleep("5 millis")
+        yield* Latch.whenOpen(server, Effect.void)
 
         return { subject: `Thread ${id}` }
       }),
@@ -68,7 +68,11 @@ const Settings = (mounts: Ref.Ref<number>) =>
     }),
   )(SettingsView)
 
-const Shell = (loads: Ref.Ref<ReadonlyArray<string>>, mounts: Ref.Ref<number>) =>
+const Shell = (
+  loads: Ref.Ref<ReadonlyArray<string>>,
+  mounts: Ref.Ref<number>,
+  server: Latch.Latch,
+) =>
   View.connect(
     Effect.fnUntraced(function* () {
       const router = yield* Router.Router
@@ -84,7 +88,7 @@ const Shell = (loads: Ref.Ref<ReadonlyArray<string>>, mounts: Ref.Ref<number>) =
         page: yield* Router.outlet({
           routes: [
             Router.on(home, HomeView),
-            Router.on(thread, Thread(loads)),
+            Router.on(thread, Thread(loads, server)),
             Router.on(search, SearchView),
             Router.on(settings, Settings(mounts)),
           ],
@@ -97,10 +101,11 @@ const Shell = (loads: Ref.Ref<ReadonlyArray<string>>, mounts: Ref.Ref<number>) =
 const app = Effect.fnUntraced(function* () {
   const loads = yield* Ref.make<ReadonlyArray<string>>([])
   const mounts = yield* Ref.make(0)
+  const server = yield* Latch.make(true)
 
-  yield* Testing.mount(Shell(loads, mounts))
+  yield* Testing.mount(Shell(loads, mounts, server))
 
-  return { loads: Ref.get(loads), mounts: Ref.get(mounts) }
+  return { loads: Ref.get(loads), mounts: Ref.get(mounts), server }
 })
 
 const heading = (name: string) => Testing.find("heading", name)
@@ -146,11 +151,13 @@ describe("the router", () => {
   it.live("shows the page for the current URL and changes page when a link is clicked", () =>
     Effect.gen(function* () {
       const router = yield* Router.Router
-      const { loads } = yield* app()
+      const { loads, server } = yield* app()
 
       yield* heading("Home")
+      yield* Latch.close(server)
       yield* Testing.click("link", "Welcome thread")
       yield* Testing.findText("Loading thread welcome")
+      yield* Latch.open(server)
       yield* heading("Thread welcome")
       yield* router.go(thread, { id: "second" })
       yield* heading("Thread second")
@@ -212,6 +219,28 @@ describe("the router", () => {
     }).pipe(Effect.provide(Router.Router.layerMemory("/settings/profile"))),
   )
 
+  it.effect("going back steps through each earlier page in turn", () =>
+    Effect.gen(function* () {
+      const router = yield* Router.Router
+      const path = Effect.map(router.location.get, (location) => location.pathname)
+
+      yield* router.go(thread, { id: "one" })
+      yield* router.go(thread, { id: "two" })
+      yield* router.go(thread, { id: "three" })
+      yield* router.back
+
+      expect(yield* path).toBe("/threads/two")
+
+      yield* router.back
+
+      expect(yield* path).toBe("/threads/one")
+
+      yield* router.back
+
+      expect(yield* path).toBe("/")
+    }).pipe(Effect.provide(Router.Router.layerMemory("/"))),
+  )
+
   it.live("focus moves to the page after a navigation", () =>
     Effect.gen(function* () {
       yield* app()
@@ -224,14 +253,19 @@ describe("the router", () => {
   it.live("in a browser it drives the address bar and follows back and forward", () =>
     Effect.gen(function* () {
       const router = yield* Router.Router
+      const scrolled = vi.spyOn(window, "scrollTo")
+      const wentBack = vi.spyOn(window.history, "back")
 
       yield* router.go(thread, { id: "welcome" })
 
       expect(window.location.pathname).toBe("/threads/welcome")
+      expect(scrolled.mock.calls).toEqual([[0, 0]])
 
       yield* router.replace(search, { kind: "mail" })
 
       expect(window.location.pathname).toBe("/search/mail")
+      expect(scrolled.mock.calls).toHaveLength(1)
+      expect(wentBack.mock.calls).toHaveLength(0)
 
       yield* Effect.sync(() => window.history.replaceState(null, "", "/settings/billing"))
       yield* Effect.sync(() => window.dispatchEvent(new PopStateEvent("popstate")))
@@ -240,6 +274,10 @@ describe("the router", () => {
       expect((yield* router.location.get).pathname).toBe("/settings/billing")
 
       yield* router.back
+
+      expect(wentBack.mock.calls).toHaveLength(1)
+      scrolled.mockRestore()
+      wentBack.mockRestore()
     }).pipe(Effect.provide(Layer.fresh(Router.Router.layerBrowser))),
   )
 })

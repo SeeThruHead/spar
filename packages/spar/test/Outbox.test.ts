@@ -172,6 +172,9 @@ describe("Outbox", () => {
       expect(dead.map((lost) => [lost.key, lost.channel, lost.payload])).toEqual([
         ["garbled", "unreadable", "{ not what was written"],
       ])
+      expect(dead[0]?.reason).toBe(
+        "What was saved for this item could not be read, so it was not sent.",
+      )
       expect(yield* outbox.pending.get).toBe(0)
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )

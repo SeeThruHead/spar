@@ -1,10 +1,28 @@
 import { describe, expect, it } from "vitest"
-import { check } from "../src/transform/check.ts"
+import { check, format, isViewFile } from "../src/transform/check.ts"
 
 const rules = (source: string): ReadonlyArray<string> =>
   check("View.tsx", source).map((violation) => violation.rule)
 
 describe("the JSX build check", () => {
+  it("says where each problem is, one to a line", () => {
+    const source = `export const List = ({ items }) => <ul>{items.map((item) => <li>{item}</li>)}</ul>
+export const Panel = ({ open }) => <div>{open ? <p>Open</p> : "Closed"}</div>`
+    const lines = format(check("src/Views.tsx", source)).split("\n")
+
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/^src\/Views\.tsx:1:\d+ jsx-only-in-views: \S/)
+    expect(lines[1]).toMatch(/^src\/Views\.tsx:2:\d+ jsx-only-in-views: \S/)
+  })
+
+  it("only looks at view files, whatever a bundler adds after the name", () => {
+    expect(isViewFile("src/RowView.tsx")).toBe(true)
+    expect(isViewFile("src/RowView.tsx?v=3")).toBe(true)
+    expect(isViewFile("src/Row.ts")).toBe(false)
+    expect(isViewFile("src/RowView.tsx.map")).toBe(false)
+    expect(isViewFile("src/notes.tsxt")).toBe(false)
+  })
+
   it("accepts a view whose body is JSX with reactive holes", () => {
     const source = `
       export const Row = ({ title, onRemove }) => (

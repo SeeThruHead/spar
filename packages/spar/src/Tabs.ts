@@ -1,4 +1,4 @@
-import { Context, Effect, Function, Layer, Option, Stream } from "effect"
+import { Context, Effect, Function, Layer, Option, Schema, Stream } from "effect"
 import type { Scope } from "effect"
 import { events, on } from "./internal/listen.ts"
 
@@ -57,9 +57,14 @@ const exclusively = <A, E, R>(
 const stay = (name: string): Effect.Effect<void, never, Scope.Scope> =>
   Effect.asVoid(Effect.acquireRelease(take(name), giveBack))
 
-const heldNames = (locks: LockManager): Effect.Effect<ReadonlyArray<string>> =>
+class Unanswered extends Schema.TaggedError<Unanswered, { readonly brand: unique symbol }>()(
+  "Unanswered",
+  { cause: Schema.Defect() },
+) {}
+
+const heldNames = (locks: LockManager): Effect.Effect<ReadonlyArray<string>, Unanswered> =>
   Effect.map(
-    Effect.promise(() => locks.query()),
+    Effect.tryPromise({ try: () => locks.query(), catch: (cause) => new Unanswered({ cause }) }),
     (snapshot) =>
       Option.toArray(Option.fromNullishOr(snapshot.held))
         .flat()
@@ -70,6 +75,7 @@ const here = (name: string): Effect.Effect<boolean> =>
   lockManagers.pipe(
     Effect.flatMap(Effect.forEach(heldNames)),
     Effect.map((names) => names.flat().includes(name)),
+    Effect.orElseSucceed(() => true),
   )
 
 const dataOf = (event: Event): unknown => Reflect.get(event, "data")

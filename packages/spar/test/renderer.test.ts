@@ -168,7 +168,7 @@ describe("the renderer", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       expect(Cause.pretty(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toContain(
-        "rows that share a key: alpha",
+        "rows that share a key: alpha. Each row needs its own key.",
       )
     }),
   )

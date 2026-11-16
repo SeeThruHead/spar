@@ -15,5 +15,4 @@ In the order I would do them.
 7. **Server rendering and hydration.** Not started.
 8. **Docs site.** The docs are markdown in this folder. There is no generated site and there are no
    diagrams.
-9. **Mutation testing.** Not set up; coverage is 100% but mutants have not been run.
-10. **Drag and drop.** The proof app does not port the original screen's drag reordering.
+9. **Drag and drop.** The proof app does not port the original screen's drag reordering.

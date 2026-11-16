@@ -171,6 +171,8 @@ describe("overlays", () => {
   it.live("a menu sits by its button and closes on Escape or a press anywhere else", () =>
     Effect.gen(function* () {
       const box = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      const stopped = vi.spyOn(window, "removeEventListener")
+      const middle = (window.innerHeight - 30) / 2
 
       box.mockReturnValue(new DOMRect(40, 100, 80, 30))
 
@@ -193,8 +195,26 @@ describe("overlays", () => {
       yield* Testing.eventually(() =>
         expect([menu.style.top, menu.style.bottom]).toEqual(["", `${window.innerHeight - 700}px`]),
       )
+      box.mockReturnValue(new DOMRect(40, middle, 80, 30))
+
+      yield* Effect.sync(() => document.dispatchEvent(new Event("scroll")))
+      yield* Testing.eventually(() =>
+        expect([menu.style.top, menu.style.bottom]).toEqual([`${middle + 30}px`, ""]),
+      )
+
+      box.mockReturnValue(new DOMRect(40, middle + 11, 80, 30))
+
+      yield* Effect.sync(() => window.dispatchEvent(new Event("resize")))
+      yield* Testing.eventually(() =>
+        expect([menu.style.top, menu.style.bottom]).toEqual([
+          "",
+          `${window.innerHeight - middle - 11}px`,
+        ]),
+      )
       yield* Effect.sync(() => fireEvent.pointerDown(menu))
       yield* Effect.sync(() => fireEvent.pointerDown(more))
+      yield* Effect.sync(() => fireEvent.keyDown(document.body, { key: "a" }))
+      yield* Effect.sync(() => document.dispatchEvent(new Event("keydown")))
       yield* Effect.sleep("20 millis")
 
       expect(screen.getByRole("menu", { name: "More" })).toBe(menu)
@@ -208,6 +228,12 @@ describe("overlays", () => {
       yield* escape
       yield* Testing.gone("menu")
 
+      expect(stopped.mock.calls.filter(([type]) => type === "resize")).toHaveLength(2)
+      expect(
+        stopped.mock.calls.filter(([type]) => type === "scroll").map(([, , capture]) => capture),
+      ).toEqual([true, true])
+
+      stopped.mockRestore()
       box.mockRestore()
     }),
   )

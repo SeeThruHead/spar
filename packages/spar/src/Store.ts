@@ -286,7 +286,7 @@ const onDevice = <State, Encoded, A extends Actions<State>, S extends Selectors<
 
       const orphans = Effect.gen(function* () {
         const all = yield* intents.keys
-        const owners = [...new Set(all.map(ownerOf))].filter((owner) => owner !== session)
+        const owners = [...new Set(all.map(ownerOf))]
         const gone = yield* Effect.filter(owners, (owner) =>
           Effect.map(tabs.here(tabOf(owner)), (open) => !open),
         )

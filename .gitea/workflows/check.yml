@@ -64,3 +64,15 @@ jobs:
         run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough --concurrency 1
         env:
           SPAR_BROWSER: webkit
+  mutation:
+    runs-on: boat
+    needs: browser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Mutation testing of the framework, failing under 90 percent
+        run: bun run moon run spar:mutation

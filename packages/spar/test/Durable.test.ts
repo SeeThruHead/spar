@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Effect, Layer, Ref, Schema } from "effect"
+import { Array, Context, Effect, Layer, Ref, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import { TestClock } from "effect/testing"
@@ -98,6 +98,58 @@ describe("a store kept on the device", () => {
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )
 
+  it.effect("an old entry left beside a newer saved state is not applied a second time", () =>
+    Effect.gen(function* () {
+      const stored = yield* KeyValueStore.KeyValueStore
+
+      yield* session((journal) =>
+        Effect.forEach([1, 2, 3, 4, 5], (amount) => journal.commands.added({ amount }), {
+          discard: true,
+        }),
+      )
+      yield* stored.set(
+        "spar/store/test/Journal/log/000000000003",
+        JSON.stringify({ id: "stale", action: "added", payload: { amount: 100 }, seq: 3 }),
+      )
+
+      expect((yield* session((journal) => journal.state.get)).total).toBe(15)
+    }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
+  it.effect("the log a store shows stops growing at its newest thousand entries", () =>
+    Effect.gen(function* () {
+      const log = yield* session((journal) =>
+        Effect.andThen(
+          Effect.forEach(
+            Array.makeBy(1001, (index) => index + 1),
+            (amount) => journal.commands.added({ amount }),
+            { discard: true },
+          ),
+          journal.log.get,
+        ),
+      )
+
+      expect(log).toHaveLength(1000)
+      expect(log.at(0)?.seq).toBe(2)
+    }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
+  it.effect("without devtools no past state is kept, so stepping back shows the present", () =>
+    Effect.gen(function* () {
+      const shown = yield* session((journal) =>
+        journal.commands
+          .added({ amount: 1 })
+          .pipe(
+            Effect.andThen(journal.commands.added({ amount: 2 })),
+            Effect.andThen(journal.travelTo(1)),
+            Effect.andThen(journal.state.get),
+          ),
+      )
+
+      expect(shown.total).toBe(3)
+    }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
   it.effect.prop(
     "any run of commands restores to the same state after a restart",
     [Schema.Array(Amount)],
@@ -157,6 +209,14 @@ describe("a store kept on the device", () => {
           yield* TestClock.adjust("1 second")
         }).pipe(Effect.provide(withOutbox))
         yield* stored.set(
+          "spar/outbox/and-one-more",
+          JSON.stringify({
+            channel: "test/Journal/noted",
+            payload: { text: "and one more" },
+            seq: 3,
+          }),
+        )
+        yield* stored.set(
           "spar/outbox/crashed-before-the-log",
           JSON.stringify({
             channel: "test/Journal/noted",
@@ -165,11 +225,11 @@ describe("a store kept on the device", () => {
           }),
         )
         yield* stored.set(
-          "spar/outbox/and-one-more",
+          "spar/outbox/logged-but-not-yet-sent",
           JSON.stringify({
             channel: "test/Journal/noted",
-            payload: { text: "and one more" },
-            seq: 3,
+            payload: { text: "logged, still to send" },
+            seq: 1,
           }),
         )
 
@@ -184,7 +244,12 @@ describe("a store kept on the device", () => {
         const expected = ["logged and sent", "typed just before a crash", "and one more"]
 
         expect(restored.notes).toEqual(expected)
-        expect(yield* Ref.get(sent)).toEqual(expected)
+        expect(yield* Ref.get(sent)).toEqual([
+          "logged and sent",
+          "logged, still to send",
+          "typed just before a crash",
+          "and one more",
+        ])
       }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )
 })

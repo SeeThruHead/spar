@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@effect/vitest"
+import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
 import { Effect, Option, SubscriptionRef, pipe } from "effect"
 import { TestClock } from "effect/testing"
@@ -52,11 +52,15 @@ describe("handles", () => {
 
       const trigger = yield* find("button", "Pick a colour")
       const red = yield* find("option", "Red")
+      const scrolled = vi.spyOn(trigger, "scrollIntoView")
 
       yield* eventually(() => expect(document.activeElement).toBe(red))
       yield* Effect.sync(() => fireEvent.click(red))
       yield* gone("listbox")
       yield* eventually(() => expect(document.activeElement).toBe(trigger))
+      yield* eventually(() =>
+        expect(scrolled.mock.calls).toEqual([[{ block: "nearest", inline: "nearest" }]]),
+      )
     }),
   )
 

@@ -55,6 +55,23 @@ describe("cells", () => {
     expect(log.read()).toEqual(["second 1"])
   })
 
+  it("a listener on part of a value hears only when that part changes", () => {
+    const cell = Cell.make({ name: "Ada", visits: 1 })
+    const log = Cell.make<ReadonlyArray<string>>([])
+
+    cell.subscribe(
+      Cell.mapped(
+        (who) => who.name,
+        (name) => log.write([...log.read(), name]),
+      ),
+    )
+    cell.write({ name: "Ada", visits: 2 })
+    cell.write({ name: "Grace", visits: 2 })
+    cell.write({ name: "Grace", visits: 3 })
+
+    expect(log.read()).toEqual(["Ada", "Grace"])
+  })
+
   it("everything an owner holds is stopped once when it is released", () => {
     const { cell, log, note } = heard()
     const owner = Cell.owner()
