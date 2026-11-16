@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Outbox, View } from "spar"
+import { Devtools, Outbox, View } from "spar"
 import { AppView } from "./AppView.tsx"
 import { Counter } from "./counter/Counter.ts"
 import { CounterStore } from "./counter/CounterStore.ts"
@@ -16,6 +16,7 @@ export const Root = View.connect(
       counter: yield* View.child(Counter, {}),
       todos: yield* View.child(Todos, {}),
       mail: yield* View.child(Mail, {}),
+      tools: yield* View.child(Devtools.Panel, {}),
     }
   }),
 )(AppView)
@@ -25,7 +26,7 @@ export const layer = Layer.mergeAll(
   TodoStore.layerDurable({ state: TodoState }),
   MailStoreLive,
 ).pipe(
-  Layer.provideMerge(Layer.mergeAll(MailApi.layer, Outbox.Outbox.layer)),
+  Layer.provideMerge(Layer.mergeAll(MailApi.layer, Outbox.Outbox.layer, Devtools.layer)),
   Layer.provide(Outbox.layerBrowser),
   Layer.provide(SecureRandom.layerWebCrypto),
 )

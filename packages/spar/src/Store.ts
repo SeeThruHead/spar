@@ -1,4 +1,5 @@
 import {
+  Array,
   Context,
   Effect,
   Layer,
@@ -68,9 +69,36 @@ interface ToReactive<State> extends Struct.Lambda {
   readonly "~lambda.out": this["~lambda.in"] extends (state: never) => infer A ? Reactive<A> : never
 }
 
+type Held<State> = {
+  readonly state: State
+  readonly log: ReadonlyArray<Entry>
+  readonly trail: ReadonlyArray<{ readonly seq: number; readonly state: State }>
+  readonly viewing: number | null
+}
+
+const shown = <State>(held: Held<State>): State =>
+  Option.match(
+    Array.findFirst(held.trail, (step) => step.seq === held.viewing),
+    { onNone: () => held.state, onSome: (step) => step.state },
+  )
+
+export type Inspected = {
+  readonly key: string
+  readonly state: Reactive<unknown>
+  readonly log: Reactive<ReadonlyArray<Entry>>
+  readonly viewing: Reactive<number | null>
+  readonly travelTo: (seq: number | null) => Effect.Effect<void>
+}
+
+export const Inspector = Context.Reference<{
+  readonly register: (store: Inspected) => Effect.Effect<void>
+}>("spar/Store/Inspector", { defaultValue: () => ({ register: () => Effect.void }) })
+
 export type Shape<State, A extends Actions<State>, S extends Selectors<State>> = {
   readonly state: Reactive<State>
   readonly log: Reactive<ReadonlyArray<Entry>>
+  readonly viewing: Reactive<number | null>
+  readonly travelTo: (seq: number | null) => Effect.Effect<void>
   readonly select: { readonly [Name in keyof S]: Struct.Apply<ToReactive<State>, S[Name]> }
   readonly commands: {
     readonly [Name in keyof A & string]: (payload: PayloadOf<A[Name]>) => Effect.Effect<void>
@@ -265,9 +293,27 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const leftovers = leftBehind.flat(2)
       const journal = yield* open(leftovers)
       const sequence = yield* Ref.make(lastSeqOf(leftovers, journal.lastSeq))
-      const cell = Cell.make({ state: journal.state, log: journal.entries })
+      const opened: Held<State> = {
+        state: journal.state,
+        log: journal.entries,
+        trail: [],
+        viewing: null,
+      }
+      const cell = Cell.make(opened)
       const current = fromCell(cell)
-      const state = map(current, (snapshot) => snapshot.state)
+      const state = map(current, shown)
+      const viewing = map(current, (held) => held.viewing)
+      const travelTo = (seq: number | null): Effect.Effect<void> =>
+        Effect.sync(() => cell.write({ ...cell.read(), viewing: seq }))
+      const inspector = yield* Inspector
+
+      yield* inspector.register({
+        key,
+        state,
+        log: map(current, (held) => held.log),
+        viewing,
+        travelTo,
+      })
 
       const record = Effect.fnUntraced(function* (
         name: string,
@@ -292,7 +338,12 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           { discard: true },
         )
         yield* journal.append(entry, next)
-        cell.write({ state: next, log: [...before.log, entry].slice(-logLimit) })
+        cell.write({
+          state: next,
+          log: [...before.log, entry].slice(-logLimit),
+          trail: [...before.trail, { seq, state: next }].slice(-logLimit),
+          viewing: before.viewing,
+        })
 
         return { entry, next }
       })
@@ -324,7 +375,9 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
 
       return {
         state,
-        log: map(current, (snapshot) => snapshot.log),
+        log: map(current, (held) => held.log),
+        viewing,
+        travelTo,
         select: Struct.map(
           selectors,
           Struct.lambda<ToReactive<State>>((selector) => map(state, selector)),

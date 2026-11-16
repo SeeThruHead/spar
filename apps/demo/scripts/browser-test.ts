@@ -11,7 +11,7 @@ const shows = (locator: Locator, text: string | RegExp): Promise<void> =>
   locator.filter({ hasText: text }).first().waitFor({ timeout: 5000 })
 
 const counter = async (page: Page): Promise<void> => {
-  const section = page.getByRole("region", { name: "Counter" })
+  const section = page.getByRole("region", { name: "Counter", exact: true })
 
   await shows(section.getByLabel("Count"), /^0$/)
   await section.getByRole("button", { name: "Add one" }).click()
@@ -19,6 +19,14 @@ const counter = async (page: Page): Promise<void> => {
   await shows(section.getByLabel("Count"), /^2$/)
   await shows(section.getByLabel("Doubled"), /^4$/)
   await section.getByRole("button", { name: "Reset" }).click()
+  await shows(section.getByLabel("Count"), /^0$/)
+
+  const tools = page.getByRole("region", { name: "demo/counter/CounterStore" })
+
+  await tools.getByRole("button", { name: "Back" }).click()
+  await shows(section.getByLabel("Count"), /^2$/)
+  await shows(tools.getByLabel("demo/counter/CounterStore position"), "action 2")
+  await tools.getByRole("button", { name: "Live" }).click()
   await shows(section.getByLabel("Count"), /^0$/)
 }
 
@@ -29,7 +37,7 @@ const addTodo = async (section: Locator, title: string): Promise<void> => {
 }
 
 const todos = async (page: Page): Promise<void> => {
-  const section = page.getByRole("region", { name: "Todos" })
+  const section = page.getByRole("region", { name: "Todos", exact: true })
   const items = section.getByRole("listitem")
 
   await addTodo(section, "Buy milk")
@@ -84,7 +92,7 @@ const mail = async (page: Page): Promise<void> => {
 }
 
 const afterReload = async (page: Page): Promise<void> => {
-  const section = page.getByRole("region", { name: "Todos" })
+  const section = page.getByRole("region", { name: "Todos", exact: true })
 
   await page.reload()
   await shows(section.getByRole("listitem"), "Buy milk")
