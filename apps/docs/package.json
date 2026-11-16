@@ -1,0 +1,24 @@
+{
+  "name": "@spar/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json scripts",
+    "build": "bun scripts/build.ts",
+    "dev": "bun run build && bun scripts/serve.ts",
+    "look": "bun run build && bun scripts/look.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@spar/lint": "workspace:*",
+    "@types/bun": "1.4.3",
+    "mermaid": "12.3.0",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "playwright": "1.65.1",
+    "typescript": "7.0.2"
+  }
+}

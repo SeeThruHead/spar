@@ -4,6 +4,20 @@ Each principle says what it is and what it rules out. Rules are enforced by type
 JSX build step, never by a lint rule, and each has a file under `apps/demo/forbidden` that must fail
 to compile.
 
+How one component is put together: its Effect runs once with the props it was given and the
+services it asks for, and hands plain props to a pure view. After that, only reactive values
+touch the page.
+
+```mermaid
+flowchart TB
+  given[Props given] --> effect[Component Effect]
+  services[Services] --> effect
+  effect --> props[View props]
+  props --> view[Pure view]
+  view --> page[DOM nodes]
+  values[Reactive values] -.-> page
+```
+
 ## 1. Set up once, bind at the leaf
 
 A view function runs one time and builds real DOM nodes. A reactive value placed in the markup is

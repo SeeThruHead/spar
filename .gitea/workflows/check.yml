@@ -57,6 +57,8 @@ jobs:
         run: bun run moon run bench:memory
       - name: Walk the sidebar app by keyboard at three sizes with an accessibility audit
         run: bun run moon run sidebar:walkthrough
+      - name: Build the docs site and check its diagrams can be read on a narrow screen
+        run: bun run moon run docs:look
       - name: A server-rendered page is taken over without remaking its nodes
         run: bun run moon run ssr:browser
       - name: The same suites in Firefox

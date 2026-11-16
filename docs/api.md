@@ -83,6 +83,20 @@ A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`,
 
 ### Several tabs
 
+```mermaid
+sequenceDiagram
+  participant A as Tab A
+  participant D as Device
+  participant B as Tab B
+  A->>D: save request
+  A->>D: take lock
+  D-->>A: news from B
+  A->>D: append entry
+  A-)B: announce
+  B->>D: read news
+  Note over B: same state
+```
+
 Provide `Tabs.layerBrowser` in a browser and a durable store is one store across every open tab.
 A command takes a cross-tab lock, first applies whatever other tabs have recorded since, then
 records its own entry, so two tabs never write the same slot and a reducer always sees the latest
@@ -169,6 +183,20 @@ that place the layer by its anchor: below it or above, whichever has more room, 
 or the right, never past the edge of the window, and no taller than the room there is.
 
 ## On a server
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant S as Server
+  B->>S: ask for page
+  Note over S: run component
+  Note over S: wait for data
+  S-->>B: finished HTML
+  Note over B: page is readable
+  B->>S: ask for script
+  Note over B: keep the nodes
+  Note over B: attach listeners
+```
 
 `Server.renderToString(Component, { layer })` runs the same component on a server and gives its
 HTML. Loading parts (`View.pending`) are waited for, so the page arrives complete; overlays are

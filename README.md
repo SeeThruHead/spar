@@ -16,6 +16,8 @@ This repo is private and nothing here is published.
 - [Benchmarks](docs/benchmarks.md) against Solid and Foldkit
 - [What is not done](docs/gaps.md)
 
+`bun run --cwd apps/docs dev` serves the same pages as a site on http://127.0.0.1:4183.
+
 ## Run
 
 | Command                             | What it does                                                                       |
