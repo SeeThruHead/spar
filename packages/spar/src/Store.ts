@@ -40,7 +40,9 @@ type Orphan = typeof Intent.Type & { readonly key: string }
 
 export type Entry = typeof StoredEntry.Type
 
-export const LogText = Schema.fromJsonString(Schema.Array(StoredEntry))
+export const Entries = Schema.Array(StoredEntry)
+
+export const LogText = Schema.fromJsonString(Entries)
 
 export type Action<State, Payload> = {
   readonly encode: (input: unknown) => Effect.Effect<Schema.Json, Schema.SchemaError>

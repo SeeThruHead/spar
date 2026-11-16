@@ -16,6 +16,7 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
+    "@spar/devtools-mcp": "workspace:*",
     "effect": "4.1.4",
     "spar": "workspace:*"
   },

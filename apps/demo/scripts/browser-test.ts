@@ -1,4 +1,7 @@
-import { Effect, Queue } from "effect"
+import { Effect, Layer, Queue, Schedule } from "effect"
+import type { Schema } from "effect"
+import { McpClient, McpProtocol } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
 import { engine, launch } from "@spar/browsers"
 import type { Locator, Page } from "playwright"
 import { start } from "./site.ts"
@@ -163,6 +166,83 @@ const offline = async (page: Page): Promise<void> => {
 
 const offlineNoise = ["ERR_INTERNET_DISCONNECTED", "WebKit encountered an internal error"]
 
+const devtoolsPort = 4189
+
+const devtoolsUrl = `http://127.0.0.1:${devtoolsPort}`
+
+const answering = async (left: number): Promise<void> => {
+  const up = await fetch(`${devtoolsUrl}/mcp`).then(
+    () => true,
+    () => false,
+  )
+  if (up) return
+  if (left === 0) throw new Error("The devtools server did not start")
+
+  await Bun.sleep(100)
+
+  return answering(left - 1)
+}
+
+const asAgent = Effect.gen(function* () {
+  const client = yield* McpClient.McpClient
+  const tools = yield* client.listTools()
+  const call = (name: string, given: Readonly<Record<string, Schema.Json>>) =>
+    Effect.fromNullishOr(tools.find((tool) => tool.name === name)).pipe(
+      Effect.flatMap((tool) => client.callTool({ tool, arguments: given })),
+      Effect.map((result) =>
+        result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
+      ),
+    )
+  const counterStore = "demo/counter/CounterStore"
+  const listed = yield* Effect.repeat(call("list_stores", {}), {
+    until: (text) => text.includes(counterStore),
+    schedule: Schedule.spaced("100 millis"),
+  })
+  const ran = yield* call("run_action", {
+    store: counterStore,
+    action: "incremented",
+    payload: { by: 7 },
+  })
+
+  return { listed, ran }
+}).pipe(
+  Effect.provide(
+    McpClient.layerHttp({
+      name: "browser test",
+      version: "0.0.0",
+      url: `${devtoolsUrl}/mcp`,
+      protocol: McpProtocol.v2025_11_25,
+    }).pipe(Layer.provide(FetchHttpClient.layer)),
+  ),
+)
+
+const drivenByAnAgent = async (page: Page, appUrl: string): Promise<void> => {
+  const devtools = Bun.spawn(["bun", `${root}../../packages/devtools-mcp/src/main.ts`], {
+    env: { ...Bun.env, SPAR_DEVTOOLS_PORT: String(devtoolsPort) },
+    stdout: "ignore",
+    stderr: "inherit",
+  })
+
+  await answering(100)
+    .then(async () => {
+      await page.goto(`${new URL(appUrl).origin}/?devtools=${encodeURIComponent(devtoolsUrl)}`)
+
+      const section = page.getByRole("region", { name: "Counter", exact: true })
+      const before = Number(await section.getByLabel("Count").textContent())
+      const { listed, ran } = await Effect.runPromise(asAgent)
+
+      if (!listed.includes("demo/todos/TodoStore")) throw new Error(`The agent saw only ${listed}`)
+      if (!ran.includes(String(before + 7))) throw new Error(`The agent was told ${ran}`)
+
+      await shows(section.getByLabel("Count"), new RegExp(`^${before + 7}$`))
+    })
+    .finally(async () => {
+      devtools.kill()
+      await devtools.exited
+      await page.close()
+    })
+}
+
 const isExpectedOffline = (text: string): boolean =>
   offlineNoise.some((noise) => text.includes(noise))
 
@@ -190,6 +270,7 @@ const run = async (): Promise<void> => {
   await afterReload(page)
   await twoTabs(page)
   await offline(page)
+  await drivenByAnAgent(await context.newPage(), page.url())
   await browser.close()
 
   const failures = Effect.runSync(Queue.clear(errors)).filter((text) => !isExpectedOffline(text))
@@ -199,5 +280,5 @@ const run = async (): Promise<void> => {
 
 await run().finally(() => server.stop(true))
 console.log(
-  `Browser test passed in ${engine()}: counter, keyed list, mail thread, state kept across a reload, two tabs kept in step, sending held while offline`,
+  `Browser test passed in ${engine()}: counter, keyed list, mail thread, state kept across a reload, two tabs kept in step, sending held while offline, an agent driving it through the devtools server`,
 )

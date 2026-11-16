@@ -8,20 +8,21 @@ The principles are in `docs/principles.md`. Tickets are in `.tickets/` (`tk read
 Everything runs through package.json scripts wrapped by moon tasks. Never call a tool binary directly.
 Run one heavy command at a time (`--concurrency 1`).
 
-| Command                                | What it does                                                                                   |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `bun run check`                        | Every project's typecheck, lint, format check, tests at 100% coverage, forbidden-code proofs.  |
-| `bun run moon run spar:test`           | Unit and component tests of the framework.                                                     |
-| `bun run moon run demo:proofs`         | Type checks `apps/demo/forbidden` and runs the JSX build check; fails if any file is accepted. |
-| `bun run moon run demo:browser`        | Builds the demo and drives it in a real browser, two tabs and offline included.                |
-| `bun run moon run stories:play`        | Plays every component story at three sizes with an accessibility audit.                        |
-| `bun run moon run sidebar:features`    | The proof app's Gherkin scenarios.                                                             |
-| `bun run moon run sidebar:walkthrough` | Walks the proof app by keyboard at three sizes with an accessibility audit.                    |
-| `bun run moon run bench:leaks`         | Checks that mounting and unmounting leaves nothing behind.                                     |
-| `bun run moon run bench:memory`        | Fails if 10,000 rows hold more than 1.5 times what Solid holds.                                |
-| `bun run moon run bench:bench`         | Reruns the benchmarks and rewrites `docs/benchmarks.md`.                                       |
-| `bun run --cwd packages/spar mutation` | Mutation testing of the framework (long). It rewrites `src` in place and restores it.          |
-| `bun run format`                       | Formats with oxfmt.                                                                            |
+| Command                                     | What it does                                                                                   |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `bun run check`                             | Every project's typecheck, lint, format check, tests at 100% coverage, forbidden-code proofs.  |
+| `bun run moon run spar:test`                | Unit and component tests of the framework.                                                     |
+| `bun run moon run demo:proofs`              | Type checks `apps/demo/forbidden` and runs the JSX build check; fails if any file is accepted. |
+| `bun run moon run demo:browser`             | Builds the demo and drives it in a real browser, two tabs and offline included.                |
+| `bun run moon run stories:play`             | Plays every component story at three sizes with an accessibility audit.                        |
+| `bun run moon run sidebar:features`         | The proof app's Gherkin scenarios.                                                             |
+| `bun run moon run sidebar:walkthrough`      | Walks the proof app by keyboard at three sizes with an accessibility audit.                    |
+| `bun run moon run bench:leaks`              | Checks that mounting and unmounting leaves nothing behind.                                     |
+| `bun run moon run bench:memory`             | Fails if 10,000 rows hold more than 1.5 times what Solid holds.                                |
+| `bun run moon run bench:bench`              | Reruns the benchmarks and rewrites `docs/benchmarks.md`.                                       |
+| `bun run --cwd packages/spar mutation`      | Mutation testing of the framework (long). It rewrites `src` in place and restores it.          |
+| `bun run --cwd packages/devtools-mcp start` | The devtools server for agents (MCP at 127.0.0.1:4188/mcp); see docs/api.md.                   |
+| `bun run format`                            | Formats with oxfmt.                                                                            |
 
 The four browser suites (demo, stories, features, walkthrough) run in Chromium by default. Put
 `SPAR_BROWSER=firefox` or `SPAR_BROWSER=webkit` in front to run them in another engine. On Linux
@@ -36,6 +37,8 @@ WebKit runs from the pinned Playwright container through podman
   and Vite adapters.
 - `packages/ui`: base components (`@spar/ui`) and their stylesheet.
 - `packages/browsers`: picks the browser engine for the browser suites.
+- `packages/devtools-mcp`: a server that lets an agent read and drive a running app's stores over
+  MCP, and the client layer an app uses to link to it.
 - `packages/lint`: repo hygiene only (house rules as an oxlint plugin, the attribution hook).
 - `apps/demo`: the first demo, its browser test, and `forbidden/`, code that must not compile.
 - `apps/stories`: one page per base component, with play tests.

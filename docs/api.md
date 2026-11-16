@@ -171,7 +171,21 @@ or the right, never past the edge of the window, and no taller than the room the
 ## Devtools
 
 Provide `Devtools.layer` to the store layers and mount `Devtools.Panel`: each store's actions and
-state, with Back, Forward, Live and Go to.
+state, with Back, Forward, Live and Go to. Actions restored from the device can be stepped to as
+well. Export log gives a store's actions as JSON text; pasting a log and pressing Load log replays
+it from the store's first state and shows the result without touching the live state (Live goes
+back). When the app has an outbox, the panel also shows how many items are waiting and lists what
+could not be sent, each with Retry and Discard.
+
+### For agents
+
+`bun run --cwd packages/devtools-mcp start` runs a small server on 127.0.0.1:4188 (set
+`SPAR_DEVTOOLS_PORT` to change it). An app that provides
+`DevtoolsLink.layer({ url })` from `@spar/devtools-mcp/client` beside `Devtools.layer` reports its
+stores to it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4188`. An
+agent connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and gets six tools: `list_stores`,
+`get_state`, `get_log`, `travel_to`, `run_action` and `load_log`. Each failure comes back as a
+plain sentence. With several pages linked, the tools speak for the one that reported last.
 
 ## App
 
