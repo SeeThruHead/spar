@@ -1,0 +1,30 @@
+{
+  "name": "@spar/stories",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src scripts",
+    "build": "vite build",
+    "dev": "vite",
+    "play": "bun run build && bun scripts/play.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "@spar/ui": "workspace:*",
+    "effect": "4.1.4",
+    "spar": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@spar/lint": "workspace:*",
+    "@types/bun": "1.4.3",
+    "axe-core": "4.14.0",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "playwright": "1.65.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}

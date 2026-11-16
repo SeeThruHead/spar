@@ -1,0 +1,29 @@
+$schema: https://moonrepo.dev/schemas/project.json
+fileGroups:
+  upstream:
+    - /package.json
+    - /tsconfig.base.json
+    - /packages/lint/oxlintrc.json
+    - /packages/lint/house-rules.ts
+    - /packages/spar/src/**/*
+    - /packages/ui/src/**/*
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", "@group(upstream)"]
+  lint:
+    command: bun run lint
+    inputs: ["**/*", "@group(upstream)"]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  build:
+    command: bun run build
+    inputs: ["src/**/*", "index.html", "vite.config.ts", "@group(upstream)"]
+    outputs: ["dist"]
+  play:
+    command: bun scripts/play.ts
+    deps: [build]
+    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
+  check:
+    deps: [typecheck, lint, format]

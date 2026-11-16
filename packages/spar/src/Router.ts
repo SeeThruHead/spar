@@ -249,16 +249,20 @@ export const on = <Params, R = never>(
     })),
 })
 
-export const outlet = Effect.fnUntraced(function* <R = never, R2 = never>(options: {
-  readonly routes: ReadonlyArray<Case<R>>
+export const outlet = Effect.fnUntraced(function* <
+  const Needs extends ReadonlyArray<unknown>,
+  R2 = never,
+>(options: {
+  readonly routes: { readonly [Index in keyof Needs]: Case<Needs[Index]> }
   readonly otherwise: Mountable<{ readonly path: string }, never, R2>
 }) {
   const router = yield* Router
-  const context = yield* Effect.context<R | R2>()
+  const context = yield* Effect.context<Needs[number] | R2>()
+  const routes: ReadonlyArray<Case<Needs[number]>> = options.routes
 
   const page = (location: Location): Row =>
     Option.match(
-      Array.findFirst(options.routes, (candidate) => candidate.match(location)),
+      Array.findFirst(routes, (candidate) => candidate.match(location)),
       {
         onNone: () => ({
           key: `nothing at ${location.pathname}`,

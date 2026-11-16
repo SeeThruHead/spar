@@ -117,6 +117,16 @@ describe("overlays", () => {
 
       yield* Testing.eventually(() => expect(document.activeElement).toBe(close))
 
+      const last = yield* Testing.find("button", "Ask to confirm")
+      const kept = yield* Effect.sync(() => [
+        fireEvent.keyDown(close, { key: "Tab" }),
+        fireEvent.keyDown(close, { key: "Tab", shiftKey: true }),
+        document.activeElement === last,
+        fireEvent.keyDown(last, { key: "Tab" }),
+        document.activeElement === close,
+      ])
+
+      expect(kept).toEqual([true, false, true, false, true])
       expect(overlays()?.contains(dialog)).toBe(true)
       expect(appRoot()?.contains(dialog)).toBe(false)
       expect(appRoot()?.hasAttribute("inert")).toBe(true)

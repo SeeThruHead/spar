@@ -195,3 +195,22 @@ export const openModal = (
     hadFocus.forEach((node) => node.focus())
   }
 }
+
+const focusable =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+const isTab = (event: Event): event is KeyboardEvent =>
+  event instanceof KeyboardEvent && event.key === "Tab"
+
+export const keepTabInside = (layer: HTMLElement, event: Event): void => {
+  if (!isTab(event)) return
+
+  const stops = [...layer.querySelectorAll<HTMLElement>(focusable)]
+  const edge = event.shiftKey ? stops.at(0) : stops.at(-1)
+  const wrapTo = event.shiftKey ? stops.at(-1) : stops.at(0)
+
+  if (document.activeElement !== edge) return
+
+  event.preventDefault()
+  ;[wrapTo].filter(isHtml).forEach((stop) => stop.focus())
+}

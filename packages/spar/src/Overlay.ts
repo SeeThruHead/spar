@@ -36,6 +36,11 @@ export const modal = Effect.fnUntraced(function* (options: {
     (restore) => Effect.sync(restore),
   )
   yield* onEscape(frame.overlays, layer.element, options.onDismiss)
+  yield* listen(document, "keydown", (event: Event): Action => {
+    Dom.keepTabInside(layer.element, event)
+
+    return []
+  })
   yield* Effect.forkScoped(
     Option.match(Option.fromNullishOr(options.initialFocus), {
       onNone: () => Effect.sync(() => Dom.focus(layer.element)),

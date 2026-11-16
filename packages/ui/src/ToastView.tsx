@@ -16,7 +16,7 @@ export const ToastView = ({ message, tone, onDismiss }: ToastProps) => (
 )
 
 export const ToastsView = ({ toasts }: { readonly toasts: Element }) => (
-  <ol class="spar-toasts" role="status" aria-live="polite" aria-label="Notifications">
-    {toasts}
-  </ol>
+  <div role="status" aria-live="polite" aria-label="Notifications">
+    <ol class="spar-toasts">{toasts}</ol>
+  </div>
 )

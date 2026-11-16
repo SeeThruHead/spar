@@ -48,3 +48,5 @@ jobs:
         run: bun run moon run demo:browser
       - name: Check that mounting and unmounting leaves nothing behind
         run: bun run moon run bench:leaks
+      - name: Play every component story at phone, tablet and desktop sizes with an accessibility audit
+        run: bun run moon run stories:play
