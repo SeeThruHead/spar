@@ -50,7 +50,15 @@ const inContainer = async (program: string): Promise<number> => {
     { stdout: "ignore", stderr: "ignore" },
   )
 
-  return listening(120)
+  return listening(480)
+    .catch(async (failed: unknown) => {
+      await Bun.spawn([program, "logs", "--tail", "40", container], {
+        stdout: "inherit",
+        stderr: "inherit",
+      }).exited
+
+      throw failed
+    })
     .then(
       () =>
         Bun.spawn(command, {

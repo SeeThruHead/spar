@@ -33,6 +33,7 @@ jobs:
   browser:
     runs-on: boat
     needs: check
+    timeout-minutes: 45
     env:
       MOON_CACHE_TOKEN: ${{ secrets.MOON_CACHE_TOKEN }}
     steps:
@@ -71,7 +72,8 @@ jobs:
           SPAR_BROWSER: webkit
   mutation:
     runs-on: boat
-    needs: browser
+    needs: check
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: https://github.com/oven-sh/setup-bun@v2
