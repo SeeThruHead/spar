@@ -11,6 +11,7 @@
     "serve": "bun scripts/serve.ts",
     "test:browser": "bun run build && bun scripts/browser-test.ts",
     "browser:install": "playwright install chromium-headless-shell",
+    "browser:install:ci": "playwright install --with-deps chromium-headless-shell",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },

@@ -5,3 +5,11 @@ projects:
   - packages/*
 vcs:
   defaultBranch: main
+remote:
+  host: grpcs://moon-cache.sthloc.vip
+  auth:
+    token: MOON_CACHE_TOKEN
+  cache:
+    instanceName: spar
+    compression: zstd
+    verifyIntegrity: true

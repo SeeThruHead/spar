@@ -1,6 +1,6 @@
 ---
 id: spa-ptii
-status: open
+status: in_progress
 deps: [spa-g51c]
 links: []
 created: 2026-11-16T04:22:57Z

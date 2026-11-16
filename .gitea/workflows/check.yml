@@ -1,0 +1,48 @@
+name: check
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".tickets/**"
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - ".tickets/**"
+      - "**/*.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: boat
+    env:
+      MOON_CACHE_TOKEN: ${{ secrets.MOON_CACHE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Typecheck, lint, format, tests and the forbidden-code proofs
+        run: bun run moon run :check
+  browser:
+    runs-on: boat
+    needs: check
+    env:
+      MOON_CACHE_TOKEN: ${{ secrets.MOON_CACHE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Chromium for the browser tests
+        run: bun run --cwd apps/demo browser:install:ci
+      - name: Drive the demo in a real browser
+        run: bun run moon run demo:browser
