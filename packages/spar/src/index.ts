@@ -1,5 +1,6 @@
 export * as App from "./App.ts"
 export * as Events from "./Events.ts"
+export * as Form from "./Form.ts"
 export * as Handle from "./Handle.ts"
 export * as Outbox from "./Outbox.ts"
 export * as Reactive from "./Reactive.ts"
