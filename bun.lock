@@ -63,6 +63,12 @@
         "typescript": "7.0.2",
         "vitest": "5.0.5",
       },
+      "peerDependencies": {
+        "@testing-library/dom": "10.4.1",
+      },
+      "optionalPeers": [
+        "@testing-library/dom",
+      ],
     },
   },
   "overrides": {

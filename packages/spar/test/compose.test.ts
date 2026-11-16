@@ -4,7 +4,7 @@ import { Effect, Queue, Ref, SubscriptionRef, pipe } from "effect"
 import { Reactive, UiState, View } from "spar"
 import { jsx } from "spar/jsx-runtime"
 import { CountView, DraftView, EmptyView, SpanView } from "./forms.tsx"
-import { eventually, find, findText, gone, mount } from "./support.ts"
+import { eventually, find, findText, gone, mount } from "spar/testing"
 import { BoardView, ItemView } from "./views.tsx"
 import type { Item } from "./views.tsx"
 

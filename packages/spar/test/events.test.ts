@@ -5,7 +5,7 @@ import { Effect, Predicate, Schedule, Stream, SubscriptionRef, pipe } from "effe
 import { TestClock } from "effect/testing"
 import { Events, Reactive, UiState, View } from "spar"
 import { MenuItemsView, MenuView, SearchView, StatusView } from "./menus.tsx"
-import { eventually, find, gone, mount } from "./support.ts"
+import { eventually, find, gone, mount } from "spar/testing"
 
 const yesNo = (value: boolean): string => (value ? "yes" : "no")
 

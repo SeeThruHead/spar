@@ -1,6 +1,6 @@
 ---
 id: spa-ptii
-status: in_progress
+status: closed
 deps: [spa-g51c]
 links: []
 created: 2026-11-16T04:22:57Z
@@ -17,3 +17,9 @@ Create the repo through the Gitea API with the admin token from OpenBao (never i
 
 A push to main runs check and it is green.
 
+
+## Notes
+
+**2026-11-16T04:49:18Z**
+
+Both jobs (check, browser) are green on the Events commit. The runner executes jobs on the STHDEV host, so Chromium is installed without system packages, and setup-bun is fetched from GitHub by absolute URL.

@@ -4,7 +4,7 @@ import { Effect, Option, SubscriptionRef, pipe } from "effect"
 import { TestClock } from "effect/testing"
 import { Handle, Reactive, UiState, View } from "spar"
 import { OptionsView, PickerView } from "./focus.tsx"
-import { eventually, find, gone, mount } from "./support.ts"
+import { eventually, find, gone, mount } from "spar/testing"
 
 const describeBox = Option.match({
   onNone: () => "not on the page",

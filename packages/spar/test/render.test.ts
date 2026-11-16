@@ -3,7 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Context, Deferred, Effect, Layer, Ref, Schema, pipe } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, Store, UiState, View } from "spar"
-import { eventually, find, findText, gone, mount } from "./support.ts"
+import { eventually, find, findText, gone, mount } from "spar/testing"
 import {
   BoardView,
   DetailsView,
