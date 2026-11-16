@@ -153,6 +153,29 @@ describe("Outbox", () => {
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )
 
+  it.effect("a saved item that can no longer be read is set aside and the rest still goes", () =>
+    Effect.gen(function* () {
+      const saved = yield* KeyValueStore.KeyValueStore
+
+      yield* saved.set("spar/outbox/garbled", "{ not what was written")
+
+      const outbox = yield* started(patient)
+      const mail = yield* recorder()
+
+      yield* outbox.register("mail", mail.send)
+      yield* outbox.persist(entry("fine", 1))
+      yield* TestClock.adjust("1 second")
+
+      const dead = yield* outbox.dead.get
+
+      expect(yield* mail.sent).toEqual(["fine"])
+      expect(dead.map((lost) => [lost.key, lost.channel, lost.payload])).toEqual([
+        ["garbled", "unreadable", "{ not what was written"],
+      ])
+      expect(yield* outbox.pending.get).toBe(0)
+    }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
   it.effect("nothing is sent while offline, and sending starts when the connection is back", () =>
     Effect.gen(function* () {
       const connected = yield* SubscriptionRef.make(false)

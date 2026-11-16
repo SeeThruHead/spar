@@ -91,12 +91,26 @@ const make = Effect.fnUntraced(function* (options: Options) {
     Buried,
   )
 
+  const setAsideUnreadable = Effect.fnUntraced(function* (key: string) {
+    const raw = yield* keyValueStore.get(`spar/outbox/${key}`)
+
+    yield* buried.set(key, {
+      channel: "unreadable",
+      payload: `${raw}`,
+      seq: 0,
+      reason: "What was saved for this item could not be read, so it was not sent.",
+    })
+    yield* waiting.remove(key)
+
+    return Option.none<Entry>()
+  })
+
   const stored = Effect.fnUntraced(function* () {
     const keys = yield* waiting.keys
     const found = yield* Effect.forEach(keys, (key) =>
-      Effect.map(
-        waiting.get(key),
-        Option.map((entry): Entry => ({ key, ...entry })),
+      waiting.get(key).pipe(
+        Effect.map(Option.map((entry): Entry => ({ key, ...entry }))),
+        Effect.catchTag("SchemaError", () => setAsideUnreadable(key)),
       ),
     )
 
