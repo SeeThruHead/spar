@@ -1,4 +1,5 @@
 import { Effect, Predicate, Scope, SubscriptionRef } from "effect"
+import { report } from "./internal/crash.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
@@ -81,6 +82,17 @@ export const branch =
       test(props) ? child(other, props) : child(self, props),
     )
 
+export const crash =
+  <R2 = never>(fallback: Mountable<{ readonly defect: unknown }, never, R2>) =>
+  <Props, E = never, R = never, ViewProps = never>(
+    self: Mountable<Props, E, R, ViewProps>,
+  ): Component<Props, E, R | R2, ViewProps> =>
+    make<Props, E, R | R2, ViewProps>(viewOf(self), (props) =>
+      Effect.catchDefect(child(self, props), (defect) =>
+        Effect.andThen(report(defect), child(fallback, { defect })),
+      ),
+    )
+
 export const recover =
   <const Tag extends string, Err extends { readonly _tag: Tag }, R2 = never>(
     tag: Tag,
@@ -115,6 +127,7 @@ export const pending =
         yield* Effect.forkScoped(
           child(self, props).pipe(
             Effect.flatMap((element) => SubscriptionRef.set(current, { key: "ready", element })),
+            Effect.tapDefect(report),
           ),
         )
 

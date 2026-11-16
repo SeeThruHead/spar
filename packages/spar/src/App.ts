@@ -4,6 +4,8 @@ import * as Dom from "./internal/dom.ts"
 import { render } from "./internal/render.ts"
 import type { Component } from "./View.ts"
 
+export { CrashReporter } from "./internal/crash.ts"
+
 export type NoProps = Readonly<Record<string, never>>
 
 export const mount = <R, LayerError = never>(

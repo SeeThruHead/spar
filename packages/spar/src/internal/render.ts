@@ -9,6 +9,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect"
+import { report } from "./crash.ts"
 import * as Dom from "./dom.ts"
 import { HandleTypeId, isHandle } from "./handle.ts"
 import type { Handle } from "./handle.ts"
@@ -55,7 +56,10 @@ const bind = <A>(
     Effect.map(apply),
     Effect.andThen(
       Effect.forkScoped(
-        Stream.runForEach(source.changes, (value) => Effect.sync(() => apply(value))),
+        Effect.tapDefect(
+          Stream.runForEach(source.changes, (value) => Effect.sync(() => apply(value))),
+          report,
+        ),
         { startImmediately: true },
       ),
     ),

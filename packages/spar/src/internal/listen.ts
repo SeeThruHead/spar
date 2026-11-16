@@ -3,6 +3,7 @@ import type { Cause } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
 import { ActionScope } from "./actionScope.ts"
+import { report } from "./crash.ts"
 
 export type Source<E> = {
   readonly add: (listener: (event: E) => void) => void
@@ -45,7 +46,11 @@ export const listen = Effect.fnUntraced(function* (
         Queue.end(pending),
       ),
   )
-  yield* Effect.forkIn(Stream.runForEach(Stream.fromQueue(pending), run), outliving, {
-    startImmediately: true,
-  })
+  yield* Effect.forkIn(
+    Stream.runForEach(Stream.fromQueue(pending), (action) =>
+      Effect.catchDefect(run(action), report),
+    ),
+    outliving,
+    { startImmediately: true },
+  )
 })

@@ -1,6 +1,6 @@
 ---
 id: spa-ilar
-status: open
+status: closed
 deps: [spa-msnp]
 links: []
 created: 2026-11-16T04:22:57Z
@@ -17,3 +17,9 @@ View.crash(FallbackView) enhancer and an App.mount onDefect reporter; the rest o
 
 A dying child shows the fallback, siblings stay mounted, the defect is reported once.
 
+
+## Notes
+
+**2026-11-16T04:55:41Z**
+
+Done: View.crash(FallbackView) catches a defect in a component's mount, reports it and mounts the fallback with { defect }; siblings are untouched. App.CrashReporter is a reference with a default that logs; an app replaces it with a layer or provideService. An action that dies is reported and its listener keeps running; a reactive binding or a load behind View.pending that dies is reported instead of failing silently.
