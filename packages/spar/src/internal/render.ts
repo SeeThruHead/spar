@@ -116,12 +116,19 @@ const renderText = (
   return bind(source, (value) => Dom.setText(node, value)).pipe(Effect.andThen(insert(node, place)))
 }
 
+const childrenFirst = (
+  props: ReadonlyArray<[string, unknown]>,
+): ReadonlyArray<[string, unknown]> => [
+  ...props.filter(([name]) => name === "children"),
+  ...props.filter(([name]) => name !== "children"),
+]
+
 const renderIntrinsic = Effect.fnUntraced(function* (element: Intrinsic, place: Place) {
   const namespace = element.tag === "svg" ? "svg" : place.namespace
   const node = Dom.create(element.tag, namespace)
 
   yield* Effect.forEach(
-    Object.entries(element.props),
+    childrenFirst(Object.entries(element.props)),
     ([name, value]) => applyProp(node, name, value, childNamespace(element.tag, namespace)),
     { discard: true },
   )

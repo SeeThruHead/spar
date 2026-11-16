@@ -8,7 +8,7 @@ import type { View } from "./View.ts"
 
 type Child = string | number | Reactive<string | number> | SparElement
 
-export type Children = Child | ReadonlyArray<Child>
+export type Children = Child | ReadonlyArray<Children>
 
 type Attribute<A> = A | Reactive<A>
 

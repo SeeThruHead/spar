@@ -91,6 +91,27 @@
         "@testing-library/dom",
       ],
     },
+    "packages/ui": {
+      "name": "@spar/ui",
+      "version": "0.0.0",
+      "dependencies": {
+        "effect": "4.1.4",
+        "spar": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/tsgo": "0.67.7",
+        "@effect/vitest": "4.1.4",
+        "@spar/lint": "workspace:*",
+        "@testing-library/dom": "10.4.1",
+        "@types/bun": "1.4.3",
+        "@vitest/coverage-istanbul": "5.0.5",
+        "happy-dom": "20.0.11",
+        "oxfmt": "0.73.0",
+        "oxlint": "1.91.0",
+        "typescript": "7.0.2",
+        "vitest": "5.0.5",
+      },
+    },
   },
   "overrides": {
     "@effect/platform-bun": "4.1.4",
@@ -343,6 +364,8 @@
     "@spar/demo": ["@spar/demo@workspace:apps/demo"],
 
     "@spar/lint": ["@spar/lint@workspace:packages/lint"],
+
+    "@spar/ui": ["@spar/ui@workspace:packages/ui"],
 
     "@testing-library/dom": ["@testing-library/dom@10.4.1", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg=="],
 
