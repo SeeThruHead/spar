@@ -350,3 +350,22 @@ const results = await frameworks
 await Bun.write(`${root}artifacts/bench.json`, JSON.stringify(results, null, 2))
 await Bun.write(`${repo}docs/benchmarks.md`, report(results, browser.version()))
 console.log(report(results, browser.version()))
+
+const budgetRatio = 4
+const noiseFloor = 25
+
+const medianOf = (framework: string, operation: Operation): number =>
+  results.find((result) => result.framework === framework)?.timings[operation.id]?.median ?? 0
+
+const overBudget = operations.filter((operation) => {
+  const spar = medianOf("spar", operation)
+
+  return spar > noiseFloor && spar > budgetRatio * medianOf("solid", operation)
+})
+
+if (overBudget.length > 0) {
+  console.error(
+    `Over budget (more than ${budgetRatio} times Solid): ${overBudget.map((operation) => operation.label).join(", ")}`,
+  )
+  process.exit(1)
+}
