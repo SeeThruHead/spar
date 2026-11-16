@@ -49,8 +49,16 @@ const todos = async (page: Page): Promise<void> => {
   await section.getByRole("checkbox", { name: "Buy milk" }).check()
   await shows(section.getByLabel("Remaining"), /^1$/)
 
-  await section.getByRole("button", { name: "Reverse order" }).click()
+  await section.getByRole("checkbox", { name: "Buy milk" }).focus()
+  await section.getByRole("button", { name: "Reverse order" }).evaluate((button) => {
+    if (button instanceof HTMLElement) button.click()
+  })
   await shows(items.first(), "Walk the dog")
+  await page.waitForFunction(() => {
+    if (!("moveBefore" in Element.prototype)) return true
+
+    return document.activeElement?.closest("li")?.textContent?.includes("Buy milk") === true
+  })
   await items
     .last()
     .and(page.locator('[data-kept="yes"]'))

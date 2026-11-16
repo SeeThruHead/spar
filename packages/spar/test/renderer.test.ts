@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@effect/vitest"
+import { describe, expect, it, vi } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Cause, Effect, Exit, Layer, Queue, SubscriptionRef, pipe } from "effect"
 import { App, Reactive, View } from "spar"
@@ -155,6 +155,32 @@ describe("the renderer", () => {
       yield* Effect.sleep("20 millis")
 
       expect(yield* total(insertions)).toBe(2)
+    }),
+  )
+
+  it.live("where the browser can move a node without resetting it, rows are moved that way", () =>
+    Effect.gen(function* () {
+      const moved = vi.fn(function (this: Node, node: Node, before: Node | null) {
+        this.insertBefore(node, before)
+      })
+      const list = yield* SubscriptionRef.make(items(["One", "Two", "Three"]))
+
+      Reflect.defineProperty(Element.prototype, "moveBefore", { configurable: true, value: moved })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => Reflect.deleteProperty(Element.prototype, "moveBefore")),
+      )
+      yield* mount(Listed(Reactive.fromSubscriptionRef(list), ItemView, RowsView))
+      yield* find("list", "Rows")
+      yield* SubscriptionRef.set(list, items(["Three", "One", "Two"]))
+      yield* eventually(() => expect(textsOf("listitem")).toEqual(["Three", "One", "Two"]))
+
+      expect(moved.mock.calls.map(([node]) => node.textContent)).toEqual(["Three"])
+
+      moved.mockImplementation(() => {
+        throw new DOMException("cannot keep state here", "HierarchyRequestError")
+      })
+      yield* SubscriptionRef.set(list, items(["Two", "Three", "One"]))
+      yield* eventually(() => expect(textsOf("listitem")).toEqual(["Two", "Three", "One"]))
     }),
   )
 

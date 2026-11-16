@@ -106,11 +106,36 @@ export const removeSpan = (span: Span): void => {
   rangeOf(span).deleteContents()
 }
 
-const moveSpan = (parent: Node, span: Span, before: Node): void => {
-  if (span.start === span.end) return insert(parent, span.start, before)
+const nodesOf = (node: ChildNode, end: ChildNode): ReadonlyArray<ChildNode> => {
+  if (node === end) return [node]
 
-  insert(parent, rangeOf(span).extractContents(), before)
+  return [
+    node,
+    ...Option.toArray(Option.fromNullishOr(node.nextSibling)).flatMap((next) => nodesOf(next, end)),
+  ]
 }
+
+const movedKeepingState = (parent: Node, node: ChildNode, before: Node): boolean => {
+  const moveBefore: unknown = Reflect.get(parent, "moveBefore")
+  if (!Predicate.isFunction(moveBefore)) return false
+
+  try {
+    Reflect.apply(moveBefore, parent, [node, before])
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+const moveNode = (parent: Node, node: ChildNode, before: Node): void => {
+  if (movedKeepingState(parent, node, before)) return
+
+  insert(parent, node, before)
+}
+
+const moveSpan = (parent: Node, span: Span, before: Node): void =>
+  nodesOf(span.start, span.end).forEach((node) => moveNode(parent, node, before))
 
 export const placeSpans = (
   parent: Node,
