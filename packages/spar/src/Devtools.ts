@@ -1,10 +1,15 @@
-import { Context, Effect, Formatter, Layer, pipe } from "effect"
+import { Context, Effect, Formatter, Layer, Option, Schema, pipe } from "effect"
+import { run } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
-import { EntryView, PanelView, StoreView } from "./devtools/PanelView.tsx"
+import { DeadView, EntryView, OutboxView, PanelView, StoreView } from "./devtools/PanelView.tsx"
+import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
+import * as UiState from "./UiState.ts"
 import * as View from "./View.ts"
+
+type OutboxService = Context.Service.Shape<typeof Outbox.Outbox>
 
 export class Registry extends Context.Service<
   Registry,
@@ -68,7 +73,28 @@ const StorePanel = View.connect(
       ),
     )
 
+    const exported = yield* UiState.make("")
+    const pasted = yield* UiState.make("")
+    const problem = yield* UiState.make("")
+    const say = (text: string) => run(UiState.set(problem, text))
+
     return {
+      exported,
+      pasted,
+      problem,
+      onExport: store.log.get.pipe(
+        Effect.flatMap(Schema.encodeEffect(Store.LogText)),
+        Effect.orDie,
+        Effect.flatMap((text) => run(UiState.set(exported, text))),
+      ),
+      onPaste: (event: { readonly currentTarget: { readonly value: string } }) =>
+        UiState.set(pasted, event.currentTarget.value),
+      onLoad: pasted.get.pipe(
+        Effect.flatMap(Schema.decodeEffect(Store.LogText)),
+        Effect.flatMap(store.load),
+        Effect.andThen(say("")),
+        Effect.catch((unreadable) => say(unreadable.message)),
+      ),
       name: store.key,
       position: Reactive.map(store.viewing, (viewing) =>
         viewing === null ? "live" : `action ${viewing}`,
@@ -82,9 +108,33 @@ const StorePanel = View.connect(
   }),
 )(StoreView)
 
+const summaryOfDead = (dead: Outbox.Dead): string =>
+  `${dead.channel} ${Formatter.formatJson(dead.payload)}: ${dead.reason}`
+
+const OutboxPanel = View.connect(
+  Effect.fnUntraced(function* ({ outbox }: { readonly outbox: OutboxService }) {
+    return {
+      pending: outbox.pending,
+      dead: yield* pipe(
+        outbox.dead,
+        Reactive.mapBy(
+          (dead: Outbox.Dead) => dead.key,
+          DeadView,
+          (dead, key) => ({
+            summary: Reactive.map(dead, summaryOfDead),
+            onRetry: outbox.retry(key),
+            onDiscard: outbox.discard(key),
+          }),
+        ),
+      ),
+    }
+  }),
+)(OutboxView)
+
 export const Panel = View.connect(
   Effect.fnUntraced(function* () {
     const registry = yield* Registry
+    const outbox = yield* Effect.serviceOption(Outbox.Outbox)
     const stores = yield* pipe(
       registry.stores,
       Reactive.mapBy(
@@ -94,6 +144,11 @@ export const Panel = View.connect(
       ),
     )
 
-    return { stores }
+    return {
+      stores,
+      outbox: yield* Effect.forEach(Option.toArray(outbox), (service) =>
+        View.child(OutboxPanel, { outbox: service }),
+      ),
+    }
   }),
 )(PanelView)

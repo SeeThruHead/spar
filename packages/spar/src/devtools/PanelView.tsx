@@ -19,9 +19,15 @@ type StoreProps = {
   readonly position: Reactive.Reactive<string>
   readonly state: Reactive.Reactive<string>
   readonly entries: Element
+  readonly exported: Reactive.Reactive<string>
+  readonly pasted: Reactive.Reactive<string>
+  readonly problem: Reactive.Reactive<string>
   readonly onBack: Action
   readonly onForward: Action
   readonly onLive: Action
+  readonly onExport: Action
+  readonly onPaste: (event: { readonly currentTarget: { readonly value: string } }) => Action
+  readonly onLoad: Action
 }
 
 export const StoreView = (props: StoreProps) => (
@@ -35,12 +41,56 @@ export const StoreView = (props: StoreProps) => (
     <button onClick={props.onLive}>Live</button>
     <ol aria-label={`${props.name} actions`}>{props.entries}</ol>
     <pre aria-label={`${props.name} state`}>{props.state}</pre>
+    <button onClick={props.onExport}>Export log</button>
+    <textarea aria-label={`${props.name} exported log`} readOnly={true} value={props.exported} />
+    <textarea
+      aria-label={`${props.name} log to load`}
+      value={props.pasted}
+      onInput={props.onPaste}
+    />
+    <button onClick={props.onLoad}>Load log</button>
+    <output aria-label={`${props.name} problem`}>{props.problem}</output>
   </section>
 )
 
-export const PanelView = ({ stores }: { readonly stores: Element }) => (
+type DeadProps = {
+  readonly summary: Reactive.Reactive<string>
+  readonly onRetry: Action
+  readonly onDiscard: Action
+}
+
+export const DeadView = ({ summary, onRetry, onDiscard }: DeadProps) => (
+  <li>
+    <code>{summary}</code>
+    <button onClick={onRetry}>Retry</button>
+    <button onClick={onDiscard}>Discard</button>
+  </li>
+)
+
+type OutboxProps = {
+  readonly pending: Reactive.Reactive<number>
+  readonly dead: Element
+}
+
+export const OutboxView = ({ pending, dead }: OutboxProps) => (
+  <section aria-label="Outbox">
+    <h2>Outbox</h2>
+    <p>
+      Waiting to send: <output aria-label="Outbox waiting">{pending}</output>
+    </p>
+    <ul aria-label="Not sent">{dead}</ul>
+  </section>
+)
+
+type PanelProps = {
+  readonly stores: Element
+  readonly outbox: ReadonlyArray<Element>
+}
+
+export const PanelView = ({ stores, outbox }: PanelProps) => (
   <aside aria-label="Developer tools">
     <h2>Stores</h2>
     {stores}
+    {outbox}
   </aside>
 )

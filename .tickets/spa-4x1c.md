@@ -1,6 +1,6 @@
 ---
 id: spa-4x1c
-status: open
+status: in_progress
 deps: []
 links: []
 created: 2026-11-16T06:19:58Z
