@@ -1,16 +1,20 @@
 import { Schema } from "effect"
 import { Store } from "spar"
 
-export type Todo = {
-  readonly id: string
-  readonly title: string
-  readonly done: boolean
-}
+const Todo = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  done: Schema.Boolean,
+})
 
-type State = {
-  readonly nextId: number
-  readonly todos: ReadonlyArray<Todo>
-}
+export type Todo = typeof Todo.Type
+
+export const TodoState = Schema.Struct({
+  nextId: Schema.Int,
+  todos: Schema.Array(Todo),
+})
+
+type State = typeof TodoState.Type
 
 const initialState: State = { nextId: 1, todos: [] }
 

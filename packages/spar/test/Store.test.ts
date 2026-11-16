@@ -112,7 +112,7 @@ describe("Store", () => {
   it.effect("replaying a log with an action the store does not define fails and names it", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        Store.replay(Ledger.definition, [{ id: "1", action: "archived", payload: null }]),
+        Store.replay(Ledger.definition, [{ id: "1", action: "archived", payload: null, seq: 1 }]),
       )
 
       expect(error._tag).toBe("UnknownAction")
@@ -183,7 +183,11 @@ describe("Store", () => {
 
       yield* stored.set(
         "spar/outbox/left-over",
-        JSON.stringify({ channel: "test/Ledger/noted", payload: { text: "from before" } }),
+        JSON.stringify({
+          channel: "test/Ledger/noted",
+          payload: { text: "from before" },
+          seq: 4,
+        }),
       )
 
       const attempts = yield* Effect.gen(function* () {

@@ -209,7 +209,8 @@
     "effecttsgo/unsafe-effect-type-assertion": "error",
     "effecttsgo/unstable-api-usage": "off",
     "effecttsgo/yield-in-call-argument": "error",
-    "effecttsgo/match-to-result-or-option": "error"
+    "effecttsgo/match-to-result-or-option": "error",
+    "unicorn/require-post-message-target-origin": "off"
   },
   "overrides": [
     {

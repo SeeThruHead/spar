@@ -83,6 +83,36 @@ const mail = async (page: Page): Promise<void> => {
   await shows(thread.getByLabel("Unsent replies"), /^0$/)
 }
 
+const afterReload = async (page: Page): Promise<void> => {
+  const section = page.getByRole("region", { name: "Todos" })
+
+  await page.reload()
+  await shows(section.getByRole("listitem"), "Buy milk")
+  await section.getByRole("checkbox", { name: "Buy milk", checked: true }).waitFor()
+  await shows(section.getByLabel("Remaining"), /^0$/)
+}
+
+const offline = async (page: Page): Promise<void> => {
+  const thread = page.getByRole("article", { name: "Welcome to the hangar" })
+  const unsent = thread.getByLabel("Unsent replies")
+
+  await thread.waitFor()
+  await page.context().setOffline(true)
+  await thread.getByLabel("Reply", { exact: true }).fill("Sent from a tunnel")
+  await thread.getByRole("button", { name: "Send reply" }).click()
+  await shows(
+    thread.getByRole("list", { name: "Replies" }).getByRole("listitem"),
+    "Sent from a tunnel",
+  )
+  await shows(unsent, /^1$/)
+  await page.waitForTimeout(1500)
+  await shows(unsent, /^1$/)
+  await page.context().setOffline(false)
+  await shows(unsent, /^0$/)
+}
+
+const isExpectedOffline = (text: string): boolean => text.includes("ERR_INTERNET_DISCONNECTED")
+
 const run = async (): Promise<void> => {
   const browser = await chromium.launch()
   const page = await browser.newPage({ viewport: { width: 820, height: 1100 } })
@@ -103,12 +133,16 @@ const run = async (): Promise<void> => {
   await mail(page)
   await tracesSent
   await page.screenshot({ path: `${root}artifacts/demo.png`, fullPage: true })
+  await afterReload(page)
+  await offline(page)
   await browser.close()
 
-  const failures = Effect.runSync(Queue.clear(errors))
+  const failures = Effect.runSync(Queue.clear(errors)).filter((text) => !isExpectedOffline(text))
 
   if (failures.length > 0) throw new Error(`The page logged errors:\n${failures.join("\n")}`)
 }
 
 await run().finally(() => server.stop(true))
-console.log("Browser test passed: counter, keyed list, mail thread")
+console.log(
+  "Browser test passed: counter, keyed list, mail thread, state kept across a reload, sending held while offline",
+)
