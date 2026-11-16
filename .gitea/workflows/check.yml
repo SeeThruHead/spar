@@ -43,6 +43,6 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
       - name: Chromium for the browser tests
-        run: bun run --cwd apps/demo browser:install:ci
+        run: bun run --cwd apps/demo browser:install
       - name: Drive the demo in a real browser
         run: bun run moon run demo:browser
