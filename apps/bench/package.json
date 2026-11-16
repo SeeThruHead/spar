@@ -7,6 +7,7 @@
     "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src/spar src/foldkit src/shared scripts",
     "build": "vite build --config vite.spar.config.ts && vite build --config vite.solid.config.ts && vite build --config vite.foldkit.config.ts",
     "bench": "bun run build && bun scripts/bench.ts",
+    "leaks": "bun run build && bun scripts/leaks.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },

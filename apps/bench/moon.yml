@@ -26,5 +26,9 @@ tasks:
     deps: [build]
     options:
       cache: false
+  leaks:
+    command: bun scripts/leaks.ts
+    deps: [build]
+    inputs: ["src/**/*", "scripts/leaks.ts", "@group(upstream)"]
   check:
     deps: [typecheck, lint, format]

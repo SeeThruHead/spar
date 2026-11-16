@@ -46,3 +46,5 @@ jobs:
         run: bun run --cwd apps/demo browser:install
       - name: Drive the demo in a real browser
         run: bun run moon run demo:browser
+      - name: Check that mounting and unmounting leaves nothing behind
+        run: bun run moon run bench:leaks
