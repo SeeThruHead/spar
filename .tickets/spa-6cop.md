@@ -1,6 +1,6 @@
 ---
 id: spa-6cop
-status: open
+status: closed
 deps: [spa-is9o, spa-1yfb, spa-wwiq]
 links: []
 created: 2026-11-16T04:22:57Z
@@ -17,3 +17,9 @@ apps/docs built with Spar itself, code highlighted at build time, examples type 
 
 Site builds, every example compiles, diagram checks pass.
 
+
+## Notes
+
+**2026-11-16T05:58:51Z**
+
+Done as markdown in docs/: getting-started, principles (rewritten to match what was built, 12 principles and the differences from the brief), api (every module, each pointing at a type-checked file in the repo), recipes, from-foldkit, from-react, benchmarks (generated), gaps. README links them. Decisions: no docs site app and no Mermaid diagrams (recorded in gaps); examples are taken from code that CI type-checks rather than checked separately.
