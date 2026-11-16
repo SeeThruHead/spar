@@ -1,4 +1,6 @@
-import { Effect, Layer, Scheduler } from "effect"
+import { Effect, Layer, Option, Scheduler } from "effect"
+import * as Cell from "./internal/cell.ts"
+import { Hydrating } from "./internal/server.ts"
 import { ActionScope } from "./internal/actionScope.ts"
 import { browserScheduler } from "./internal/soon.ts"
 import * as Dom from "./internal/dom.ts"
@@ -15,26 +17,51 @@ const overlayRoot = Effect.acquireRelease(Effect.sync(Dom.addOverlayRoot), (root
   Effect.sync(() => root.remove()),
 )
 
-export const mount = <R, LayerError = never>(
+type Options<R, LayerError> = {
+  readonly target: HTMLElement
+  readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>>, LayerError>
+  readonly shown?: Effect.Effect<void>
+}
+
+const shown = <R, LayerError>(
   component: Component<NoProps, never, R>,
-  options: {
-    readonly target: HTMLElement
-    readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>>, LayerError>
-  },
+  options: Options<R, LayerError>,
+  existing: (target: HTMLElement) => Dom.Cursor | undefined,
 ): Effect.Effect<never, LayerError> =>
   Effect.all({ scope: Effect.scope, overlays: overlayRoot }).pipe(
-    Effect.flatMap(({ scope, overlays }) =>
-      component.mount({}).pipe(
+    Effect.flatMap(({ scope, overlays }) => {
+      const claim = existing(options.target)
+      const hydrating = Cell.make(claim !== undefined)
+
+      return component.mount({}).pipe(
         Effect.flatMap((element) =>
-          renderInto(element, { parent: options.target, before: null, namespace: "html" }),
+          renderInto(element, { parent: options.target, before: null, namespace: "html" }, claim),
         ),
+        Effect.andThen(
+          Effect.sync(() => {
+            hydrating.write(false)
+            Option.map(Option.fromNullishOr(claim), (cursor) => Dom.dropRest(cursor, null))
+          }),
+        ),
+        Effect.andThen(options.shown ?? Effect.void),
+        Effect.provideService(Hydrating, hydrating),
         Effect.provideService(ActionScope, scope),
         Effect.provideService(Frame, { target: options.target, overlays }),
-      ),
-    ),
+      )
+    }),
     Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),
     Effect.andThen(Effect.never),
     Effect.provide(options.layer),
     Effect.scoped,
     Effect.provideService(Scheduler.Scheduler, browserScheduler),
   )
+
+export const mount = <R, LayerError = never>(
+  component: Component<NoProps, never, R>,
+  options: Options<R, LayerError>,
+): Effect.Effect<never, LayerError> => shown(component, options, () => undefined)
+
+export const hydrate = <R, LayerError = never>(
+  component: Component<NoProps, never, R>,
+  options: Options<R, LayerError>,
+): Effect.Effect<never, LayerError> => shown(component, options, Dom.cursorIn)

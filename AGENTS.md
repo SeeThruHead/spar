@@ -43,6 +43,8 @@ WebKit runs from the pinned Playwright container through podman
 - `apps/demo`: the first demo, its browser test, and `forbidden/`, code that must not compile.
 - `apps/stories`: one page per base component, with play tests.
 - `apps/sidebar`: the proof app, a port of a real Foldkit screen, with Gherkin scenarios.
+- `apps/ssr`: a small page rendered on a server and taken over in the browser, with a browser test
+  that checks none of the server's nodes are made again.
 - `apps/bench`: the same table app in Spar, Solid and Foldkit, with the leak and memory checks.
 
 ## How it starts

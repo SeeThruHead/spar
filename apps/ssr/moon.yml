@@ -1,0 +1,29 @@
+$schema: https://moonrepo.dev/schemas/project.json
+fileGroups:
+  upstream:
+    - /package.json
+    - /tsconfig.base.json
+    - /packages/lint/oxlintrc.json
+    - /packages/lint/house-rules.ts
+    - /packages/spar/package.json
+    - /packages/spar/src/**/*
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", "@group(upstream)"]
+  lint:
+    command: bun run lint
+    inputs: ["**/*", "@group(upstream)"]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  build:
+    command: bun run build
+    inputs: ["src/**/*", "scripts/build.ts", "@group(upstream)"]
+    outputs: ["dist"]
+  browser:
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/browser-test.ts
+    deps: [build]
+    inputs: ["src/**/*", "scripts/**/*", "@group(upstream)", "$SPAR_BROWSER"]
+  check:
+    deps: [typecheck, lint, format]

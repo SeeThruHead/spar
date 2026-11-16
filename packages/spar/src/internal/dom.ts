@@ -60,7 +60,7 @@ const booleanText = (name: string, value: boolean): string | undefined => {
   return value ? "" : undefined
 }
 
-const attributeText = (name: string, value: unknown): string | undefined => {
+export const attributeText = (name: string, value: unknown): string | undefined => {
   if (Predicate.isBoolean(value)) return booleanText(name, value)
   if (isAttributeText(value)) return toText(value)
 
@@ -83,16 +83,20 @@ export const toggleClass = (node: Host, names: string, on: unknown): void => {
     .forEach((name) => node.classList.toggle(name, on === true))
 }
 
-const cssName = (name: string): string => {
+export const cssName = (name: string): string => {
   if (name.startsWith("--")) return name
 
   return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
 }
 
-export const setStyle = (node: Host, name: string, value: unknown): void => {
-  if (isAttributeText(value)) return node.style.setProperty(cssName(name), toText(value))
+export const styleText = (value: unknown): string | undefined =>
+  isAttributeText(value) ? toText(value) : undefined
 
-  node.style.removeProperty(cssName(name))
+export const setStyle = (node: Host, name: string, value: unknown): void => {
+  const text = styleText(value)
+  if (text === undefined) return void node.style.removeProperty(cssName(name))
+
+  node.style.setProperty(cssName(name), text)
 }
 
 const rangeOf = (span: Span): Range => {
@@ -318,3 +322,103 @@ export const listen = (
 
   return () => node.removeEventListener(type, listener)
 }
+
+export const listStart = "["
+
+export const listEnd = "]"
+
+export const textBreak = ","
+
+export type Cursor = { next: ChildNode | null }
+
+export const cursorIn = (parent: Node): Cursor => ({ next: parent.firstChild })
+
+const isComment = (node: Node | null, data: string): node is Comment =>
+  node instanceof Comment && node.data === data
+
+const taken = <A extends ChildNode>(cursor: Cursor, node: A): A => {
+  cursor.next = node.nextSibling
+
+  return node
+}
+
+const skipTextBreak = (cursor: Cursor): void => {
+  const node = cursor.next
+  if (!isComment(node, textBreak)) return
+
+  taken(cursor, node).remove()
+}
+
+const isHost = (node: Node | null): node is Host =>
+  node instanceof HTMLElement || node instanceof SVGElement
+
+export const claimElement = (cursor: Cursor, tag: string): Host | undefined => {
+  const node = cursor.next
+  if (!isHost(node)) return undefined
+  if (node.localName !== tag.toLowerCase() && node.localName !== tag) return undefined
+
+  return taken(cursor, node)
+}
+
+export const claimText = (cursor: Cursor, parent: Node): Text => {
+  skipTextBreak(cursor)
+
+  const node = cursor.next
+  if (node instanceof Text) return taken(cursor, node)
+
+  return parent.insertBefore(document.createTextNode(""), node)
+}
+
+export const claimComment = (cursor: Cursor, parent: Node, data: string): Comment => {
+  const node = cursor.next
+  if (isComment(node, data)) return taken(cursor, node)
+
+  return parent.insertBefore(document.createComment(data), node)
+}
+
+const closing = (node: ChildNode | null, depth: number): Comment | undefined => {
+  if (node === null) return undefined
+  if (isComment(node, listEnd) && depth === 0) return node
+  if (isComment(node, listEnd)) return closing(node.nextSibling, depth - 1)
+  if (isComment(node, listStart)) return closing(node.nextSibling, depth + 1)
+
+  return closing(node.nextSibling, depth)
+}
+
+export const claimList = (
+  cursor: Cursor,
+  parent: Node,
+): { readonly anchor: Comment; readonly rows: Cursor } => {
+  const start = cursor.next
+  const end = isComment(start, listStart) ? closing(start.nextSibling, 0) : undefined
+  if (!isComment(start, listStart) || end === undefined) {
+    const anchor = parent.insertBefore(document.createComment(""), start)
+
+    return { anchor, rows: { next: anchor } }
+  }
+
+  const rows = { next: start.nextSibling }
+
+  start.remove()
+  end.data = ""
+  cursor.next = end.nextSibling
+
+  return { anchor: end, rows }
+}
+
+const dropFrom = (node: ChildNode | null, until: Node | null): void => {
+  if (node === null || node === until) return
+
+  const following = node.nextSibling
+
+  node.remove()
+  dropFrom(following, until)
+}
+
+export const dropRest = (cursor: Cursor, until: Node | null): void => {
+  dropFrom(cursor.next, until)
+  cursor.next = null
+}
+
+export const insertionPoint = (cursor: Cursor | undefined, before: Node | null): Node | null =>
+  cursor === undefined ? before : cursor.next

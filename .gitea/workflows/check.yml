@@ -57,8 +57,10 @@ jobs:
         run: bun run moon run bench:memory
       - name: Walk the sidebar app by keyboard at three sizes with an accessibility audit
         run: bun run moon run sidebar:walkthrough
-      - name: The same four suites in Firefox
-        run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough --concurrency 1
+      - name: A server-rendered page is taken over without remaking its nodes
+        run: bun run moon run ssr:browser
+      - name: The same suites in Firefox
+        run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough ssr:browser --concurrency 1
         env:
           SPAR_BROWSER: firefox
       - name: WebKit itself, for a runner with no container runtime
@@ -66,8 +68,8 @@ jobs:
           cat /etc/os-release | head -2
           command -v podman docker || echo "no container runtime here"
           bun run --cwd apps/demo browser:install:webkit || echo "WebKit could not be installed natively"
-      - name: The same four suites in WebKit, sharing one WebKit server
-        run: bun packages/browsers/scripts/in.ts bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough --concurrency 1
+      - name: The same suites in WebKit, sharing one WebKit server
+        run: bun packages/browsers/scripts/in.ts bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough ssr:browser --concurrency 1
         env:
           SPAR_BROWSER: webkit
   mutation:

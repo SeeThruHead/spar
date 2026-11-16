@@ -54,6 +54,7 @@ type Later = Effect.Effect<void, never, Scope.Scope>
 type Place = Target & {
   readonly owner: Cell.Owner
   readonly later: Cell.Waiting<Later>
+  readonly claim: Dom.Cursor | undefined
   readonly start: (action: Action) => void
   readonly crashed: (defect: unknown) => void
 }
@@ -63,7 +64,28 @@ const isEventName = (name: string): boolean => /^on[A-Z]/.test(name)
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   Predicate.isReadonlyObject(value) && !isReactive(value)
 
-const insert = (node: Node, place: Place): void => Dom.insert(place.parent, node, place.before)
+const insert = (node: Node, place: Place): void =>
+  Dom.insert(place.parent, node, Dom.insertionPoint(place.claim, place.before))
+
+const textNode = (place: Place): Text => {
+  if (place.claim !== undefined) return Dom.claimText(place.claim, place.parent)
+
+  const node = document.createTextNode("")
+
+  insert(node, place)
+
+  return node
+}
+
+const marker = (place: Place): Comment => {
+  if (place.claim !== undefined) return Dom.claimComment(place.claim, place.parent, "")
+
+  const node = document.createComment("")
+
+  insert(node, place)
+
+  return node
+}
 
 const bindLater = <A>(source: Reactive<A>, write: (value: A) => void, place: Place): Later =>
   Effect.flatMap(source.get, (initial) => {
@@ -129,10 +151,9 @@ const applyProp = (node: Dom.Host, name: string, value: unknown, place: Place): 
 }
 
 const renderText = (source: Reactive<unknown>, place: Place): void => {
-  const node = document.createTextNode("")
+  const node = textNode(place)
 
   bind(source, (value) => Dom.setText(node, value), place)
-  insert(node, place)
 }
 
 const within = (place: Place, namespace: Dom.Namespace): Place => {
@@ -155,24 +176,47 @@ const applyOwnPropsInTurn = (node: Dom.Host, props: Intrinsic["props"], place: P
   )
 }
 
-const renderIntrinsic = (element: Intrinsic, place: Place): Dom.Host => {
-  const namespace = element.tag === "svg" ? "svg" : place.namespace
-  const node = Dom.create(element.tag, namespace)
-  const inside = within(place, childNamespace(element.tag, namespace))
-
+const fill = (node: Dom.Host, element: Intrinsic, inside: Place): void => {
   applyProp(node, "children", element.props["children"], inside)
   applyOwnPropsInTurn(node, element.props, inside)
+}
+
+const claimed = (element: Intrinsic, place: Place): Dom.Host | undefined =>
+  place.claim === undefined ? undefined : Dom.claimElement(place.claim, element.tag)
+
+const renderIntrinsic = (element: Intrinsic, place: Place): Dom.Host => {
+  const namespace = element.tag === "svg" ? "svg" : place.namespace
+  const inside = within(place, childNamespace(element.tag, namespace))
+  const found = claimed(element, place)
+  if (found !== undefined) {
+    const children = Dom.cursorIn(found)
+
+    fill(found, element, { ...inside, claim: children })
+    Dom.dropRest(children, null)
+
+    return found
+  }
+
+  const node = Dom.create(element.tag, namespace)
+
+  fill(node, element, { ...inside, claim: undefined })
   insert(node, place)
 
   return node
 }
 
 const createBetweenMarkers = (element: Element, place: Place): Dom.Span => {
-  const start = document.createComment("")
-  const end = document.createComment("")
+  if (place.claim !== undefined) {
+    const start = marker(place)
 
-  insert(start, place)
-  insert(end, place)
+    render(element, place)
+
+    return { start, end: marker(place) }
+  }
+
+  const start = marker(place)
+  const end = marker(place)
+
   render(element, { ...place, before: end })
 
   return { start, end }
@@ -329,17 +373,30 @@ const drawEach = <A>(
     )
   })
 
-const fillRows = Effect.fnUntraced(function* <A>(rows: Rows<A>, place: Place, anchor: Node) {
-  const inside: Place = { ...place, before: anchor }
+const fillRows = Effect.fnUntraced(function* <A>(
+  rows: Rows<A>,
+  place: Place,
+  anchor: Node,
+  existing: Dom.Cursor | undefined,
+) {
   const entries = yield* Ref.make<ReadonlyArray<Entry<A>>>([])
+  const claiming = yield* Ref.make(existing)
   const placeEach = (
     wanted: ReadonlyArray<readonly [string, A]>,
     positions: ReadonlyMap<string, Placed<A>>,
     keptCount: number,
   ) =>
-    rows.kind === "drawn"
-      ? drawEach(rows, wanted, positions, keptCount, inside)
-      : mountEach(rows, wanted, positions, keptCount, inside)
+    Effect.flatMap(Ref.getAndSet(claiming, undefined), (claim) => {
+      const inside: Place = { ...place, before: anchor, claim }
+      const placed =
+        rows.kind === "drawn"
+          ? drawEach(rows, wanted, positions, keptCount, inside)
+          : mountEach(rows, wanted, positions, keptCount, inside)
+
+      return claim === undefined
+        ? placed
+        : Effect.tap(placed, () => Effect.sync(() => Dom.dropRest(claim, anchor)))
+    })
 
   const reconcile = Effect.fnUntraced(
     function* (next: ReadonlyArray<A>) {
@@ -391,10 +448,16 @@ const fillRows = Effect.fnUntraced(function* <A>(rows: Rows<A>, place: Place, an
 })
 
 const renderRows = <A>(rows: Rows<A>, place: Place): void => {
+  if (place.claim !== undefined) {
+    const list = Dom.claimList(place.claim, place.parent)
+
+    return Cell.defer(place.later, fillRows(rows, place, list.anchor, list.rows))
+  }
+
   const anchor = document.createComment("")
 
   insert(anchor, place)
-  Cell.defer(place.later, fillRows(rows, place, anchor))
+  Cell.defer(place.later, fillRows(rows, place, anchor, undefined))
 }
 
 const renderElement = (element: Element, place: Place): void => {
@@ -406,6 +469,7 @@ const renderElement = (element: Element, place: Place): void => {
       parent: element.layer,
       before: null,
       namespace: "html",
+      claim: undefined,
     })
   }
 
@@ -414,14 +478,18 @@ const renderElement = (element: Element, place: Place): void => {
 
 const render = (child: unknown, place: Place): void => {
   if (Predicate.isString(child) || Predicate.isNumber(child)) {
-    return insert(document.createTextNode(Dom.toText(child)), place)
+    return Dom.setText(textNode(place), child)
   }
   if (isReactive(child)) return renderText(child, place)
   if (Array.isArray(child)) return child.forEach((item) => render(item, place))
   if (isElement(child)) return renderElement(child, place)
 }
 
-export const renderInto = Effect.fnUntraced(function* (child: unknown, target: Target) {
+export const renderInto = Effect.fnUntraced(function* (
+  child: unknown,
+  target: Target,
+  claim: Dom.Cursor | undefined,
+) {
   const start = yield* starter()
   const owner = Cell.owner()
   const later = Cell.waiting<Later>()
@@ -432,6 +500,7 @@ export const renderInto = Effect.fnUntraced(function* (child: unknown, target: T
       ...target,
       owner,
       later,
+      claim,
       start,
       crashed: (defect) => start(report(defect)),
     }),

@@ -2,10 +2,11 @@ import { Effect, Predicate, Scope, SubscriptionRef } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
-import { keyed, portal as portalTo } from "./internal/element.ts"
+import { fragment, keyed, portal as portalTo } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
+import { Hydrating, OnServer } from "./internal/server.ts"
 import { ViewScope } from "./internal/viewScope.ts"
 
 export type View<Props> = (props: Props) => Element
@@ -119,6 +120,13 @@ export const recover =
 
 type Shown = { readonly key: string; readonly element: Element }
 
+const waitsForContent = Effect.gen(function* () {
+  const onServer = yield* OnServer
+  const hydrating = yield* Hydrating
+
+  return onServer || hydrating.read()
+})
+
 export const pending =
   <Props>(placeholder: View<Props>) =>
   <R = never, ViewProps = never>(
@@ -127,6 +135,9 @@ export const pending =
     make(
       viewOf(self),
       Effect.fnUntraced(function* (props: Props) {
+        const settled = yield* waitsForContent
+        if (settled) return yield* child(self, props)
+
         const current = yield* SubscriptionRef.make<Shown>({
           key: "pending",
           element: placeholder(props),
@@ -154,6 +165,9 @@ export const portal = <Props, E = never, R = never, ViewProps = never>(
   make(
     viewOf(self),
     Effect.fnUntraced(function* (props: Props) {
+      const onServer = yield* OnServer
+      if (onServer) return fragment([])
+
       const frame = yield* Frame
       const layer = yield* Effect.acquireRelease(
         Effect.sync(() => Dom.addLayer(frame.overlays)),

@@ -168,6 +168,22 @@ everything beneath inert, locks scrolling, keeps Tab inside, dismisses on Escape
 that place the layer by its anchor: below it or above, whichever has more room, from the left edge
 or the right, never past the edge of the window, and no taller than the room there is.
 
+## On a server
+
+`Server.renderToString(Component, { layer })` runs the same component on a server and gives its
+HTML. Loading parts (`View.pending`) are waited for, so the page arrives complete; overlays are
+left out; `Events` values take their resting values (online, visible, no media query matching)
+and window listeners are not attached. Give it server layers: `Router.Router.layerMemory(url)`,
+stores in memory or over a `KeyValueStore` you provide.
+
+In the browser, `App.hydrate(Component, { target, layer })` takes the page over instead of
+building it again: it keeps the server's nodes, attaches listeners and bindings to them, and
+repairs whatever does not match what the component would have drawn. While it takes over,
+loading parts are waited for as on the server, so nothing flickers back to a placeholder.
+`App.mount` and `App.hydrate` both take `shown`, an effect run once the first picture is up.
+
+(`apps/ssr`)
+
 ## Devtools
 
 Provide `Devtools.layer` to the store layers and mount `Devtools.Panel`: each store's actions and
