@@ -1,7 +1,7 @@
 ---
 id: spa-ycvh
-status: closed
-deps: [spa-frp9, spa-tx8c, spa-up5r]
+status: open
+deps: [spa-frp9, spa-tx8c, spa-up5r, spa-gjm9, spa-181z, spa-690t, spa-gmzk]
 links: []
 created: 2026-11-16T04:22:57Z
 type: task

@@ -130,4 +130,8 @@ Rules out: two styles of the same app in one codebase.
 - A span per component is automatic (named after the view), so there is no `withSpan`.
 - Two internal modules are allowed to mutate, each behind a pure-looking interface: `internal/dom.ts`
   (all DOM writes) and `internal/cell.ts` (the value cell under reactive values, added after the
-  benchmark showed a stream and a fiber per binding cost 10 seconds for 10,000 rows).
+  benchmark showed a stream and a fiber per binding cost 10 seconds for 10,000 rows). The reactive
+  values in `internal/reactive.ts` are small classes for the same reason: one object per value
+  instead of an object, two effects and three closures, which with one list of things to stop per
+  row took 10,000 rows from 61 MB to 19 MB. The lint rule lets a constructor set its own fields
+  and nothing else.

@@ -4,10 +4,10 @@ import type { Reactive } from "./reactive.ts"
 
 export const TypeId = "~spar/Element"
 
-export type Row = {
-  readonly key: string
-  readonly mount: Effect.Effect<Element, never, Scope.Scope>
-  readonly refresh: Effect.Effect<void>
+export type Rows<A> = {
+  readonly items: Reactive<ReadonlyArray<A>>
+  readonly key: (item: A) => string
+  readonly mount: (key: string, item: Reactive<A>) => Effect.Effect<Element, never, Scope.Scope>
 }
 
 export type Intrinsic = {
@@ -16,10 +16,15 @@ export type Intrinsic = {
   readonly props: Readonly<Record<string, unknown>>
 }
 
+export type Keyed = {
+  readonly [TypeId]: "Keyed"
+  readonly open: <X>(use: <A>(rows: Rows<A>) => X) => X
+}
+
 export type Element =
   | Intrinsic
+  | Keyed
   | { readonly [TypeId]: "Fragment"; readonly children: ReadonlyArray<unknown> }
-  | { readonly [TypeId]: "Keyed"; readonly rows: Reactive<ReadonlyArray<Row>> }
   | { readonly [TypeId]: "Portal"; readonly layer: HTMLElement; readonly child: Element }
 
 export const intrinsic = (tag: string, props: Readonly<Record<string, unknown>>): Element => ({
@@ -33,9 +38,9 @@ export const fragment = (children: ReadonlyArray<unknown>): Element => ({
   children,
 })
 
-export const keyed = (rows: Reactive<ReadonlyArray<Row>>): Element => ({
+export const keyed = <A>(rows: Rows<A>): Element => ({
   [TypeId]: "Keyed",
-  rows,
+  open: (use) => use(rows),
 })
 
 export const portal = (layer: HTMLElement, child: Element): Element => ({

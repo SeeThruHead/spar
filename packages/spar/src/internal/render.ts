@@ -1,4 +1,5 @@
 import {
+  Array as Arr,
   Effect,
   Exit,
   Option,
@@ -11,15 +12,18 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect"
+import { toAction } from "./action.ts"
+import type { Action } from "./action.ts"
+import * as Cell from "./cell.ts"
 import { report } from "./crash.ts"
 import * as Dom from "./dom.ts"
 import { HandleTypeId, isHandle } from "./handle.ts"
 import type { Handle } from "./handle.ts"
 import { TypeId, isElement } from "./element.ts"
-import type { Element, Intrinsic, Row } from "./element.ts"
-import { listen, starter } from "./listen.ts"
+import type { Element, Intrinsic, Rows } from "./element.ts"
+import { starter } from "./listen.ts"
 import { settled } from "./order.ts"
-import { Observe, isReactive } from "./reactive.ts"
+import { Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 
 export class DuplicateKey extends Schema.TaggedError<
@@ -31,15 +35,23 @@ export class DuplicateKey extends Schema.TaggedError<
   }
 }
 
-type Entry = Dom.Span & {
+type Entry<A> = Dom.Span & {
   readonly key: string
   readonly scope: Scope.Closeable
+  readonly owner: Cell.Owner
+  readonly cell: Cell.Cell<A>
 }
 
-type Place = {
+type Target = {
   readonly parent: Node
   readonly before: Node | null
   readonly namespace: Dom.Namespace
+}
+
+type Place = Target & {
+  readonly owner: Cell.Owner
+  readonly start: (action: Action) => void
+  readonly crashed: (defect: unknown) => void
 }
 
 const isEventName = (name: string): boolean => /^on[A-Z]/.test(name)
@@ -50,19 +62,23 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 const insert = (node: Node, place: Place): Effect.Effect<void> =>
   Effect.sync(() => Dom.insert(place.parent, node, place.before))
 
-const bind = Effect.fnUntraced(function* <A>(source: Reactive<A>, write: (value: A) => void) {
-  const start = yield* starter()
-  const initial = yield* source.get
+const bind = <A>(
+  source: Reactive<A>,
+  write: (value: A) => void,
+  place: Place,
+): Effect.Effect<void> =>
+  Effect.flatMap(source.get, (initial) => {
+    write(initial)
 
-  write(initial)
-  yield* source[Observe](write, (defect) => start(report(defect)))
-})
+    return Effect.map(source[Observe](write, place.crashed), (stop) => Cell.own(place.owner, stop))
+  })
 
 const apply = (
   value: unknown,
   write: (value: unknown) => void,
-): Effect.Effect<void, never, Scope.Scope> => {
-  if (isReactive(value)) return bind(value, write)
+  place: Place,
+): Effect.Effect<void> => {
+  if (isReactive(value)) return bind(value, write, place)
 
   return Effect.sync(() => write(value))
 }
@@ -70,16 +86,30 @@ const apply = (
 const applyEach = (
   entries: Readonly<Record<string, unknown>>,
   write: (name: string, value: unknown) => void,
-): Effect.Effect<void, never, Scope.Scope> =>
+  place: Place,
+): Effect.Effect<void> =>
   Effect.forEach(
     Object.entries(entries),
-    ([name, value]) => apply(value, (current) => write(name, current)),
+    ([name, value]) => apply(value, (current) => write(name, current), place),
     { discard: true },
   )
 
 const attach = (node: Dom.Host, handle: Handle): Effect.Effect<void, never, Scope.Scope> =>
   Effect.acquireRelease(SubscriptionRef.set(handle[HandleTypeId], Option.some(node)), () =>
     SubscriptionRef.set(handle[HandleTypeId], Option.none()),
+  )
+
+const listen = (
+  node: Dom.Host,
+  type: string,
+  handler: unknown,
+  place: Place,
+): Effect.Effect<void> =>
+  Effect.sync(() =>
+    Cell.own(
+      place.owner,
+      Dom.listen(node, type, (event) => place.start(toAction(handler, event))),
+    ),
   )
 
 const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
@@ -92,28 +122,27 @@ const applyProp = (
   node: Dom.Host,
   name: string,
   value: unknown,
-  namespace: Dom.Namespace,
-): Effect.Effect<void, never, Scope.Scope> => {
-  if (name === "children") return render(value, { parent: node, before: null, namespace })
-  if (isEventName(name)) return listen(node, name.slice(2).toLowerCase(), value)
-  if (isHandle(value)) return attach(node, value)
-  if (name === "class" && isRecord(value)) {
-    return applyEach(value, (names, on) => Dom.toggleClass(node, names, on))
-  }
-  if (name === "style" && isRecord(value)) {
-    return applyEach(value, (property, current) => Dom.setStyle(node, property, current))
-  }
-
-  return apply(value, (current) => Dom.setAttribute(node, name, current))
-}
-
-const renderText = (
-  source: Reactive<unknown>,
   place: Place,
 ): Effect.Effect<void, never, Scope.Scope> => {
+  if (name === "children") return render(value, { ...place, parent: node, before: null })
+  if (isEventName(name)) return listen(node, name.slice(2).toLowerCase(), value, place)
+  if (isHandle(value)) return attach(node, value)
+  if (name === "class" && isRecord(value)) {
+    return applyEach(value, (names, on) => Dom.toggleClass(node, names, on), place)
+  }
+  if (name === "style" && isRecord(value)) {
+    return applyEach(value, (property, current) => Dom.setStyle(node, property, current), place)
+  }
+
+  return apply(value, (current) => Dom.setAttribute(node, name, current), place)
+}
+
+const renderText = (source: Reactive<unknown>, place: Place): Effect.Effect<void> => {
   const node = document.createTextNode("")
 
-  return bind(source, (value) => Dom.setText(node, value)).pipe(Effect.andThen(insert(node, place)))
+  return bind(source, (value) => Dom.setText(node, value), place).pipe(
+    Effect.andThen(insert(node, place)),
+  )
 }
 
 const childrenFirst = (
@@ -123,13 +152,20 @@ const childrenFirst = (
   ...props.filter(([name]) => name !== "children"),
 ]
 
+const within = (place: Place, namespace: Dom.Namespace): Place => {
+  if (place.namespace === namespace) return place
+
+  return { ...place, namespace }
+}
+
 const renderIntrinsic = Effect.fnUntraced(function* (element: Intrinsic, place: Place) {
   const namespace = element.tag === "svg" ? "svg" : place.namespace
   const node = Dom.create(element.tag, namespace)
+  const inside = within(place, childNamespace(element.tag, namespace))
 
   yield* Effect.forEach(
     childrenFirst(Object.entries(element.props)),
-    ([name, value]) => applyProp(node, name, value, childNamespace(element.tag, namespace)),
+    ([name, value]) => applyProp(node, name, value, inside),
     { discard: true },
   )
   yield* insert(node, place)
@@ -157,34 +193,55 @@ const createSpan = (
   return Effect.map(renderIntrinsic(element, place), (node) => ({ start: node, end: node }))
 }
 
-const createEntry = Effect.fnUntraced(function* (row: Row, place: Place, parent: Scope.Scope) {
-  const scope = yield* Scope.fork(parent)
-  const element = yield* Scope.provide(row.mount, scope)
-  const span = yield* Scope.provide(createSpan(element, place), scope)
+type Owned = { readonly scope: Scope.Closeable; readonly owner: Cell.Owner }
 
-  return { ...span, key: row.key, scope } satisfies Entry
-})
+const closeEntry = (entry: Owned): Effect.Effect<void> =>
+  Effect.andThen(
+    Scope.close(entry.scope, Exit.void),
+    Effect.sync(() => Cell.release(entry.owner)),
+  )
 
-const removeEntry = (entry: Entry): Effect.Effect<void> =>
-  Scope.close(entry.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => Dom.removeSpan(entry))))
+const removeEntry = <A>(entry: Entry<A>): Effect.Effect<void> =>
+  Effect.andThen(
+    closeEntry(entry),
+    Effect.sync(() => Dom.removeSpan(entry)),
+  )
+
+const createEntry = <A>(
+  rows: Rows<A>,
+  key: string,
+  item: A,
+  place: Place,
+): Effect.Effect<Entry<A>> => {
+  const scope = Scope.makeUnsafe()
+  const owner = Cell.owner()
+  const cell = Cell.make(item)
+
+  return rows.mount(key, fromCell(cell)).pipe(
+    Effect.flatMap((element) => createSpan(element, { ...place, owner })),
+    Effect.map((span): Entry<A> => ({ start: span.start, end: span.end, key, scope, owner, cell })),
+    Effect.onError(() => closeEntry({ scope, owner })),
+    Scope.provide(scope),
+  )
+}
 
 const repeated = (keys: ReadonlyArray<string>): ReadonlyArray<string> => [
   ...new Set(keys.filter((key, index) => keys.indexOf(key) !== index)),
 ]
 
-const renderKeyed = Effect.fnUntraced(function* (rows: Reactive<ReadonlyArray<Row>>, place: Place) {
+const renderRows = Effect.fnUntraced(function* <A>(rows: Rows<A>, place: Place) {
   const anchor = document.createComment("")
   const inside: Place = { ...place, before: anchor }
-  const scope = yield* Effect.scope
-  const entries = yield* Ref.make<ReadonlyArray<Entry>>([])
+  const entries = yield* Ref.make<ReadonlyArray<Entry<A>>>([])
 
   const reconcile = Effect.fnUntraced(
-    function* (next: ReadonlyArray<Row>) {
+    function* (next: ReadonlyArray<A>) {
       const previous = yield* Ref.get(entries)
-      const keys = new Set(next.map((row) => row.key))
+      const nextKeys = next.map(rows.key)
+      const keys = new Set(nextKeys)
 
       if (keys.size !== next.length) {
-        return yield* Effect.die(new DuplicateKey({ keys: repeated(next.map((row) => row.key)) }))
+        return yield* Effect.die(new DuplicateKey({ keys: repeated(nextKeys) }))
       }
 
       const kept = previous.filter((entry) => keys.has(entry.key))
@@ -196,14 +253,20 @@ const renderKeyed = Effect.fnUntraced(function* (rows: Reactive<ReadonlyArray<Ro
         { discard: true },
       )
 
-      const placed = yield* Effect.forEach(next, (row, index) => {
-        const existing = positions.get(row.key)
-        if (existing !== undefined) return Effect.as(row.refresh, existing)
+      const placed = yield* Effect.forEach(Arr.zip(nextKeys, next), ([key, item], index) => {
+        const existing = positions.get(key)
+        if (existing === undefined) {
+          return Effect.map(createEntry(rows, key, item, inside), (entry) => ({
+            entry,
+            position: kept.length + index,
+          }))
+        }
 
-        return Effect.map(createEntry(row, inside, scope), (entry) => ({
-          entry,
-          position: kept.length + index,
-        }))
+        return Effect.sync(() => {
+          existing.entry.cell.write(item)
+
+          return existing
+        })
       })
       const current = placed.map((each) => each.entry)
       const staying = settled(placed.map((each) => each.position))
@@ -215,17 +278,19 @@ const renderKeyed = Effect.fnUntraced(function* (rows: Reactive<ReadonlyArray<Ro
   )
 
   yield* insert(anchor, place)
+  yield* Effect.addFinalizer(() =>
+    Effect.flatMap(Ref.get(entries), (all) => Effect.forEach(all, closeEntry, { discard: true })),
+  )
 
-  const start = yield* starter()
-  const latest = yield* Queue.sliding<ReadonlyArray<Row>>(1)
-  const initial = yield* rows.get
+  const latest = yield* Queue.sliding<ReadonlyArray<A>>(1)
+  const initial = yield* rows.items.get
 
   yield* reconcile(initial)
-  yield* rows[Observe](
-    (next) => {
+  yield* Effect.acquireRelease(
+    rows.items[Observe]((next) => {
       Queue.offerUnsafe(latest, next)
-    },
-    (defect) => start(report(defect)),
+    }, place.crashed),
+    (stop) => Effect.sync(stop),
   )
   yield* Effect.forkScoped(
     Effect.tapDefect(Stream.runForEach(Stream.fromQueue(latest), reconcile), report),
@@ -237,13 +302,18 @@ const renderElement = (element: Element, place: Place): Effect.Effect<void, neve
   if (element[TypeId] === "Intrinsic") return Effect.asVoid(renderIntrinsic(element, place))
   if (element[TypeId] === "Fragment") return render(element.children, place)
   if (element[TypeId] === "Portal") {
-    return render(element.child, { parent: element.layer, before: null, namespace: "html" })
+    return render(element.child, {
+      ...place,
+      parent: element.layer,
+      before: null,
+      namespace: "html",
+    })
   }
 
-  return renderKeyed(element.rows, place)
+  return element.open((rows) => renderRows(rows, place))
 }
 
-export const render = (child: unknown, place: Place): Effect.Effect<void, never, Scope.Scope> => {
+const render = (child: unknown, place: Place): Effect.Effect<void, never, Scope.Scope> => {
   if (Predicate.isString(child) || Predicate.isNumber(child)) {
     return insert(document.createTextNode(Dom.toText(child)), place)
   }
@@ -255,3 +325,16 @@ export const render = (child: unknown, place: Place): Effect.Effect<void, never,
 
   return Effect.void
 }
+
+export const renderInto = Effect.fnUntraced(function* (child: unknown, target: Target) {
+  const start = yield* starter()
+  const owner = Cell.owner()
+
+  yield* Effect.addFinalizer(() => Effect.sync(() => Cell.release(owner)))
+  yield* render(child, {
+    ...target,
+    owner,
+    start,
+    crashed: (defect) => start(report(defect)),
+  })
+})

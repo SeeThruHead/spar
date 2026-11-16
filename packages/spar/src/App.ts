@@ -3,7 +3,7 @@ import { ActionScope } from "./internal/actionScope.ts"
 import { browserScheduler } from "./internal/soon.ts"
 import * as Dom from "./internal/dom.ts"
 import { Frame } from "./internal/frame.ts"
-import { render } from "./internal/render.ts"
+import { renderInto } from "./internal/render.ts"
 import type { Component } from "./View.ts"
 
 export { CrashReporter } from "./internal/crash.ts"
@@ -26,7 +26,7 @@ export const mount = <R, LayerError = never>(
     Effect.flatMap(({ scope, overlays }) =>
       component.mount({}).pipe(
         Effect.flatMap((element) =>
-          render(element, { parent: options.target, before: null, namespace: "html" }),
+          renderInto(element, { parent: options.target, before: null, namespace: "html" }),
         ),
         Effect.provideService(ActionScope, scope),
         Effect.provideService(Frame, { target: options.target, overlays }),

@@ -27,6 +27,7 @@ const expected = [
   "loops.ts house(no-loops) 3",
   "loops.ts house(no-mutation) 3",
   "multiline-logical.ts house(no-multiline-logical) 2",
+  "mutation.ts house(no-mutation) 13",
   "mutation.ts house(no-mutation) 2",
   "mutation.ts house(no-mutation) 3",
   "mutation.ts house(no-mutation) 4",

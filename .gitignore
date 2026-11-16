@@ -9,3 +9,4 @@ playwright-report/
 .stryker-tmp/
 reports/
 artifacts/
+dist-readable/

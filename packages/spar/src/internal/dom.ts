@@ -214,3 +214,13 @@ export const keepTabInside = (layer: HTMLElement, event: Event): void => {
   event.preventDefault()
   ;[wrapTo].filter(isHtml).forEach((stop) => stop.focus())
 }
+
+export const listen = (
+  node: Host,
+  type: string,
+  listener: (event: Event) => void,
+): (() => void) => {
+  node.addEventListener(type, listener)
+
+  return () => node.removeEventListener(type, listener)
+}

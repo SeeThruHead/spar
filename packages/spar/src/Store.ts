@@ -354,8 +354,8 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         return { entry, next }
       })
 
-      const command = (name: string, handled: Action<State, unknown>) =>
-        Effect.fn(channelOf(key, name))(
+      const command = (name: string, handled: Action<State, unknown>) => {
+        const carryOut = Effect.fnUntraced(
           function* (input: unknown) {
             const payload = yield* handled.encode(input)
             const reduce = yield* handled.reducer(payload)
@@ -372,7 +372,11 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           },
           Effect.orDie,
           (effect) => provideTo<void, never, R>(effect, context),
+          (effect) => Effect.withSpan(effect, channelOf(key, name), { captureStackTrace: false }),
         )
+
+        return (input: unknown) => Effect.suspend(() => carryOut(input))
+      }
 
       yield* provideTo(
         eachReaction((reaction, channel) => reaction.start(channel)),

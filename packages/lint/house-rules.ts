@@ -42,6 +42,19 @@ const memberParts = (
 const isFunction = (node: Node): boolean =>
   ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"].includes(node.type)
 
+const enclosingFunction = (node: Node): Node | undefined => {
+  const parent = node.parent
+  if (parent === undefined || parent === null) return undefined
+
+  return isFunction(parent) ? parent : enclosingFunction(parent)
+}
+
+const setsOwnFieldWhileConstructing = (node: Node): boolean => {
+  if (field(field(field(node, "left"), "object"), "type") !== "ThisExpression") return false
+
+  return field(enclosingFunction(node)?.parent, "kind") === "constructor"
+}
+
 const rule = (create: (context: Context) => Visitor): Rule => ({
   meta: { type: "problem" },
   create,
@@ -178,6 +191,7 @@ const rules: Readonly<Record<string, Rule>> = {
     },
     AssignmentExpression: (node) => {
       if (field(field(node, "left"), "type") !== "MemberExpression") return
+      if (setsOwnFieldWhileConstructing(node)) return
 
       context.report({
         node,

@@ -30,5 +30,9 @@ tasks:
     command: bun scripts/leaks.ts
     deps: [build]
     inputs: ["src/**/*", "scripts/leaks.ts", "@group(upstream)"]
+  memory:
+    command: bun scripts/memory.ts
+    deps: [build]
+    inputs: ["src/**/*", "scripts/memory.ts", "@group(upstream)"]
   check:
     deps: [typecheck, lint, format]

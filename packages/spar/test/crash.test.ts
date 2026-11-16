@@ -152,6 +152,44 @@ describe("crashes", () => {
     }).pipe(Effect.provide(Reports.layer)),
   )
 
+  it.live("a row that dies while it is made is reported, cleaned up, and the rest stay", () =>
+    Effect.gen(function* () {
+      const reports = yield* Reports
+      const released = yield* SubscriptionRef.make(0)
+      const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
+      const Fragile = View.connect(
+        Effect.fnUntraced(function* ({ item }: { readonly item: Reactive.Reactive<Item> }) {
+          const now = yield* item.get
+
+          yield* Effect.addFinalizer(() => SubscriptionRef.update(released, (count) => count + 1))
+          if (now.label === "Beta") return yield* Effect.die("this row cannot be shown")
+
+          return { item }
+        }),
+      )(ItemView)
+
+      yield* Testing.mount(
+        View.connect(
+          Effect.fnUntraced(function* () {
+            return {
+              rows: yield* pipe(
+                Reactive.fromSubscriptionRef(list),
+                Reactive.mapBy(keyOf, Fragile, (item) => ({ item })),
+              ),
+            }
+          }),
+        )(RowsView),
+      )
+      yield* Testing.findText("Alpha")
+      yield* SubscriptionRef.update(list, (all) => [...all, { id: "b", label: "Beta" }])
+      yield* Effect.sleep("20 millis")
+
+      expect(yield* reports.seen).toEqual(["this row cannot be shown"])
+      expect(yield* SubscriptionRef.get(released)).toBe(1)
+      expect((yield* Testing.find("listitem")).textContent).toBe("Alpha")
+    }).pipe(Effect.provide(Reports.layer)),
+  )
+
   it.live("without a reporter a crash is logged and the page carries on", () =>
     Effect.gen(function* () {
       yield* Testing.mount(Page(Widget))

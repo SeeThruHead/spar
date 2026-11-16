@@ -72,7 +72,9 @@ export const connect =
     view: View<ViewProps> & View<Props> & OnlyWhatTheViewTakes<Props, ViewProps>,
   ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
     make<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
-      Effect.withSpan(inViewScope(Effect.map(props(outer), view)), spanName(view)),
+      Effect.withSpan(inViewScope(Effect.map(props(outer), view)), spanName(view), {
+        captureStackTrace: false,
+      }),
     )
 
 export const mapProps =
@@ -120,6 +122,8 @@ export const recover =
       ),
     )
 
+type Shown = { readonly key: string; readonly element: Element }
+
 export const pending =
   <Props>(placeholder: View<Props>) =>
   <R = never, ViewProps = never>(
@@ -128,10 +132,7 @@ export const pending =
     make(
       viewOf(self),
       Effect.fnUntraced(function* (props: Props) {
-        const current = yield* SubscriptionRef.make<{
-          readonly key: string
-          readonly element: Element
-        }>({
+        const current = yield* SubscriptionRef.make<Shown>({
           key: "pending",
           element: placeholder(props),
         })
@@ -143,11 +144,11 @@ export const pending =
           ),
         )
 
-        return keyed(
-          map(fromSubscriptionRef(current), ({ key, element }) => [
-            { key, mount: Effect.succeed(element), refresh: Effect.void },
-          ]),
-        )
+        return keyed({
+          items: map(fromSubscriptionRef(current), (shown) => [shown]),
+          key: (shown: Shown) => shown.key,
+          mount: (_key, shown) => Effect.map(shown.get, (now) => now.element),
+        })
       }),
     )
 

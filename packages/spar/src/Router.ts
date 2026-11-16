@@ -6,7 +6,7 @@ import type { Modified } from "./internal/action.ts"
 import { inContext } from "./internal/context.ts"
 import * as Dom from "./internal/dom.ts"
 import { keyed } from "./internal/element.ts"
-import type { Element, Row } from "./internal/element.ts"
+import type { Element } from "./internal/element.ts"
 import { events, on as onTarget } from "./internal/listen.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -249,6 +249,11 @@ export const on = <Params, R = never>(
     })),
 })
 
+type Page = {
+  readonly key: string
+  readonly mount: Effect.Effect<Element, never, Scope.Scope>
+}
+
 export const outlet = Effect.fnUntraced(function* <
   const Needs extends ReadonlyArray<unknown>,
   R2 = never,
@@ -260,24 +265,26 @@ export const outlet = Effect.fnUntraced(function* <
   const context = yield* Effect.context<Needs[number] | R2>()
   const routes: ReadonlyArray<Case<Needs[number]>> = options.routes
 
-  const page = (location: Location): Row =>
+  const page = (location: Location): Page =>
     Option.match(
       Array.findFirst(routes, (candidate) => candidate.match(location)),
       {
         onNone: () => ({
           key: `nothing at ${location.pathname}`,
           mount: inContext(child(options.otherwise, { path: location.pathname }), context),
-          refresh: Effect.void,
         }),
         onSome: ({ key, mount }) => ({
           key,
           mount: inContext(mount, context),
-          refresh: Effect.void,
         }),
       },
     )
 
-  return keyed(map(router.location, (location) => [page(location)]))
+  return keyed({
+    items: map(router.location, (location) => [page(location)]),
+    key: (shown: Page) => shown.key,
+    mount: (_key, shown) => Effect.flatMap(shown.get, (now) => now.mount),
+  })
 })
 
 export const focusOnChange = Effect.fnUntraced(function* (handle: Handle.Handle) {

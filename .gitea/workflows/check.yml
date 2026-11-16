@@ -52,5 +52,7 @@ jobs:
         run: bun run moon run stories:play
       - name: Run the sidebar app's feature scenarios
         run: bun run moon run sidebar:features
+      - name: Check memory at 10,000 rows against Solid
+        run: bun run moon run bench:memory
       - name: Walk the sidebar app by keyboard at three sizes with an accessibility audit
         run: bun run moon run sidebar:walkthrough
