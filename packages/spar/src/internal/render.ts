@@ -222,6 +222,9 @@ const renderKeyed = Effect.fnUntraced(function* (rows: Reactive<ReadonlyArray<Ro
 const renderElement = (element: Element, place: Place): Effect.Effect<void, never, Scope.Scope> => {
   if (element[TypeId] === "Intrinsic") return Effect.asVoid(renderIntrinsic(element, place))
   if (element[TypeId] === "Fragment") return render(element.children, place)
+  if (element[TypeId] === "Portal") {
+    return render(element.child, { parent: element.layer, before: null, namespace: "html" })
+  }
 
   return renderKeyed(element.rows, place)
 }

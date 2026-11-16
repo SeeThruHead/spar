@@ -1,7 +1,9 @@
 import { Effect, Predicate, Scope, SubscriptionRef } from "effect"
 import { report } from "./internal/crash.ts"
-import { keyed } from "./internal/element.ts"
+import * as Dom from "./internal/dom.ts"
+import { keyed, portal as portalTo } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
+import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
 
@@ -148,3 +150,22 @@ export const pending =
         )
       }),
     )
+
+export const portal = <Props, E = never, R = never, ViewProps = never>(
+  self: Mountable<Props, E, R, ViewProps>,
+): Component<Props, E, Exclude<R, OverlayLayer> | Frame, ViewProps> =>
+  make(
+    viewOf(self),
+    Effect.fnUntraced(function* (props: Props) {
+      const frame = yield* Frame
+      const layer = yield* Effect.acquireRelease(
+        Effect.sync(() => Dom.addLayer(frame.overlays)),
+        (element) => Effect.sync(() => element.remove()),
+      )
+      const content = yield* Effect.provideService(child(self, props), OverlayLayer, {
+        element: layer,
+      })
+
+      return portalTo(layer, content)
+    }),
+  )

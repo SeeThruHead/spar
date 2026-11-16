@@ -153,3 +153,45 @@ export const measure = (node: Host): Box => {
 
   return { x, y, width, height }
 }
+
+const isHtml = (node: unknown): node is HTMLElement => node instanceof HTMLElement
+
+export const addOverlayRoot = (): HTMLElement => {
+  const root = document.createElement("div")
+  root.setAttribute("data-spar-overlays", "")
+
+  return document.body.appendChild(root)
+}
+
+export const addLayer = (overlays: HTMLElement): HTMLElement => {
+  const layer = document.createElement("div")
+  layer.tabIndex = -1
+
+  return overlays.appendChild(layer)
+}
+
+export const isTopLayer = (overlays: HTMLElement, layer: HTMLElement): boolean =>
+  overlays.lastElementChild === layer
+
+export const holds = (node: Node, target: EventTarget | null): boolean =>
+  target instanceof Node && node.contains(target)
+
+export const openModal = (
+  frame: { readonly target: HTMLElement; readonly overlays: HTMLElement },
+  layer: HTMLElement,
+): (() => void) => {
+  const layers = [...frame.overlays.children].filter(isHtml)
+  const beneath = [frame.target, ...layers.slice(0, layers.indexOf(layer))]
+  const wasInert = beneath.map((node) => node.hasAttribute("inert"))
+  const hadFocus = [document.activeElement].filter(isHtml)
+  const overflow = document.documentElement.style.overflow
+
+  beneath.forEach((node) => node.toggleAttribute("inert", true))
+  document.documentElement.style.overflow = "hidden"
+
+  return () => {
+    beneath.forEach((node, index) => node.toggleAttribute("inert", wasInert[index] === true))
+    document.documentElement.style.overflow = overflow
+    hadFocus.forEach((node) => node.focus())
+  }
+}

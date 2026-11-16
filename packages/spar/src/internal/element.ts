@@ -20,6 +20,7 @@ export type Element =
   | Intrinsic
   | { readonly [TypeId]: "Fragment"; readonly children: ReadonlyArray<unknown> }
   | { readonly [TypeId]: "Keyed"; readonly rows: Reactive<ReadonlyArray<Row>> }
+  | { readonly [TypeId]: "Portal"; readonly layer: HTMLElement; readonly child: Element }
 
 export const intrinsic = (tag: string, props: Readonly<Record<string, unknown>>): Element => ({
   [TypeId]: "Intrinsic",
@@ -35,6 +36,12 @@ export const fragment = (children: ReadonlyArray<unknown>): Element => ({
 export const keyed = (rows: Reactive<ReadonlyArray<Row>>): Element => ({
   [TypeId]: "Keyed",
   rows,
+})
+
+export const portal = (layer: HTMLElement, child: Element): Element => ({
+  [TypeId]: "Portal",
+  layer,
+  child,
 })
 
 export const isElement = (value: unknown): value is Element => Predicate.hasProperty(value, TypeId)

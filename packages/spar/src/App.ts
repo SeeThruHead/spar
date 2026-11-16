@@ -1,27 +1,34 @@
 import { Effect, Layer } from "effect"
 import { ActionScope } from "./internal/actionScope.ts"
 import * as Dom from "./internal/dom.ts"
+import { Frame } from "./internal/frame.ts"
 import { render } from "./internal/render.ts"
 import type { Component } from "./View.ts"
 
 export { CrashReporter } from "./internal/crash.ts"
+export type { Frame } from "./internal/frame.ts"
 
 export type NoProps = Readonly<Record<string, never>>
+
+const overlayRoot = Effect.acquireRelease(Effect.sync(Dom.addOverlayRoot), (root) =>
+  Effect.sync(() => root.remove()),
+)
 
 export const mount = <R, LayerError = never>(
   component: Component<NoProps, never, R>,
   options: {
     readonly target: HTMLElement
-    readonly layer: Layer.Layer<NoInfer<R>, LayerError>
+    readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>>, LayerError>
   },
 ): Effect.Effect<never, LayerError> =>
-  Effect.scope.pipe(
-    Effect.flatMap((scope) =>
+  Effect.all({ scope: Effect.scope, overlays: overlayRoot }).pipe(
+    Effect.flatMap(({ scope, overlays }) =>
       component.mount({}).pipe(
         Effect.flatMap((element) =>
           render(element, { parent: options.target, before: null, namespace: "html" }),
         ),
         Effect.provideService(ActionScope, scope),
+        Effect.provideService(Frame, { target: options.target, overlays }),
       ),
     ),
     Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),

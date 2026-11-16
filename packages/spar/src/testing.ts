@@ -29,7 +29,7 @@ export const mount = Effect.fnUntraced(function* <R>(
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (node) => Effect.sync(() => node.remove()),
   )
-  const context = yield* Effect.context<R>()
+  const context = yield* Effect.context<Exclude<R, App.Frame>>()
 
   yield* Effect.forkScoped(App.mount(component, { target, layer: Layer.succeedContext(context) }), {
     startImmediately: true,

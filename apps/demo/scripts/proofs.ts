@@ -35,6 +35,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "Layer<NoInfer<CounterStore>",
   },
   {
+    file: "modal-outside-a-portal.ts",
+    rule: "Giving a component modal behaviour without mounting it in a portal",
+    by: "types",
+    expect: "Layer<NoInfer<OverlayLayer>",
+  },
+  {
     file: "mount-unhandled-error.ts",
     rule: "Mounting a component whose error nobody recovers",
     by: "types",
