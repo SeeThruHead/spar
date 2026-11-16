@@ -85,14 +85,24 @@ export const guarded =
     }
   }
 
-export type Owner = Array<Stop>
+export type Waiting<A> = Array<A>
 
-export const owner = (): Owner => []
+export const waiting = <A>(): Waiting<A> => []
 
-export const own = (held: Owner, stop: Stop): void => {
-  held.push(stop)
+export const defer = <A>(held: Waiting<A>, item: A): void => {
+  held.push(item)
 }
 
+export const take = <A>(held: Waiting<A>): ReadonlyArray<A> => held.splice(0)
+
+export const isEmpty = <A>(held: Waiting<A>): boolean => held.length === 0
+
+export type Owner = Waiting<Stop>
+
+export const owner = (): Owner => waiting()
+
+export const own: (held: Owner, stop: Stop) => void = defer
+
 export const release = (held: Owner): void => {
-  held.splice(0).forEach((stop) => stop())
+  take(held).forEach((stop) => stop())
 }

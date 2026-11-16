@@ -8,6 +8,13 @@ export const Observe: unique symbol = Symbol.for("~spar/Reactive/observe")
 
 export const Backing: unique symbol = Symbol.for("~spar/Reactive/backing")
 
+export const Direct: unique symbol = Symbol.for("~spar/Reactive/direct")
+
+export type Now<A> = {
+  readonly read: () => A
+  readonly watch: (listener: Cell.Listener<A>, onError: (defect: unknown) => void) => Cell.Stop
+}
+
 export type Reactive<A> = {
   readonly [TypeId]: typeof TypeId
   readonly get: Effect.Effect<A>
@@ -16,6 +23,7 @@ export type Reactive<A> = {
     listener: Cell.Listener<A>,
     onError: (defect: unknown) => void,
   ) => Effect.Effect<Cell.Stop>
+  readonly [Direct]: Now<A> | undefined
 }
 
 export type Backed<A> = Reactive<A> & { readonly [Backing]: Cell.Cell<A> }
@@ -34,6 +42,7 @@ export const make = <A>(get: Effect.Effect<A>, changes: Stream.Stream<A>): React
       ),
       (fiber) => () => fiber.interruptUnsafe(),
     ),
+  [Direct]: undefined,
 })
 
 export const isReactive = (value: unknown): value is Reactive<unknown> =>
@@ -44,9 +53,10 @@ export const succeed = <A>(value: A): Reactive<A> => ({
   get: Effect.succeed(value),
   changes: Stream.empty,
   [Observe]: () => Effect.succeed(Function.constVoid),
+  [Direct]: { read: () => value, watch: () => Function.constVoid },
 })
 
-class FromCell<A> implements Backed<A> {
+class FromCell<A> implements Backed<A>, Now<A> {
   readonly [TypeId] = TypeId
   readonly [Backing]: Cell.Cell<A>
 
@@ -79,7 +89,19 @@ class FromCell<A> implements Backed<A> {
     listener: Cell.Listener<A>,
     onError: (defect: unknown) => void,
   ): Effect.Effect<Cell.Stop> {
-    return Effect.sync(() => this[Backing].subscribe(Cell.guarded(listener, onError)))
+    return Effect.sync(() => this.watch(listener, onError))
+  }
+
+  get [Direct](): Now<A> {
+    return this
+  }
+
+  read(): A {
+    return this[Backing].read()
+  }
+
+  watch(listener: Cell.Listener<A>, onError: (defect: unknown) => void): Cell.Stop {
+    return this[Backing].subscribe(Cell.guarded(listener, onError))
   }
 }
 
@@ -108,6 +130,28 @@ class Mapped<A, B> implements Reactive<B> {
     onError: (defect: unknown) => void,
   ): Effect.Effect<Cell.Stop> {
     return this.self[Observe](Cell.mapped(this.f, listener), onError)
+  }
+
+  get [Direct](): Now<B> | undefined {
+    return this.self[Direct] === undefined ? undefined : new MappedNow(this.self[Direct], this.f)
+  }
+}
+
+class MappedNow<A, B> implements Now<B> {
+  readonly source: Now<A>
+  readonly f: (value: A) => B
+
+  constructor(source: Now<A>, f: (value: A) => B) {
+    this.source = source
+    this.f = f
+  }
+
+  read(): B {
+    return this.f(this.source.read())
+  }
+
+  watch(listener: Cell.Listener<B>, onError: (defect: unknown) => void): Cell.Stop {
+    return this.source.watch(Cell.mapped(this.f, listener), onError)
   }
 }
 

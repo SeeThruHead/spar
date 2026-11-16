@@ -2,8 +2,6 @@
 
 In the order I would do them.
 
-2. **Row creation speed.** About 2 times Solid. The remaining cost is one Effect scope and several
-   Effect steps per row.
 3. **Overlay placement.** Menus flip above or below their anchor but do not avoid the left and right
    edges. There is no Tooltip, no standalone Popover, and Select is the native control.
 4. **Devtools.** No export or import of a log, no outbox view, no MCP server for agents. Only

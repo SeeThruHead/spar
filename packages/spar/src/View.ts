@@ -1,4 +1,5 @@
 import { Effect, Predicate, Scope, SubscriptionRef } from "effect"
+import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
 import { keyed, portal as portalTo } from "./internal/element.ts"
@@ -6,8 +7,6 @@ import type { Element } from "./internal/element.ts"
 import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
-
-const TypeId = "~spar/Component"
 
 export type View<Props> = (props: Props) => Element
 
@@ -25,10 +24,6 @@ const make = <Props, E, R, ViewProps>(
   view: View<ViewProps>,
   mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>,
 ): Component<Props, E, R, ViewProps> => ({ [TypeId]: TypeId, view, mount })
-
-const isComponent = <Props, E, R, ViewProps>(
-  mountable: Mountable<Props, E, R, ViewProps>,
-): mountable is Component<Props, E, R, ViewProps> => Predicate.hasProperty(mountable, TypeId)
 
 const viewOf = <Props, E, R, ViewProps>(
   mountable: Mountable<Props, E, R, ViewProps>,
@@ -145,6 +140,7 @@ export const pending =
         )
 
         return keyed({
+          kind: "mounted",
           items: map(fromSubscriptionRef(current), (shown) => [shown]),
           key: (shown: Shown) => shown.key,
           mount: (_key, shown) => Effect.map(shown.get, (now) => now.element),

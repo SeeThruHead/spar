@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { isPlainView } from "./internal/component.ts"
 import { inContext } from "./internal/context.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
@@ -18,8 +19,17 @@ export const mapBy = <A, Props, R = never>(
 ) =>
   Effect.fnUntraced(function* (list: Reactive<ReadonlyArray<A>>) {
     const context = yield* Effect.context<R>()
+    if (isPlainView(component)) {
+      return keyed({
+        kind: "drawn",
+        items: list,
+        key,
+        draw: (id, item) => component(toProps(item, id)),
+      })
+    }
 
     return keyed({
+      kind: "mounted",
       items: list,
       key,
       mount: (id, item) => inContext(child(component, toProps(item, id)), context),
@@ -33,6 +43,7 @@ export const when =
   (condition: Reactive<boolean>): Effect.Effect<Element, never, R> =>
     Effect.map(Effect.context<R>(), (context) =>
       keyed({
+        kind: "mounted",
         items: map(condition, (on) => (on ? shown : [])),
         key: (only: "shown") => only,
         mount: () => inContext(child(component, props), context),

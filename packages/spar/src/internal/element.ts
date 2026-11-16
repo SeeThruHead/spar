@@ -4,11 +4,22 @@ import type { Reactive } from "./reactive.ts"
 
 export const TypeId = "~spar/Element"
 
-export type Rows<A> = {
+type Listed<A> = {
   readonly items: Reactive<ReadonlyArray<A>>
   readonly key: (item: A) => string
+}
+
+export type Drawn<A> = Listed<A> & {
+  readonly kind: "drawn"
+  readonly draw: (key: string, item: Reactive<A>) => Element
+}
+
+export type Mounted<A> = Listed<A> & {
+  readonly kind: "mounted"
   readonly mount: (key: string, item: Reactive<A>) => Effect.Effect<Element, never, Scope.Scope>
 }
+
+export type Rows<A> = Drawn<A> | Mounted<A>
 
 export type Intrinsic = {
   readonly [TypeId]: "Intrinsic"

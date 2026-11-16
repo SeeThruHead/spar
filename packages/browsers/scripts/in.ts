@@ -10,7 +10,9 @@ const container = `spar-${engine()}-${process.pid}`
 
 const command = Bun.argv.slice(2)
 
-const needsContainer = engine() === "webkit" && process.platform === "linux"
+const runtime = Bun.which("podman") ?? Bun.which("docker")
+
+const wantsContainer = engine() === "webkit" && process.platform === "linux"
 
 const listening = async (left: number): Promise<void> => {
   const answered = await fetch(`http://127.0.0.1:${port}/`).then(
@@ -25,10 +27,10 @@ const listening = async (left: number): Promise<void> => {
   return listening(left - 1)
 }
 
-const inContainer = async (): Promise<number> => {
+const inContainer = async (program: string): Promise<number> => {
   const server = Bun.spawn(
     [
-      "podman",
+      program,
       "run",
       "--rm",
       "--name",
@@ -57,7 +59,7 @@ const inContainer = async (): Promise<number> => {
         }).exited,
     )
     .finally(async () => {
-      await Bun.spawn(["podman", "stop", "--time", "2", container], {
+      await Bun.spawn([program, "stop", "--time", "2", container], {
         stdout: "ignore",
         stderr: "ignore",
       }).exited
@@ -68,4 +70,11 @@ const inContainer = async (): Promise<number> => {
 const onHost = (): Promise<number> =>
   Bun.spawn(command, { stdio: ["inherit", "inherit", "inherit"] }).exited
 
-process.exit(await (needsContainer ? inContainer() : onHost()))
+const run = (): Promise<number> => {
+  if (!wantsContainer) return onHost()
+  if (runtime === null) return onHost()
+
+  return inContainer(runtime)
+}
+
+process.exit(await run())

@@ -281,6 +281,7 @@ export const outlet = Effect.fnUntraced(function* <
     )
 
   return keyed({
+    kind: "mounted",
     items: map(router.location, (location) => [page(location)]),
     key: (shown: Page) => shown.key,
     mount: (_key, shown) => Effect.flatMap(shown.get, (now) => now.mount),

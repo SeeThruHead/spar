@@ -10,6 +10,7 @@
     "leaks": "bun run build && bun scripts/leaks.ts",
     "allocations": "vite build --config vite.spar.config.ts --minify false --outDir ../../dist-readable/spar && bun scripts/allocations.ts",
     "memory": "bun run build && bun scripts/memory.ts",
+    "cpu": "vite build --config vite.spar.config.ts --minify false --outDir ../../dist-readable/spar && bun scripts/cpu.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },

@@ -1,6 +1,6 @@
 ---
 id: spa-gmzk
-status: open
+status: in_progress
 deps: [spa-vgsd]
 links: []
 created: 2026-11-16T04:22:57Z

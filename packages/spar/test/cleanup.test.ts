@@ -81,6 +81,30 @@ const balance = (target: EventTarget) => {
 }
 
 describe("what a part of the page took is given back", () => {
+  it.effect("fixed values can be combined like any other", () =>
+    Effect.gen(function* () {
+      const both = yield* Reactive.zip(Reactive.succeed(1), Reactive.succeed("one"))
+
+      expect(yield* both.get).toEqual([1, "one"])
+    }),
+  )
+
+  it.live("values that never change are shown as they are", () =>
+    Effect.gen(function* () {
+      yield* Testing.render(RowView, {
+        item: Reactive.succeed({ id: "a", label: "Fixed" }),
+        shared: Reactive.succeed("always"),
+        marked: Reactive.succeed(true),
+        onPick: [],
+      })
+
+      const row = rowOf("Fixed")
+
+      expect(row.className).toBe("marked")
+      expect(row.querySelector("em")?.textContent).toBe("always")
+    }),
+  )
+
   it.live("a removed row stops listening and stops following what it showed", () =>
     Effect.gen(function* () {
       const { items, shared, unmount } = yield* started
