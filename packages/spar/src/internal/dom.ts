@@ -1,4 +1,4 @@
-import { Predicate } from "effect"
+import { Option, Predicate, Schema } from "effect"
 
 export type Namespace = "html" | "svg"
 
@@ -144,8 +144,70 @@ export const scrollIntoView = (node: Host): void => {
   node.scrollIntoView({ block: "nearest", inline: "nearest" })
 }
 
-export const scrollToTop = (): void => {
+const firstEntry = "first"
+
+export const historyEntry = (): string => {
+  const state: unknown = window.history.state
+  const entry: unknown = Predicate.hasProperty(state, "sparEntry") ? state.sparEntry : firstEntry
+
+  return Predicate.isString(entry) ? entry : firstEntry
+}
+
+const scrollKey = (entry: string): string => `spar/scroll/${entry}`
+
+const Position = Schema.fromJsonString(Schema.Tuple([Schema.Finite, Schema.Finite]))
+
+const savedPosition = Schema.decodeUnknownOption(Position)
+
+const origin: typeof Position.Type = [0, 0]
+
+export const rememberScroll = (entry: string): void => {
+  sessionStorage.setItem(
+    scrollKey(entry),
+    Schema.encodeSync(Position)([window.scrollX, window.scrollY]),
+  )
+}
+
+const entryCount = "spar/scroll/entries"
+
+const countSoFar = Schema.decodeUnknownOption(Schema.FiniteFromString)
+
+const nextEntry = (): string => {
+  const next = Option.getOrElse(countSoFar(sessionStorage.getItem(entryCount)), () => 0) + 1
+
+  sessionStorage.setItem(entryCount, String(next))
+
+  return String(next)
+}
+
+export const pushEntry = (url: string): void => {
+  window.history.pushState({ sparEntry: nextEntry() }, "", url)
   window.scrollTo(0, 0)
+}
+
+export const replaceEntry = (url: string): void => {
+  window.history.replaceState(window.history.state, "", url)
+}
+
+export const restoreScroll = (): boolean => {
+  const [left, top] = Option.getOrElse(
+    savedPosition(sessionStorage.getItem(scrollKey(historyEntry()))),
+    () => origin,
+  )
+
+  window.scrollTo(left, top)
+
+  return Math.abs(window.scrollY - top) < 2
+}
+
+export const scrollByHand = (): (() => void) => {
+  const before = window.history.scrollRestoration
+
+  window.history.scrollRestoration = "manual"
+
+  return () => {
+    window.history.scrollRestoration = before
+  }
 }
 
 export const measure = (node: Host): Box => {

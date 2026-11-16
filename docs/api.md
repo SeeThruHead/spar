@@ -151,7 +151,10 @@ page: yield *
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path ending in `/*` is a
 layout that stays mounted while inner pages change. The service has `location`, `go(route, params)`,
 `replace`, `back` and `link(route, params)`. `Router.focusOnChange(handle)` moves focus after a
-navigation. Layers: `Router.Router.layerBrowser` and `Router.Router.layerMemory(url)`.
+navigation. `Router.live(route, Page)` keeps the page mounted while only the query changes and
+gives it `params` as a reactive value, where `Router.on` mounts a fresh page for every change. In
+a browser, a new page starts at the top and going back or forward puts the page where it was
+scrolled to, waiting for late content for up to two seconds. Layers: `Router.Router.layerBrowser` and `Router.Router.layerMemory(url)`.
 
 (`apps/sidebar/src/Shell.ts`, `packages/spar/test/router.test.ts`)
 

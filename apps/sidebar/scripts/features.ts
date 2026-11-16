@@ -99,6 +99,22 @@ const steps: ReadonlyArray<Step> = [
   ],
   [/^I go back$/, (page) => page.goBack()],
   [
+    /^I scroll down by (\d+)$/,
+    (page, distance) =>
+      page.evaluate((down) => {
+        window.scrollTo(0, down)
+        sessionStorage.setItem("features/scrolled", String(window.scrollY))
+      }, Number(distance)),
+  ],
+  [/^the page is at the top$/, (page) => page.waitForFunction(() => window.scrollY === 0)],
+  [
+    /^the page is back where I scrolled to$/,
+    (page) =>
+      page.waitForFunction(
+        () => Math.abs(window.scrollY - Number(sessionStorage.getItem("features/scrolled"))) < 3,
+      ),
+  ],
+  [
     /^I see the alert "(.+)"$/,
     (page, text) => page.getByRole("alert").filter({ hasText: text }).waitFor(),
   ],

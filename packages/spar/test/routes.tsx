@@ -1,3 +1,4 @@
+import { Reactive } from "spar"
 import type { Element, Handle, Router } from "spar"
 
 type ShellProps = {
@@ -72,3 +73,11 @@ export const SettingsView = ({ profile, billing, section }: SettingsProps) => (
 export const ProfileView = () => <h2>Profile</h2>
 
 export const BillingView = () => <h2>Billing</h2>
+
+type LiveSearchProps = {
+  readonly params: Reactive.Reactive<SearchProps>
+}
+
+export const LiveSearchView = ({ params }: LiveSearchProps) => (
+  <h1>{Reactive.map(params, (now) => `Live ${now.kind}, page ${now.page ?? 1}`)}</h1>
+)

@@ -73,6 +73,7 @@ const onHost = (): Promise<number> =>
 const run = (): Promise<number> => {
   if (!wantsContainer) return onHost()
   if (runtime === null) return onHost()
+  if (Bun.env["SPAR_BROWSER_SERVER"] !== undefined) return onHost()
 
   return inContainer(runtime)
 }

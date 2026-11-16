@@ -1,4 +1,16 @@
-import { Array, Context, Effect, Layer, Option, Ref, Schema, Stream, SubscriptionRef } from "effect"
+import {
+  Array,
+  Context,
+  Effect,
+  Function,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Schema,
+  Stream,
+  SubscriptionRef,
+} from "effect"
 import type { Scope } from "effect"
 import * as Handle from "./Handle.ts"
 import { modify } from "./internal/action.ts"
@@ -25,6 +37,7 @@ type Raw = Readonly<Record<string, string | undefined>>
 type Matched<Params> = {
   readonly params: Params
   readonly key: string
+  readonly place: string
 }
 
 export type Route<Params> = {
@@ -101,6 +114,7 @@ const make = <Params, Encoded extends Raw>(
       return Option.map(decode(raw), (params) => ({
         params,
         key: `${pattern} ${new URLSearchParams(raw).toString()}`,
+        place: `${pattern} ${new URLSearchParams(fromPath).toString()}`,
       }))
     })
 
@@ -146,6 +160,7 @@ type Driver = {
   readonly visit: (url: string) => Effect.Effect<void>
   readonly replace: (url: string) => Effect.Effect<void>
   readonly back: Effect.Effect<void>
+  readonly arrive: Effect.Effect<void>
 }
 
 const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
@@ -154,7 +169,9 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
   const follow = Effect.flatMap(driver.read, (now) => SubscriptionRef.set(location, now))
 
   yield* Effect.forkScoped(
-    Stream.runForEach(driver.moved, (now) => SubscriptionRef.set(location, now)),
+    Stream.runForEach(driver.moved, (now) =>
+      Effect.andThen(SubscriptionRef.set(location, now), Effect.forkScoped(driver.arrive)),
+    ),
     { startImmediately: true },
   )
 
@@ -196,6 +213,7 @@ const inMemory = (initial: string): Effect.Effect<Driver> =>
       })),
     replace: (url) => Ref.update(visits, ({ earlier }) => ({ earlier, current: url })),
     back: Ref.update(visits, stepBack),
+    arrive: Effect.void,
   }))
 
 const readWindow = (): Location => ({
@@ -203,17 +221,42 @@ const readWindow = (): Location => ({
   search: window.location.search,
 })
 
-const inBrowser: Driver = {
-  read: Effect.sync(readWindow),
-  moved: Stream.suspend(() => events(onTarget(window, "popstate"), readWindow)),
-  visit: (url) =>
-    Effect.sync(() => {
-      window.history.pushState(null, "", url)
-      Dom.scrollToTop()
-    }),
-  replace: (url) => Effect.sync(() => window.history.replaceState(null, "", url)),
-  back: Effect.sync(() => window.history.back()),
-}
+class NotThereYet extends Schema.TaggedError<NotThereYet, { readonly brand: unique symbol }>()(
+  "NotThereYet",
+  {},
+) {}
+
+const scrollBack = Effect.sync(Dom.restoreScroll).pipe(
+  Effect.filterOrFail(Function.identity, () => new NotThereYet()),
+  Effect.retry({ times: 40, schedule: Schedule.spaced("50 millis") }),
+  Effect.ignore,
+)
+
+const inBrowser: Effect.Effect<Driver, never, Scope.Scope> = Effect.gen(function* () {
+  yield* Effect.acquireRelease(Effect.sync(Dom.scrollByHand), (undo) => Effect.sync(undo))
+
+  const entry = yield* Ref.make(Dom.historyEntry())
+  const leave = Effect.flatMap(Ref.get(entry), (current) =>
+    Effect.sync(() => Dom.rememberScroll(current)),
+  )
+
+  return {
+    read: Effect.sync(readWindow),
+    moved: Stream.suspend(() =>
+      Stream.mapEffect(events(onTarget(window, "popstate"), readWindow), (now) =>
+        leave.pipe(Effect.andThen(Ref.set(entry, Dom.historyEntry())), Effect.as(now)),
+      ),
+    ),
+    visit: (url) =>
+      leave.pipe(
+        Effect.andThen(Effect.sync(() => Dom.pushEntry(url))),
+        Effect.andThen(Effect.suspend(() => Ref.set(entry, Dom.historyEntry()))),
+      ),
+    replace: (url) => Effect.sync(() => Dom.replaceEntry(url)),
+    back: Effect.sync(() => window.history.back()),
+    arrive: scrollBack,
+  }
+})
 
 export class Router extends Context.Service<
   Router,
@@ -228,13 +271,13 @@ export class Router extends Context.Service<
   static readonly layerMemory = (initial: string) =>
     Layer.effect(Router, Effect.flatMap(inMemory(initial), fromDriver))
 
-  static readonly layerBrowser = Layer.effect(Router, fromDriver(inBrowser))
+  static readonly layerBrowser = Layer.effect(Router, Effect.flatMap(inBrowser, fromDriver))
 }
 
 export type Case<R> = {
   readonly match: (location: Location) => Option.Option<{
     readonly key: string
-    readonly mount: Effect.Effect<Element, never, R | Scope.Scope>
+    readonly mount: (now: Reactive<Location>) => Effect.Effect<Element, never, R | Scope.Scope>
   }>
 }
 
@@ -245,13 +288,28 @@ export const on = <Params, R = never>(
   match: (location) =>
     Option.map(target.parse(location), ({ params, key }) => ({
       key,
-      mount: child(component, params),
+      mount: () => child(component, params),
+    })),
+})
+
+export const live = <Params, R = never>(
+  target: Route<Params>,
+  component: Mountable<{ readonly params: Reactive<Params> }, never, R>,
+): Case<R> => ({
+  match: (location) =>
+    Option.map(target.parse(location), ({ place }) => ({
+      key: place,
+      mount: (now) =>
+        child(component, {
+          params: map(now, (latest) => Option.getOrThrow(target.parse(latest)).params),
+        }),
     })),
 })
 
 type Page = {
   readonly key: string
-  readonly mount: Effect.Effect<Element, never, Scope.Scope>
+  readonly location: Location
+  readonly mount: (now: Reactive<Location>) => Effect.Effect<Element, never, Scope.Scope>
 }
 
 export const outlet = Effect.fnUntraced(function* <
@@ -271,11 +329,13 @@ export const outlet = Effect.fnUntraced(function* <
       {
         onNone: () => ({
           key: `nothing at ${location.pathname}`,
-          mount: inContext(child(options.otherwise, { path: location.pathname }), context),
+          location,
+          mount: () => inContext(child(options.otherwise, { path: location.pathname }), context),
         }),
         onSome: ({ key, mount }) => ({
           key,
-          mount: inContext(mount, context),
+          location,
+          mount: (now) => inContext(mount(now), context),
         }),
       },
     )
@@ -284,7 +344,8 @@ export const outlet = Effect.fnUntraced(function* <
     kind: "mounted",
     items: map(router.location, (location) => [page(location)]),
     key: (shown: Page) => shown.key,
-    mount: (_key, shown) => Effect.flatMap(shown.get, (now) => now.mount),
+    mount: (_key, shown) =>
+      Effect.flatMap(shown.get, (now) => now.mount(map(shown, (latest) => latest.location))),
   })
 })
 

@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
 import { Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
 import { Handle, Router, View } from "spar"
+import type { Element } from "spar"
 import * as Testing from "spar/testing"
 import {
   BillingView,
   HomeView,
+  LiveSearchView,
   NotFoundView,
   ProfileView,
   SearchView,
@@ -248,6 +250,91 @@ describe("the router", () => {
       yield* heading("Profile")
       yield* Testing.eventually(() => expect(document.activeElement?.tagName).toBe("MAIN"))
     }).pipe(Effect.provide(Router.Router.layerMemory("/"))),
+  )
+
+  it.live("a live page stays as it is while only its query changes, and follows it", () =>
+    Effect.gen(function* () {
+      const router = yield* Router.Router
+      const mounts = yield* Ref.make(0)
+      const LiveSearch = View.connect(
+        Effect.fnUntraced(function* (props: Parameters<typeof LiveSearchView>[0]) {
+          yield* Ref.update(mounts, (count) => count + 1)
+
+          return props
+        }),
+      )(LiveSearchView)
+
+      yield* Testing.mount(
+        View.connect(
+          Effect.fnUntraced(function* () {
+            return {
+              page: yield* Router.outlet({
+                routes: [Router.live(search, LiveSearch)],
+                otherwise: NotFoundView,
+              }),
+            }
+          }),
+        )(({ page }: { readonly page: Element }) => page),
+      )
+
+      const first = yield* heading("Live mail, page 1")
+
+      yield* router.go(search, { kind: "mail", page: 2 })
+
+      expect(yield* heading("Live mail, page 2")).toBe(first)
+      expect(yield* Ref.get(mounts)).toBe(1)
+
+      yield* router.go(search, { kind: "people" })
+
+      expect(yield* heading("Live people, page 1")).not.toBe(first)
+      expect(yield* Ref.get(mounts)).toBe(2)
+    }).pipe(Effect.provide(Router.Router.layerMemory("/search/mail"))),
+  )
+
+  it.live("in a browser, going back puts the page where it was scrolled to", () =>
+    Effect.gen(function* () {
+      const router = yield* Router.Router
+      const scrolled = vi.spyOn(window, "scrollTo")
+      const height = vi.spyOn(window, "scrollY", "get")
+
+      expect(window.history.scrollRestoration).toBe("manual")
+
+      height.mockReturnValue(300)
+      yield* router.go(thread, { id: "welcome" })
+
+      const entry: unknown = window.history.state
+
+      expect(sessionStorage.getItem("spar/scroll/first")).toBe("[0,300]")
+      expect(entry).toEqual({ sparEntry: expect.any(String) })
+
+      height.mockReturnValue(40)
+      yield* router.replace(thread, { id: "second" })
+
+      expect(window.history.state).toEqual(entry)
+
+      yield* Effect.sync(() => window.history.replaceState({ sparEntry: 7 }, "", "/"))
+      yield* Effect.sync(() => window.dispatchEvent(new PopStateEvent("popstate")))
+      yield* Testing.eventually(() => expect(scrolled.mock.calls.at(-1)).toEqual([0, 300]))
+
+      expect(sessionStorage.getItem("spar/scroll/1")).toBe("[0,40]")
+
+      height.mockReturnValue(300)
+      yield* Effect.sleep("120 millis")
+
+      const settledAt = scrolled.mock.calls.length
+
+      yield* Effect.sleep("120 millis")
+
+      expect(scrolled.mock.calls).toHaveLength(settledAt)
+
+      height.mockReturnValue(0)
+      yield* Effect.sync(() => window.history.replaceState({ sparEntry: "never seen" }, "", "/"))
+      yield* Effect.sync(() => window.dispatchEvent(new PopStateEvent("popstate")))
+      yield* Testing.eventually(() => expect(scrolled.mock.calls.at(-1)).toEqual([0, 0]))
+      scrolled.mockRestore()
+      height.mockRestore()
+      sessionStorage.clear()
+    }).pipe(Effect.provide(Layer.fresh(Router.Router.layerBrowser))),
   )
 
   it.live("in a browser it drives the address bar and follows back and forward", () =>
