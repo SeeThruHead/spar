@@ -1,4 +1,4 @@
-import { Reactive, UiState } from "spar"
+import { Events, Reactive, UiState } from "spar"
 import type { Action, Element } from "spar"
 import type { ThreadLoadFailed } from "./MailApi.ts"
 import type { Reply } from "./MailStore.ts"
@@ -57,13 +57,15 @@ export const ThreadView = (props: Props) => (
     <p>
       Status: <output aria-label="Thread status">{props.status}</output>
     </p>
-    <button
-      aria-expanded={Reactive.map(props.menuOpen, String)}
-      onClick={UiState.update(props.menuOpen, (open) => !open)}
-    >
-      Actions
-    </button>
-    {props.menu}
+    <span onPointerdown={Events.stop([])}>
+      <button
+        aria-expanded={props.menuOpen}
+        onClick={UiState.update(props.menuOpen, (open) => !open)}
+      >
+        Actions
+      </button>
+      {props.menu}
+    </span>
     <p>{props.messages.join(" ")}</p>
     <ul aria-label="Replies">{props.replies}</ul>
     <input

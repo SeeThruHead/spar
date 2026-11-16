@@ -1,9 +1,8 @@
-import { Effect, Exit, Predicate, Queue, Ref, Schema, Scope, Stream } from "effect"
-import { run, toAction } from "./action.ts"
-import type { Action } from "./action.ts"
+import { Effect, Exit, Predicate, Ref, Schema, Scope, Stream } from "effect"
 import * as Dom from "./dom.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Element, Intrinsic, Row } from "./element.ts"
+import { listen } from "./listen.ts"
 import { settled } from "./order.ts"
 import { isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
@@ -70,27 +69,6 @@ const applyEach = (
     { discard: true },
   )
 
-const actions = (node: Dom.Host, type: string, handler: unknown): Stream.Stream<Action> =>
-  Stream.callback<Action>((queue) => {
-    const listener = (event: Event): void => {
-      Queue.offerUnsafe(queue, toAction(handler, event))
-    }
-
-    return Effect.acquireRelease(
-      Effect.sync(() => node.addEventListener(type, listener)),
-      () => Effect.sync(() => node.removeEventListener(type, listener)),
-    )
-  })
-
-const listen = (
-  node: Dom.Host,
-  name: string,
-  handler: unknown,
-): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.forkScoped(Stream.runForEach(actions(node, name.slice(2).toLowerCase(), handler), run), {
-    startImmediately: true,
-  }).pipe(Effect.asVoid)
-
 const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
   if (tag === "foreignObject") return "html"
 
@@ -104,7 +82,7 @@ const applyProp = (
   namespace: Dom.Namespace,
 ): Effect.Effect<void, never, Scope.Scope> => {
   if (name === "children") return render(value, { parent: node, before: null, namespace })
-  if (isEventName(name)) return listen(node, name, value)
+  if (isEventName(name)) return listen(node, name.slice(2).toLowerCase(), value)
   if (name === "class" && isRecord(value)) {
     return applyEach(value, (names, on) => Dom.toggleClass(node, names, on))
   }

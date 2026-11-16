@@ -22,6 +22,20 @@ export const succeed = <A>(value: A): Reactive<A> => make(Effect.succeed(value),
 export const fromSubscriptionRef = <A>(ref: SubscriptionRef.SubscriptionRef<A>): Reactive<A> =>
   make(SubscriptionRef.get(ref), SubscriptionRef.changes(ref))
 
+export const fromStream = Effect.fnUntraced(function* <A, R>(
+  initial: A,
+  stream: Stream.Stream<A, never, R>,
+) {
+  const current = yield* SubscriptionRef.make(initial)
+
+  yield* Effect.forkScoped(
+    Stream.runForEach(stream, (value) => SubscriptionRef.set(current, value)),
+    { startImmediately: true },
+  )
+
+  return fromSubscriptionRef(current)
+})
+
 export const map: {
   <A, B>(f: (value: A) => B): (self: Reactive<A>) => Reactive<B>
   <A, B>(self: Reactive<A>, f: (value: A) => B): Reactive<B>

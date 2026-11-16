@@ -65,6 +65,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "ViewScope",
   },
   {
+    file: "ui-state-written-from-a-service-listener.ts",
+    rule: "Changing UI state from a document listener that a service set up",
+    by: "types",
+    expect: "ViewScope",
+  },
+  {
     file: "ui-state-seeded-from-store.ts",
     rule: "Seeding UI state from a store selector",
     by: "types",

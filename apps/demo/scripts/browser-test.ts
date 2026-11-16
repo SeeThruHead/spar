@@ -74,6 +74,17 @@ const mail = async (page: Page): Promise<void> => {
   await shows(thread.getByLabel("Thread status"), "Archived")
   await thread.getByRole("menu").waitFor({ state: "detached" })
 
+  await thread.getByRole("button", { name: "Actions" }).click()
+  await thread.getByRole("menu").waitFor()
+  await page.keyboard.press("Escape")
+  await thread.getByRole("menu").waitFor({ state: "detached" })
+
+  await thread.getByRole("button", { name: "Actions" }).click()
+  await thread.getByRole("menu").waitFor()
+  await page.getByRole("heading", { name: "Mail threads" }).click()
+  await thread.getByRole("menu").waitFor({ state: "detached" })
+  await shows(thread.getByLabel("Thread status"), "Archived")
+
   await thread.getByLabel("Reply", { exact: true }).fill("On my way")
   await thread.getByRole("button", { name: "Send reply" }).click()
   await shows(thread.getByRole("list", { name: "Replies" }).getByRole("listitem"), "On my way")

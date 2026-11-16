@@ -2,15 +2,32 @@ import { Effect, Predicate } from "effect"
 
 export const WriteTypeId: unique symbol = Symbol.for("~spar/UiWrite")
 
+const ModifiedTypeId = "~spar/ModifiedHandler"
+
 export type UiWrite = { readonly [WriteTypeId]: Effect.Effect<void> }
 
 export type Action = Effect.Effect<void> | UiWrite | ReadonlyArray<Action>
 
-export type Handler<Event> = Action | ((event: Event) => Action)
+type Before = "preventDefault" | "stopPropagation"
+
+export type Modified<Event> = {
+  readonly [ModifiedTypeId]: Before
+  readonly handler: Handler<Event>
+}
+
+export type Handler<Event> = Action | ((event: Event) => Action) | Modified<Event>
 
 export const write = (effect: Effect.Effect<void>): UiWrite => ({ [WriteTypeId]: effect })
 
+export const modify = <Event>(before: Before, handler: Handler<Event>): Modified<Event> => ({
+  [ModifiedTypeId]: before,
+  handler,
+})
+
 const isWrite = (action: Action): action is UiWrite => Predicate.hasProperty(action, WriteTypeId)
+
+const isModified = (handler: unknown): handler is Modified<Event> =>
+  Predicate.hasProperty(handler, ModifiedTypeId)
 
 const isTrustedAction = (handler: unknown): handler is Action => Predicate.isNotNullish(handler)
 
@@ -24,7 +41,14 @@ export const run = (action: Action): Effect.Effect<void> => {
   return Effect.forEach(action, run, { discard: true })
 }
 
+const modified = (handler: Modified<Event>, event: Event): Action => {
+  event[handler[ModifiedTypeId]]()
+
+  return toAction(handler.handler, event)
+}
+
 export const toAction = (handler: unknown, event: Event): Action => {
+  if (isModified(handler)) return modified(handler, event)
   if (isTrustedListener(handler)) return handler(event)
   if (isTrustedAction(handler)) return handler
 
