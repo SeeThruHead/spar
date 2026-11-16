@@ -2,7 +2,8 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Context, Deferred, Effect, Layer, Ref, Schema, pipe } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Reactive, Store, UiState, View } from "spar"
+import { Reactive, Store, UiState, View } from "spar"
+import { eventually, find, findText, gone, mount } from "./support.ts"
 import {
   BoardView,
   DetailsView,
@@ -130,31 +131,7 @@ const LoaderPage = pipe(
   View.mapProps(() => ({ id: "report" })),
 )
 
-const find = (role: string, name?: string) =>
-  Effect.tryPromise(() => screen.findByRole(role, name === undefined ? {} : { name }))
-
-const findText = (text: string) => Effect.tryPromise(() => screen.findByText(text))
-
-const gone = (role: string) =>
-  Effect.tryPromise(async () => {
-    const { waitFor } = await import("@testing-library/dom")
-
-    await waitFor(() => expect(screen.queryByRole(role)).toBeNull())
-  })
-
 const labels = Effect.sync(() => screen.getAllByRole("listitem").map((node) => node.textContent))
-
-const mount = Effect.fnUntraced(function* <R>(component: View.Component<App.NoProps, never, R>) {
-  const target = yield* Effect.acquireRelease(
-    Effect.sync(() => document.body.appendChild(document.createElement("div"))),
-    (node) => Effect.sync(() => node.remove()),
-  )
-  const context = yield* Effect.context<R>()
-
-  yield* Effect.forkScoped(App.mount(component, { target, layer: Layer.succeedContext(context) }), {
-    startImmediately: true,
-  })
-})
 
 const LoaderStory = pipe(
   LoaderPage.view,
@@ -210,11 +187,7 @@ describe("rendering", () => {
       expect(screen.getAllByRole("listitem")).toEqual([beta, alpha])
 
       yield* board.commands.removed({ id: "item-2" })
-      yield* Effect.tryPromise(async () => {
-        const { waitFor } = await import("@testing-library/dom")
-
-        await waitFor(() => expect(screen.getAllByRole("listitem")).toEqual([alpha]))
-      })
+      yield* eventually(() => expect(screen.getAllByRole("listitem")).toEqual([alpha]))
     }).pipe(Effect.provide(layer)),
   )
 

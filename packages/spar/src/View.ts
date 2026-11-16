@@ -1,5 +1,4 @@
-import { Effect, Predicate, SubscriptionRef } from "effect"
-import type { Scope } from "effect"
+import { Effect, Predicate, Scope, SubscriptionRef } from "effect"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
@@ -41,14 +40,22 @@ export const child = <Props, E = never, R = never, ViewProps = never>(
   return Effect.sync(() => mountable(props))
 }
 
+type Outside<Requirements> = Exclude<Exclude<Requirements, ViewScope>, Scope.Scope>
+
+const inViewScope = <A, E, Requirements>(
+  effect: Effect.Effect<A, E, Requirements>,
+): Effect.Effect<A, E, Outside<Requirements> | Scope.Scope> =>
+  Effect.flatMap(Effect.scope, (scope) =>
+    effect.pipe(
+      Effect.provideService(ViewScope, { mounted: true }),
+      Effect.provideService(Scope.Scope, scope),
+    ),
+  )
+
 export const connect =
-  <Props, Outer, E, R>(
-    props: (outer: Outer) => Effect.Effect<Props, E, R | ViewScope | Scope.Scope>,
-  ) =>
-  (view: View<Props>): Component<Outer, E, R, Props> =>
-    make(view, (outer) =>
-      props(outer).pipe(Effect.map(view), Effect.provideService(ViewScope, { mounted: true })),
-    )
+  <Props, Outer, E, Requirements>(props: (outer: Outer) => Effect.Effect<Props, E, Requirements>) =>
+  (view: View<Props>): Component<Outer, E, Outside<Requirements>, Props> =>
+    make(view, (outer) => inViewScope(Effect.map(props(outer), view)))
 
 export const mapProps =
   <Outer, Props>(f: (outer: Outer) => Props) =>

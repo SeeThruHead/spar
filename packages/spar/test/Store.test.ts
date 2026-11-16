@@ -109,6 +109,17 @@ describe("Store", () => {
     }).pipe(Effect.provide(layer)),
   )
 
+  it.effect("replaying a log with an action the store does not define fails and names it", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        Store.replay(Ledger.definition, [{ id: "1", action: "archived", payload: null }]),
+      )
+
+      expect(error._tag).toBe("UnknownAction")
+      expect(error.message).toContain("archived")
+    }),
+  )
+
   it.effect("replaying the log rebuilds the same state, and a shorter log an earlier one", () =>
     Effect.gen(function* () {
       const ledger = yield* Ledger

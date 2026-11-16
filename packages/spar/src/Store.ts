@@ -217,18 +217,27 @@ export const outbox = <State, Payload, E, R>(
   return { action: trigger, persist, run: (entry) => deliver(entry.id, entry.payload), resume }
 }
 
+export class UnknownAction extends Schema.TaggedError<
+  UnknownAction,
+  { readonly brand: unique symbol }
+>()("UnknownAction", { action: Schema.String }) {
+  override get message() {
+    return `The log holds an action this store does not define: ${this.action}`
+  }
+}
+
 export const replay = <State, A extends Actions<State>, S extends Selectors<State>>(
   definition: Definition<State, A, S>,
   entries: ReadonlyArray<Entry>,
-): Effect.Effect<State, Schema.SchemaError> =>
+): Effect.Effect<State, Schema.SchemaError | UnknownAction> =>
   Effect.reduce(
     entries,
     () => definition.initialState,
     (state, entry) =>
       Record.get(definition.actions, entry.action).pipe(
         Effect.fromOption,
+        Effect.mapError(() => new UnknownAction({ action: entry.action })),
         Effect.flatMap((found) => found.reducer(entry.payload)),
         Effect.map((reduce) => reduce(state)),
-        Effect.catchTag("NoSuchElementError", () => Effect.succeed(state)),
       ),
   )

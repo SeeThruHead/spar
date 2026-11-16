@@ -111,9 +111,9 @@ const createEntry = Effect.fnUntraced(function* (
   return { key: row.key, start, end, scope } satisfies Entry
 })
 
-const removeEntry = (parent: Node, entry: Entry): Effect.Effect<void> =>
+const removeEntry = (entry: Entry): Effect.Effect<void> =>
   Scope.close(entry.scope, Exit.void).pipe(
-    Effect.andThen(Effect.sync(() => Dom.removeSpan(parent, entry.start, entry.end))),
+    Effect.andThen(Effect.sync(() => Dom.removeSpan(entry.start, entry.end))),
   )
 
 const renderKeyed = Effect.fnUntraced(function* (
@@ -130,7 +130,7 @@ const renderKeyed = Effect.fnUntraced(function* (
     const keys = new Set(next.map((row) => row.key))
     const removed = previous.filter((entry) => !keys.has(entry.key))
 
-    yield* Effect.forEach(removed, (entry) => removeEntry(parent, entry), { discard: true })
+    yield* Effect.forEach(removed, removeEntry, { discard: true })
 
     const current = yield* Effect.forEach(next, (row) =>
       Option.match(

@@ -8,7 +8,7 @@ import type { Reactive } from "./internal/reactive.ts"
 import { child } from "./View.ts"
 import type { Mountable } from "./View.ts"
 
-export { map } from "./internal/reactive.ts"
+export { fromSubscriptionRef, make, map, succeed } from "./internal/reactive.ts"
 export type { Reactive } from "./internal/reactive.ts"
 
 const itemOf = <A>(

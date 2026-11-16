@@ -1,18 +1,17 @@
-import { Option, Predicate } from "effect"
+import { Predicate } from "effect"
 
 const properties: ReadonlySet<string> = new Set(["value", "checked"])
 
-const isPrintable = Predicate.or(
-  Predicate.isNumber,
-  Predicate.or(Predicate.isBigInt, Predicate.isBoolean),
-)
+const isNumeric = Predicate.or(Predicate.isNumber, Predicate.isBigInt)
 
 export const toText = (value: unknown): string => {
   if (Predicate.isString(value)) return value
-  if (isPrintable(value)) return `${value}`
+  if (isNumeric(value)) return `${value}`
 
   return ""
 }
+
+const isAttributeText = Predicate.or(Predicate.isString, isNumeric)
 
 export const insert = (parent: Node, node: Node, before: Node | null): void => {
   parent.insertBefore(node, before)
@@ -30,22 +29,22 @@ const setProperty = (node: HTMLElement, name: string, value: unknown): void => {
 
 export const setAttribute = (node: HTMLElement, name: string, value: unknown): void => {
   if (properties.has(name)) return setProperty(node, name, value)
-  if (value === false || Predicate.isNullish(value)) return node.removeAttribute(name)
+  if (value === true) return node.setAttribute(name, "")
+  if (isAttributeText(value)) return node.setAttribute(name, toText(value))
 
-  return node.setAttribute(name, value === true ? "" : toText(value))
+  return node.removeAttribute(name)
 }
 
-export const span = (start: Node, end: Node): ReadonlyArray<Node> => {
-  if (start === end) return [end]
+const rangeOf = (start: Node, end: Node): Range => {
+  const range = document.createRange()
+  range.setStartBefore(start)
+  range.setEndAfter(end)
 
-  return Option.match(Option.fromNullishOr(start.nextSibling), {
-    onNone: () => [start],
-    onSome: (next) => [start, ...span(next, end)],
-  })
+  return range
 }
 
-export const removeSpan = (parent: Node, start: Node, end: Node): void => {
-  span(start, end).forEach((node) => parent.removeChild(node))
+export const removeSpan = (start: Node, end: Node): void => {
+  rangeOf(start, end).deleteContents()
 }
 
 export const placeSpans = (
@@ -53,15 +52,13 @@ export const placeSpans = (
   spans: ReadonlyArray<{ readonly start: Node; readonly end: Node }>,
   anchor: Node,
 ): void => {
-  spans.reduceRight<Node>(
-    (cursor, each) =>
-      span(each.start, each.end).reduceRight<Node>((next, node) => {
-        if (node.nextSibling !== next) parent.insertBefore(node, next)
+  spans.reduceRight<Node>((cursor, each) => {
+    if (each.end.nextSibling !== cursor) {
+      parent.insertBefore(rangeOf(each.start, each.end).extractContents(), cursor)
+    }
 
-        return node
-      }, cursor),
-    anchor,
-  )
+    return each.start
+  }, anchor)
 }
 
 export const clear = (target: Node & ParentNode): void => {

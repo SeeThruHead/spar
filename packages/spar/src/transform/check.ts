@@ -1,4 +1,4 @@
-import { Array, Predicate, Schema } from "effect"
+import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
 
 export type Violation = {
@@ -65,9 +65,9 @@ const locate = (
   source: string,
   offset: number,
 ): { readonly line: number; readonly column: number } => {
-  const lines = source.slice(0, offset).split("\n")
+  const before = source.slice(0, offset)
 
-  return { line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 }
+  return { line: before.split("\n").length, column: offset - before.lastIndexOf("\n") }
 }
 
 export const check = (file: string, source: string): ReadonlyArray<Violation> =>
@@ -83,5 +83,4 @@ export const format = (violations: ReadonlyArray<Violation>): string =>
     .map(({ file, line, column, rule, message }) => `${file}:${line}:${column} ${rule}: ${message}`)
     .join("\n")
 
-export const isViewFile = (path: string): boolean =>
-  Predicate.isString(path) && path.endsWith(".tsx")
+export const isViewFile = (path: string): boolean => /\.tsx(\?|$)/.test(path)

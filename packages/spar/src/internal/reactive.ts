@@ -17,6 +17,8 @@ export const make = <A>(get: Effect.Effect<A>, changes: Stream.Stream<A>): React
 export const isReactive = (value: unknown): value is Reactive<unknown> =>
   Predicate.hasProperty(value, TypeId)
 
+export const succeed = <A>(value: A): Reactive<A> => make(Effect.succeed(value), Stream.empty)
+
 export const fromSubscriptionRef = <A>(ref: SubscriptionRef.SubscriptionRef<A>): Reactive<A> =>
   make(SubscriptionRef.get(ref), SubscriptionRef.changes(ref))
 
