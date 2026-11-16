@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { Reactive, Server } from "spar"
-import { fragment, portal } from "../src/internal/element.ts"
+import { fragment, intrinsic, portal } from "../src/internal/element.ts"
 import { noPage } from "../src/internal/frame.ts"
 import { toHtml } from "../src/internal/html.ts"
 import { Page, fruits } from "./shop.ts"
@@ -51,6 +51,51 @@ describe("rendering on a server", () => {
       ])
 
       expect(html).toBe("before<!--,-->after")
+    }),
+  )
+
+  it.effect("attributes, classes and styles are written the way a browser reads them", () =>
+    Effect.gen(function* () {
+      const html = yield* toHtml(
+        intrinsic("a", {
+          title: 'say "hi" & <wave>',
+          once: "kept",
+          onClick: [],
+          class: { " first ": true, second: true, third: false },
+          tabIndex: 2,
+          children: ["go", true, "now"],
+        }),
+      )
+      const styled = yield* toHtml(intrinsic("p", { style: "color: red", class: "plain" }))
+
+      expect(html).toBe(
+        '<a title="say &quot;hi&quot; &amp; &lt;wave&gt;" once="kept" class="first second" tabindex="2">go<!--,-->now</a>',
+      )
+      expect(styled).toBe('<p style="color: red" class="plain"></p>')
+    }),
+  )
+
+  it.effect("elements that cannot hold anything are not closed", () =>
+    Effect.gen(function* () {
+      const tags = [
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "source",
+        "track",
+        "wbr",
+      ]
+      const html = yield* Effect.forEach(tags, (tag) => toHtml(intrinsic(tag, {})))
+
+      expect(html).toEqual(tags.map((tag) => `<${tag}>`))
+      expect(yield* toHtml(intrinsic("span", {}))).toBe("<span></span>")
     }),
   )
 

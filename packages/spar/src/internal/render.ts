@@ -5,12 +5,11 @@ import {
   Function,
   Option,
   Predicate,
-  Queue,
   Ref,
   Scheduler,
   Schema,
   Scope,
-  Stream,
+  Semaphore,
   SubscriptionRef,
 } from "effect"
 import { toAction } from "./action.ts"
@@ -22,7 +21,7 @@ import { HandleTypeId, isHandle } from "./handle.ts"
 import type { Handle } from "./handle.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Drawn, Element, Intrinsic, Mounted, Rows } from "./element.ts"
-import { starter } from "./listen.ts"
+import { starter, starterIn } from "./listen.ts"
 import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
@@ -440,21 +439,18 @@ const fillRows = Effect.fnUntraced(function* <A>(
     Effect.flatMap(Ref.get(entries), (all) => Effect.forEach(all, closeEntry, { discard: true })),
   )
 
-  const latest = yield* Queue.sliding<ReadonlyArray<A>>(1)
+  const turn = yield* Semaphore.make(1)
+  const scope = yield* Effect.scope
+  const update = yield* starterIn(scope)
   const initial = yield* rows.items.get
 
   yield* reconcile(initial)
   yield* Effect.acquireRelease(
-    rows.items[Observe]((next) => {
-      Queue.offerUnsafe(latest, next)
-    }, place.crashed),
-    (stop) => Effect.sync(stop),
-  )
-  yield* Effect.forkScoped(
-    Stream.runForEach(Stream.fromQueue(latest), (next) =>
-      Effect.catchDefect(reconcile(next), report),
+    rows.items[Observe](
+      (next) => update(Semaphore.withPermit(turn, reconcile(next))),
+      place.crashed,
     ),
-    { startImmediately: true },
+    (stop) => Effect.sync(stop),
   )
 })
 

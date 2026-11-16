@@ -1,4 +1,5 @@
 import { Effect, Queue, Stream } from "effect"
+import type { Scope } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
 import { ActionScope } from "./actionScope.ts"
@@ -26,18 +27,23 @@ export const events = <E, A>(source: Source<E>, take: (event: E) => A): Stream.S
     )
   })
 
-export const starter = Effect.fnUntraced(function* () {
-  const outliving = yield* ActionScope
+export const starterIn = Effect.fnUntraced(function* (scope: Scope.Scope) {
   const services = yield* Effect.context()
   const start = Effect.runForkWith(services)
 
   return (action: Action): void => {
     start(
-      Effect.forkIn(Effect.catchDefect(run(action), report), outliving, {
+      Effect.forkIn(Effect.catchDefect(run(action), report), scope, {
         startImmediately: true,
       }),
     )
   }
+})
+
+export const starter = Effect.fnUntraced(function* () {
+  const outliving = yield* ActionScope
+
+  return yield* starterIn(outliving)
 })
 
 export const listen = Effect.fnUntraced(function* (

@@ -36,9 +36,7 @@ const voids: ReadonlySet<string> = new Set([
   "wbr",
 ])
 
-const attributeNames: Readonly<Record<string, string>> = { className: "class", htmlFor: "for" }
-
-const attributeName = (name: string): string => attributeNames[name] ?? name.toLowerCase()
+const attributeName = (name: string): string => name.toLowerCase()
 
 const isEventName = (name: string): boolean => /^on[A-Z]/.test(name)
 
