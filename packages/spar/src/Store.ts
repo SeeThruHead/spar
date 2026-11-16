@@ -91,8 +91,14 @@ export type Inspected = {
 }
 
 export const Inspector = Context.Reference<{
+  readonly keepStates: number
   readonly register: (store: Inspected) => Effect.Effect<void>
-}>("spar/Store/Inspector", { defaultValue: () => ({ register: () => Effect.void }) })
+}>("spar/Store/Inspector", {
+  defaultValue: () => ({ keepStates: 0, register: () => Effect.void }),
+})
+
+const lastOf = <A>(items: ReadonlyArray<A>, count: number): ReadonlyArray<A> =>
+  count === 0 ? [] : items.slice(-count)
 
 export type Shape<State, A extends Actions<State>, S extends Selectors<State>> = {
   readonly state: Reactive<State>
@@ -341,7 +347,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         cell.write({
           state: next,
           log: [...before.log, entry].slice(-logLimit),
-          trail: [...before.trail, { seq, state: next }].slice(-logLimit),
+          trail: lastOf([...before.trail, { seq, state: next }], inspector.keepStates),
           viewing: before.viewing,
         })
 

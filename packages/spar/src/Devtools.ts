@@ -17,6 +17,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
 
     return Context.make(Registry, { stores: fromCell(stores) }).pipe(
       Context.add(Store.Inspector, {
+        keepStates: 1000,
         register: (store) => Effect.sync(() => stores.write([...stores.read(), store])),
       }),
     )

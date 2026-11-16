@@ -1,6 +1,6 @@
 ---
 id: spa-frp9
-status: open
+status: in_progress
 deps: [spa-mmr0, spa-6cop, spa-bkuy, spa-rmbs]
 links: []
 created: 2026-11-16T04:22:57Z
