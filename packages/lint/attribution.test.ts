@@ -7,7 +7,7 @@ const git = (args: ReadonlyArray<string>) =>
     new Response(Bun.spawn(["git", ...args], { stdout: "pipe", stderr: "ignore" }).stdout).text(),
   )
 
-const repoRoot = `${import.meta.dir}/../..`
+const repoRoot = `${process.cwd()}/../..`
 
 const guardFiles = new Set(["packages/lint/attribution.ts", "packages/lint/attribution.test.ts"])
 
@@ -26,7 +26,7 @@ const trackedText = Effect.gen(function* () {
 
 const messageFile = (name: string, text: string) =>
   Effect.promise(async () => {
-    const path = `${import.meta.dir}/node_modules/.cache/attribution-${name}.txt`
+    const path = `${process.cwd()}/node_modules/.cache/attribution-${name}.txt`
     await Bun.write(path, text)
 
     return path

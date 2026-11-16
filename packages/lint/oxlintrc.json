@@ -3,16 +3,32 @@
   "options": {
     "typeAware": true
   },
-  "plugins": ["typescript", "unicorn", "oxc", "import", "effecttsgo"],
-  "jsPlugins": ["./house-rules.ts"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "effecttsgo"
+  ],
+  "jsPlugins": [
+    "./house-rules.ts"
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "error"
   },
-  "ignorePatterns": ["fixtures/**", "**/forbidden/**", "**/dist/**", "**/coverage/**"],
+  "ignorePatterns": [
+    "fixtures/**",
+    "**/forbidden/**",
+    "**/dist/**",
+    "**/coverage/**"
+  ],
   "rules": {
     "typescript/no-explicit-any": "error",
-    "typescript/consistent-type-definitions": ["error", "type"],
+    "typescript/consistent-type-definitions": [
+      "error",
+      "type"
+    ],
     "typescript/no-non-null-assertion": "error",
     "import/no-cycle": "error",
     "house/no-loops": "error",
@@ -28,13 +44,19 @@
     "no-underscore-dangle": [
       "error",
       {
-        "allow": ["_tag"]
+        "allow": [
+          "_tag"
+        ]
       }
     ],
     "import/no-unassigned-import": [
       "error",
       {
-        "allow": ["@fontsource-variable/**", "virtual:**", "**/*.css"]
+        "allow": [
+          "@fontsource-variable/**",
+          "virtual:**",
+          "**/*.css"
+        ]
       }
     ],
     "typescript/consistent-return": "off",
@@ -207,22 +229,38 @@
       }
     },
     {
-      "files": ["**/packages/spar/src/internal/dom.ts"],
+      "files": [
+        "**/packages/spar/src/internal/dom.ts"
+      ],
       "rules": {
         "house/no-mutation": "off"
       }
     },
     {
-      "files": ["**/packages/spar/src/Store.ts"],
+      "files": [
+        "**/packages/spar/src/Store.ts"
+      ],
       "rules": {
         "typescript/consistent-type-definitions": "off"
       }
     },
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "**/test/**"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/test/**"
+      ],
       "rules": {
         "effecttsgo/yield-in-call-argument": "off",
         "effecttsgo/effect-try-without-catch": "off"
+      }
+    },
+    {
+      "files": [
+        "**/packages/spar/src/jsx-runtime.ts"
+      ],
+      "rules": {
+        "typescript/no-unnecessary-type-parameters": "off"
       }
     }
   ]

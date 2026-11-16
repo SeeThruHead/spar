@@ -1,8 +1,18 @@
 import { Predicate } from "effect"
 
-const properties: ReadonlySet<string> = new Set(["value", "checked"])
+export type Namespace = "html" | "svg"
+
+export type Host = HTMLElement | SVGElement
+
+export type Span = { readonly start: ChildNode; readonly end: ChildNode }
+
+const svgNamespace = "http://www.w3.org/2000/svg"
+
+const attributeNames = /^(aria-|data-)|^(role|class|for|style)$/
 
 const isNumeric = Predicate.or(Predicate.isNumber, Predicate.isBigInt)
+
+const isAttributeText = Predicate.or(Predicate.isString, isNumeric)
 
 export const toText = (value: unknown): string => {
   if (Predicate.isString(value)) return value
@@ -11,7 +21,11 @@ export const toText = (value: unknown): string => {
   return ""
 }
 
-const isAttributeText = Predicate.or(Predicate.isString, isNumeric)
+export const create = (tag: string, namespace: Namespace): Host => {
+  if (namespace === "svg") return document.createElementNS(svgNamespace, tag)
+
+  return document.createElement(tag)
+}
 
 export const insert = (parent: Node, node: Node, before: Node | null): void => {
   parent.insertBefore(node, before)
@@ -21,43 +35,93 @@ export const setText = (node: Text, value: unknown): void => {
   node.data = toText(value)
 }
 
-const setProperty = (node: HTMLElement, name: string, value: unknown): void => {
+const isProperty = (node: Host, name: string): boolean => {
+  if (node instanceof SVGElement) return false
+  if (attributeNames.test(name)) return false
+
+  return name in node
+}
+
+const isScalar = Predicate.or(isAttributeText, Predicate.or(Predicate.isBoolean, Predicate.isNull))
+
+const setProperty = (node: Host, name: string, value: unknown): void => {
+  if (!isScalar(value)) return
   if (Reflect.get(node, name) === value) return
 
   Reflect.set(node, name, value)
 }
 
-export const setAttribute = (node: HTMLElement, name: string, value: unknown): void => {
-  if (properties.has(name)) return setProperty(node, name, value)
-  if (value === true) return node.setAttribute(name, "")
-  if (isAttributeText(value)) return node.setAttribute(name, toText(value))
+const booleanText = (name: string, value: boolean): string | undefined => {
+  if (name.startsWith("aria-")) return `${value}`
 
-  return node.removeAttribute(name)
+  return value ? "" : undefined
 }
 
-const rangeOf = (start: Node, end: Node): Range => {
+const attributeText = (name: string, value: unknown): string | undefined => {
+  if (Predicate.isBoolean(value)) return booleanText(name, value)
+  if (isAttributeText(value)) return toText(value)
+
+  return undefined
+}
+
+export const setAttribute = (node: Host, name: string, value: unknown): void => {
+  if (isProperty(node, name)) return setProperty(node, name, value)
+
+  const text = attributeText(name, value)
+  if (text === undefined) return node.removeAttribute(name)
+
+  return node.setAttribute(name, text)
+}
+
+export const toggleClass = (node: Host, names: string, on: unknown): void => {
+  names
+    .split(/\s+/)
+    .filter((name) => name.length > 0)
+    .forEach((name) => node.classList.toggle(name, on === true))
+}
+
+const cssName = (name: string): string => {
+  if (name.startsWith("--")) return name
+
+  return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+}
+
+export const setStyle = (node: Host, name: string, value: unknown): void => {
+  if (isAttributeText(value)) return node.style.setProperty(cssName(name), toText(value))
+
+  node.style.removeProperty(cssName(name))
+}
+
+const rangeOf = (span: Span): Range => {
   const range = document.createRange()
-  range.setStartBefore(start)
-  range.setEndAfter(end)
+  range.setStartBefore(span.start)
+  range.setEndAfter(span.end)
 
   return range
 }
 
-export const removeSpan = (start: Node, end: Node): void => {
-  rangeOf(start, end).deleteContents()
+export const removeSpan = (span: Span): void => {
+  if (span.start === span.end) return span.start.remove()
+
+  rangeOf(span).deleteContents()
+}
+
+const moveSpan = (parent: Node, span: Span, before: Node): void => {
+  if (span.start === span.end) return insert(parent, span.start, before)
+
+  insert(parent, rangeOf(span).extractContents(), before)
 }
 
 export const placeSpans = (
   parent: Node,
-  spans: ReadonlyArray<{ readonly start: Node; readonly end: Node }>,
+  spans: ReadonlyArray<Span>,
+  settled: ReadonlySet<number>,
   anchor: Node,
 ): void => {
-  spans.reduceRight<Node>((cursor, each) => {
-    if (each.end.nextSibling !== cursor) {
-      parent.insertBefore(rangeOf(each.start, each.end).extractContents(), cursor)
-    }
+  spans.reduceRight<Node>((cursor, span, position) => {
+    if (!settled.has(position)) moveSpan(parent, span, cursor)
 
-    return each.start
+    return span.start
   }, anchor)
 }
 

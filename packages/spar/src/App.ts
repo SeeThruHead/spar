@@ -13,7 +13,9 @@ export const mount = <R, LayerError = never>(
   },
 ): Effect.Effect<never, LayerError> =>
   component.mount({}).pipe(
-    Effect.flatMap((element) => render(element, options.target, null)),
+    Effect.flatMap((element) =>
+      render(element, { parent: options.target, before: null, namespace: "html" }),
+    ),
     Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),
     Effect.andThen(Effect.never),
     Effect.provide(options.layer),

@@ -122,7 +122,7 @@ export const pending =
 
         return keyed(
           map(fromSubscriptionRef(current), ({ key, element }) => [
-            { key, mount: Effect.succeed(element) },
+            { key, mount: Effect.succeed(element), refresh: Effect.void },
           ]),
         )
       }),

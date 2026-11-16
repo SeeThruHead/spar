@@ -7,14 +7,17 @@ export const TypeId = "~spar/Element"
 export type Row = {
   readonly key: string
   readonly mount: Effect.Effect<Element, never, Scope.Scope>
+  readonly refresh: Effect.Effect<void>
+}
+
+export type Intrinsic = {
+  readonly [TypeId]: "Intrinsic"
+  readonly tag: string
+  readonly props: Readonly<Record<string, unknown>>
 }
 
 export type Element =
-  | {
-      readonly [TypeId]: "Intrinsic"
-      readonly tag: string
-      readonly props: Readonly<Record<string, unknown>>
-    }
+  | Intrinsic
   | { readonly [TypeId]: "Fragment"; readonly children: ReadonlyArray<unknown> }
   | { readonly [TypeId]: "Keyed"; readonly rows: Reactive<ReadonlyArray<Row>> }
 

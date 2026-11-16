@@ -1,23 +1,40 @@
-import { Array, Effect, Exit, Option, Predicate, Queue, Ref, Scope, Stream } from "effect"
+import { Effect, Exit, Predicate, Queue, Ref, Schema, Scope, Stream } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
 import * as Dom from "./dom.ts"
 import { TypeId, isElement } from "./element.ts"
-import type { Element, Row } from "./element.ts"
+import type { Element, Intrinsic, Row } from "./element.ts"
+import { settled } from "./order.ts"
 import { isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 
-type Entry = {
+export class DuplicateKey extends Schema.TaggedError<
+  DuplicateKey,
+  { readonly brand: unique symbol }
+>()("DuplicateKey", { keys: Schema.Array(Schema.String) }) {
+  override get message() {
+    return `A keyed list has rows that share a key: ${this.keys.join(", ")}. Each row needs its own key.`
+  }
+}
+
+type Entry = Dom.Span & {
   readonly key: string
-  readonly start: Node
-  readonly end: Node
   readonly scope: Scope.Closeable
+}
+
+type Place = {
+  readonly parent: Node
+  readonly before: Node | null
+  readonly namespace: Dom.Namespace
 }
 
 const isEventName = (name: string): boolean => /^on[A-Z]/.test(name)
 
-const insert = (parent: Node, node: Node, before: Node | null): Effect.Effect<void> =>
-  Effect.sync(() => Dom.insert(parent, node, before))
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  Predicate.isReadonlyObject(value) && !isReactive(value)
+
+const insert = (node: Node, place: Place): Effect.Effect<void> =>
+  Effect.sync(() => Dom.insert(place.parent, node, place.before))
 
 const bind = <A>(
   source: Reactive<A>,
@@ -34,7 +51,26 @@ const bind = <A>(
     Effect.asVoid,
   )
 
-const actions = (node: HTMLElement, type: string, handler: unknown): Stream.Stream<Action> =>
+const apply = (
+  value: unknown,
+  write: (value: unknown) => void,
+): Effect.Effect<void, never, Scope.Scope> => {
+  if (isReactive(value)) return bind(value, write)
+
+  return Effect.sync(() => write(value))
+}
+
+const applyEach = (
+  entries: Readonly<Record<string, unknown>>,
+  write: (name: string, value: unknown) => void,
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.forEach(
+    Object.entries(entries),
+    ([name, value]) => apply(value, (current) => write(name, current)),
+    { discard: true },
+  )
+
+const actions = (node: Dom.Host, type: string, handler: unknown): Stream.Stream<Action> =>
   Stream.callback<Action>((queue) => {
     const listener = (event: Event): void => {
       Queue.offerUnsafe(queue, toAction(handler, event))
@@ -47,7 +83,7 @@ const actions = (node: HTMLElement, type: string, handler: unknown): Stream.Stre
   })
 
 const listen = (
-  node: HTMLElement,
+  node: Dom.Host,
   name: string,
   handler: unknown,
 ): Effect.Effect<void, never, Scope.Scope> =>
@@ -55,130 +91,150 @@ const listen = (
     startImmediately: true,
   }).pipe(Effect.asVoid)
 
+const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
+  if (tag === "foreignObject") return "html"
+
+  return namespace
+}
+
 const applyProp = (
-  node: HTMLElement,
+  node: Dom.Host,
   name: string,
   value: unknown,
+  namespace: Dom.Namespace,
 ): Effect.Effect<void, never, Scope.Scope> => {
-  if (name === "children") return render(value, node, null)
+  if (name === "children") return render(value, { parent: node, before: null, namespace })
   if (isEventName(name)) return listen(node, name, value)
-  if (isReactive(value)) return bind(value, (current) => Dom.setAttribute(node, name, current))
+  if (name === "class" && isRecord(value)) {
+    return applyEach(value, (names, on) => Dom.toggleClass(node, names, on))
+  }
+  if (name === "style" && isRecord(value)) {
+    return applyEach(value, (property, current) => Dom.setStyle(node, property, current))
+  }
 
-  return Effect.sync(() => Dom.setAttribute(node, name, value))
+  return apply(value, (current) => Dom.setAttribute(node, name, current))
 }
 
 const renderText = (
   source: Reactive<unknown>,
-  parent: Node,
-  before: Node | null,
+  place: Place,
 ): Effect.Effect<void, never, Scope.Scope> => {
   const node = document.createTextNode("")
 
-  return bind(source, (value) => Dom.setText(node, value)).pipe(
-    Effect.andThen(insert(parent, node, before)),
+  return bind(source, (value) => Dom.setText(node, value)).pipe(Effect.andThen(insert(node, place)))
+}
+
+const renderIntrinsic = Effect.fnUntraced(function* (element: Intrinsic, place: Place) {
+  const namespace = element.tag === "svg" ? "svg" : place.namespace
+  const node = Dom.create(element.tag, namespace)
+
+  yield* Effect.forEach(
+    Object.entries(element.props),
+    ([name, value]) => applyProp(node, name, value, childNamespace(element.tag, namespace)),
+    { discard: true },
   )
-}
+  yield* insert(node, place)
 
-const renderIntrinsic = (
-  tag: string,
-  props: Readonly<Record<string, unknown>>,
-  parent: Node,
-  before: Node | null,
-): Effect.Effect<void, never, Scope.Scope> => {
-  const node = document.createElement(tag)
+  return node
+})
 
-  return Effect.forEach(Object.entries(props), ([name, value]) => applyProp(node, name, value), {
-    discard: true,
-  }).pipe(Effect.andThen(insert(parent, node, before)))
-}
-
-const createEntry = Effect.fnUntraced(function* (
-  row: Row,
-  parent: Node,
-  anchor: Node,
-  parentScope: Scope.Scope,
-) {
-  const scope = yield* Scope.fork(parentScope)
+const createBetweenMarkers = Effect.fnUntraced(function* (element: Element, place: Place) {
   const start = document.createComment("")
   const end = document.createComment("")
 
-  yield* insert(parent, start, anchor)
-  yield* insert(parent, end, anchor)
+  yield* insert(start, place)
+  yield* insert(end, place)
+  yield* render(element, { ...place, before: end })
 
+  return { start, end }
+})
+
+const createSpan = (
+  element: Element,
+  place: Place,
+): Effect.Effect<Dom.Span, never, Scope.Scope> => {
+  if (element[TypeId] !== "Intrinsic") return createBetweenMarkers(element, place)
+
+  return Effect.map(renderIntrinsic(element, place), (node) => ({ start: node, end: node }))
+}
+
+const createEntry = Effect.fnUntraced(function* (row: Row, place: Place, parent: Scope.Scope) {
+  const scope = yield* Scope.fork(parent)
   const element = yield* Scope.provide(row.mount, scope)
-  yield* Scope.provide(render(element, parent, end), scope)
+  const span = yield* Scope.provide(createSpan(element, place), scope)
 
-  return { key: row.key, start, end, scope } satisfies Entry
+  return { ...span, key: row.key, scope } satisfies Entry
 })
 
 const removeEntry = (entry: Entry): Effect.Effect<void> =>
-  Scope.close(entry.scope, Exit.void).pipe(
-    Effect.andThen(Effect.sync(() => Dom.removeSpan(entry.start, entry.end))),
-  )
+  Scope.close(entry.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => Dom.removeSpan(entry))))
 
-const renderKeyed = Effect.fnUntraced(function* (
-  rows: Reactive<ReadonlyArray<Row>>,
-  parent: Node,
-  before: Node | null,
-) {
+const repeated = (keys: ReadonlyArray<string>): ReadonlyArray<string> => [
+  ...new Set(keys.filter((key, index) => keys.indexOf(key) !== index)),
+]
+
+const renderKeyed = Effect.fnUntraced(function* (rows: Reactive<ReadonlyArray<Row>>, place: Place) {
   const anchor = document.createComment("")
+  const inside: Place = { ...place, before: anchor }
   const scope = yield* Effect.scope
   const entries = yield* Ref.make<ReadonlyArray<Entry>>([])
 
   const reconcile = Effect.fnUntraced(function* (next: ReadonlyArray<Row>) {
     const previous = yield* Ref.get(entries)
     const keys = new Set(next.map((row) => row.key))
-    const removed = previous.filter((entry) => !keys.has(entry.key))
 
-    yield* Effect.forEach(removed, removeEntry, { discard: true })
+    if (keys.size !== next.length) {
+      return yield* Effect.die(new DuplicateKey({ keys: repeated(next.map((row) => row.key)) }))
+    }
 
-    const current = yield* Effect.forEach(next, (row) =>
-      Option.match(
-        Array.findFirst(previous, (entry) => entry.key === row.key),
-        {
-          onNone: () => createEntry(row, parent, anchor, scope),
-          onSome: (entry) => Effect.succeed(entry),
-        },
-      ),
+    const kept = previous.filter((entry) => keys.has(entry.key))
+    const positions = new Map(kept.map((entry, position) => [entry.key, { entry, position }]))
+
+    yield* Effect.forEach(
+      previous.filter((entry) => !keys.has(entry.key)),
+      removeEntry,
+      { discard: true },
     )
 
-    yield* Effect.sync(() => Dom.placeSpans(parent, current, anchor))
+    const placed = yield* Effect.forEach(next, (row, index) => {
+      const existing = positions.get(row.key)
+      if (existing !== undefined) return Effect.as(row.refresh, existing)
+
+      return Effect.map(createEntry(row, inside, scope), (entry) => ({
+        entry,
+        position: kept.length + index,
+      }))
+    })
+    const current = placed.map((each) => each.entry)
+    const staying = settled(placed.map((each) => each.position))
+
+    yield* Effect.sync(() => Dom.placeSpans(place.parent, current, staying, anchor))
     yield* Ref.set(entries, current)
   })
 
-  yield* insert(parent, anchor, before)
+  yield* insert(anchor, place)
 
   const initial = yield* rows.get
   yield* reconcile(initial)
   yield* Effect.forkScoped(Stream.runForEach(rows.changes, reconcile), { startImmediately: true })
 })
 
-const renderElement = (
-  element: Element,
-  parent: Node,
-  before: Node | null,
-): Effect.Effect<void, never, Scope.Scope> => {
-  if (element[TypeId] === "Intrinsic") {
-    return renderIntrinsic(element.tag, element.props, parent, before)
-  }
-  if (element[TypeId] === "Fragment") return render(element.children, parent, before)
+const renderElement = (element: Element, place: Place): Effect.Effect<void, never, Scope.Scope> => {
+  if (element[TypeId] === "Intrinsic") return Effect.asVoid(renderIntrinsic(element, place))
+  if (element[TypeId] === "Fragment") return render(element.children, place)
 
-  return renderKeyed(element.rows, parent, before)
+  return renderKeyed(element.rows, place)
 }
 
-export const render = (
-  child: unknown,
-  parent: Node,
-  before: Node | null,
-): Effect.Effect<void, never, Scope.Scope> => {
+export const render = (child: unknown, place: Place): Effect.Effect<void, never, Scope.Scope> => {
   if (Predicate.isString(child) || Predicate.isNumber(child)) {
-    return insert(parent, document.createTextNode(Dom.toText(child)), before)
+    return insert(document.createTextNode(Dom.toText(child)), place)
   }
-  if (isReactive(child)) return renderText(child, parent, before)
+  if (isReactive(child)) return renderText(child, place)
   if (Array.isArray(child)) {
-    return Effect.forEach(child, (item) => render(item, parent, before), { discard: true })
+    return Effect.forEach(child, (item) => render(item, place), { discard: true })
   }
-  if (isElement(child)) return renderElement(child, parent, before)
+  if (isElement(child)) return renderElement(child, place)
 
   return Effect.void
 }

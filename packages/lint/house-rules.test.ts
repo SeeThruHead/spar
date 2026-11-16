@@ -47,7 +47,7 @@ const textOf = (stream: ReadableStream<Uint8Array>) =>
 
 const lintFixtures = Effect.gen(function* () {
   const child = Bun.spawn(["bun", "run", "--silent", "lint:fixtures"], {
-    cwd: import.meta.dir,
+    cwd: process.cwd(),
     stdout: "pipe",
     stderr: "pipe",
   })
