@@ -144,6 +144,10 @@ export const scrollIntoView = (node: Host): void => {
   node.scrollIntoView({ block: "nearest", inline: "nearest" })
 }
 
+export const scrollToTop = (): void => {
+  window.scrollTo(0, 0)
+}
+
 export const measure = (node: Host): Box => {
   const { x, y, width, height } = node.getBoundingClientRect()
 

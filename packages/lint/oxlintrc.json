@@ -265,6 +265,14 @@
       "rules": {
         "typescript/no-unnecessary-type-parameters": "off"
       }
+    },
+    {
+      "files": [
+        "**/packages/spar/src/Router.ts"
+      ],
+      "rules": {
+        "typescript/no-generated-empty-object-type": "off"
+      }
     }
   ]
 }

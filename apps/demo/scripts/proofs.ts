@@ -17,6 +17,18 @@ const root = new URL("..", import.meta.url).pathname
 
 const expectations: ReadonlyArray<Expectation> = [
   {
+    file: "route-missing-param.ts",
+    rule: "Navigating to a route without the params its path needs",
+    by: "types",
+    expect: "Property 'id' is missing",
+  },
+  {
+    file: "route-with-the-wrong-page.ts",
+    rule: "Giving a route a page whose props are not that route's params",
+    by: "types",
+    expect: 'Route<PathParams<"/people/:name">>',
+  },
+  {
     file: "mount-missing-layer.ts",
     rule: "Mounting without a layer the tree needs",
     by: "types",

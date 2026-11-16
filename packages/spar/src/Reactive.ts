@@ -1,6 +1,5 @@
 import { Effect, HashMap, Option, Ref, SubscriptionRef } from "effect"
-import type { Context, Scope } from "effect"
-import { provideTo } from "./internal/context.ts"
+import { inContext } from "./internal/context.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element, Row } from "./internal/element.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
@@ -11,12 +10,6 @@ import type { Mountable } from "./View.ts"
 export { fromStream, fromSubscriptionRef, make, map, succeed } from "./internal/reactive.ts"
 export type { Reactive } from "./internal/reactive.ts"
 export { DuplicateKey } from "./internal/render.ts"
-
-const inContext = <R>(
-  mount: Effect.Effect<Element, never, R | Scope.Scope>,
-  context: Context.Context<R>,
-): Effect.Effect<Element, never, Scope.Scope> =>
-  provideTo<Element, never, R, Scope.Scope>(mount, context)
 
 const replace = <A>(current: SubscriptionRef.SubscriptionRef<A>, item: A): Effect.Effect<void> =>
   Effect.flatMap(SubscriptionRef.get(current), (held) =>

@@ -8,7 +8,7 @@ export type UiWrite = { readonly [WriteTypeId]: Effect.Effect<void> }
 
 export type Action = Effect.Effect<void> | UiWrite | ReadonlyArray<Action>
 
-type Before = "preventDefault" | "stopPropagation"
+type Before = "preventDefault" | "stopPropagation" | "followLink"
 
 export type Modified<Event> = {
   readonly [ModifiedTypeId]: Before
@@ -41,8 +41,35 @@ export const run = (action: Action): Effect.Effect<void> => {
   return Effect.forEach(action, run, { discard: true })
 }
 
+const isPlainClick = (event: Event): boolean => {
+  if (!(event instanceof MouseEvent)) return false
+  if (event.button !== 0) return false
+
+  return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+}
+
+const takesOver: Readonly<Record<Before, (event: Event) => boolean>> = {
+  preventDefault: (event) => {
+    event.preventDefault()
+
+    return true
+  },
+  stopPropagation: (event) => {
+    event.stopPropagation()
+
+    return true
+  },
+  followLink: (event) => {
+    if (!isPlainClick(event)) return false
+
+    event.preventDefault()
+
+    return true
+  },
+}
+
 const modified = (handler: Modified<Event>, event: Event): Action => {
-  event[handler[ModifiedTypeId]]()
+  if (!takesOver[handler[ModifiedTypeId]](event)) return []
 
   return toAction(handler.handler, event)
 }

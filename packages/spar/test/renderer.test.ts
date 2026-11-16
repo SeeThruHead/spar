@@ -152,6 +152,7 @@ describe("the renderer", () => {
 
       yield* SubscriptionRef.set(list, items(swapped))
       yield* eventually(() => expect(textsOf("listitem")).toEqual(swapped))
+      yield* Effect.sleep("20 millis")
 
       expect(yield* total(insertions)).toBe(2)
     }),
