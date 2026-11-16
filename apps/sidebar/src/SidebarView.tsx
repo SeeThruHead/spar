@@ -1,17 +1,28 @@
 import { Events, Reactive } from "spar"
-import type { Action, Element, Form, Handle, Router } from "spar"
+import type { Action, Element, Form, Handle, Handler, Router } from "spar"
 import { Button, SubmitButton, TextField } from "@spar/ui"
 import { countsOf } from "./domain.ts"
 import type { Agent, Section } from "./domain.ts"
 
 type RowProps = {
+  readonly id: string
   readonly agent: Reactive.Reactive<Agent>
+  readonly lifted: Reactive.Reactive<boolean>
+  readonly onLift: Handler<DragEvent>
+  readonly onRest: Action
   readonly link: Router.Link
   readonly menu: Element
 }
 
-export const AgentRowView = ({ agent, link, menu }: RowProps) => (
-  <li class="agent" data-status={Reactive.map(agent, (now) => now.status)}>
+export const AgentRowView = ({ id, agent, lifted, onLift, onRest, link, menu }: RowProps) => (
+  <li
+    class={{ agent: true, lifted }}
+    draggable={true}
+    data-agent={id}
+    data-status={Reactive.map(agent, (now) => now.status)}
+    onDragstart={onLift}
+    onDragend={onRest}
+  >
     <a href={link.href} onClick={link.onClick}>
       <span class="agent-name">{Reactive.map(agent, (now) => now.name)}</span>
       <span class="agent-status">{Reactive.map(agent, (now) => now.status)}</span>
@@ -24,23 +35,59 @@ export const AgentRowView = ({ agent, link, menu }: RowProps) => (
 type SectionProps = {
   readonly section: Reactive.Reactive<Section>
   readonly rows: Element
+  readonly over: Reactive.Reactive<boolean>
   readonly onToggle: Action
+  readonly onLift: Handler<DragEvent>
+  readonly onRest: Action
+  readonly onOver: Handler<DragEvent>
+  readonly onDrop: Handler<DragEvent>
+  readonly onUp: Action
+  readonly onDown: Action
 }
 
-export const SectionView = ({ section, rows, onToggle }: SectionProps) => (
-  <section class="group" aria-label={Reactive.map(section, (now) => now.title)}>
-    <h2>
+const fixed = (section: Reactive.Reactive<Section>) => Reactive.map(section, (now) => !now.movable)
+
+export const SectionView = (props: SectionProps) => (
+  <section
+    class={{ group: true, "drop-here": props.over }}
+    aria-label={Reactive.map(props.section, (now) => now.title)}
+    onDragover={props.onOver}
+    onDrop={props.onDrop}
+  >
+    <h2
+      draggable={Reactive.map(props.section, (now) => now.movable)}
+      onDragstart={props.onLift}
+      onDragend={props.onRest}
+    >
       <button
         type="button"
         class="group-toggle"
-        aria-expanded={Reactive.map(section, (now) => !now.collapsed)}
-        onClick={onToggle}
+        aria-expanded={Reactive.map(props.section, (now) => !now.collapsed)}
+        onClick={props.onToggle}
       >
-        <span>{Reactive.map(section, (now) => now.title)}</span>
-        <span class="group-count">{Reactive.map(section, countsOf)}</span>
+        <span>{Reactive.map(props.section, (now) => now.title)}</span>
+        <span class="group-count">{Reactive.map(props.section, countsOf)}</span>
       </button>
+      <span class="group-moves" hidden={fixed(props.section)}>
+        <button
+          type="button"
+          class="group-move"
+          aria-label={Reactive.map(props.section, (now) => `Move ${now.title} up`)}
+          onClick={props.onUp}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          class="group-move"
+          aria-label={Reactive.map(props.section, (now) => `Move ${now.title} down`)}
+          onClick={props.onDown}
+        >
+          ↓
+        </button>
+      </span>
     </h2>
-    <ul>{rows}</ul>
+    <ul>{props.rows}</ul>
   </section>
 )
 

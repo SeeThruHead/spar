@@ -1,6 +1,16 @@
 import { Effect, Schema } from "effect"
 import { Store } from "spar"
-import { AgentId, Board, SpaceId, toggled } from "./domain.ts"
+import {
+  AgentId,
+  Board,
+  SpaceId,
+  agentNudged,
+  agentPlaced,
+  agentPlacedBefore,
+  spaceNudged,
+  spacePlacedBefore,
+  toggled,
+} from "./domain.ts"
 import type { Agent } from "./domain.ts"
 import { Server } from "./Server.ts"
 
@@ -23,8 +33,8 @@ const initialState: Board = {
     agent("agent-1", "Release notes", { status: "blocked", spaceId: hangar, tags: ["docs"] }),
     agent("agent-2", "Flaky test hunt", { status: "working", spaceId: hangar }),
     agent("agent-3", "Backup check", { status: "done", spaceId: homelab, tags: ["ops"] }),
-    agent("agent-4", "Trip planning", { status: "idle" }),
     agent("agent-5", "Inbox triage", { status: "working", pinned: true }),
+    agent("agent-4", "Trip planning", { status: "idle" }),
   ],
   spaces: [
     { id: hangar, name: "Hangar" },
@@ -44,7 +54,7 @@ export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
   actions: {
     started: Store.action(Schema.Struct({ name: Schema.String }), (board: Board, { name }) => ({
       ...board,
-      agents: [...board.agents, agent(`agent-${board.nextNumber}`, name, { status: "working" })],
+      agents: [agent(`agent-${board.nextNumber}`, name, { status: "working" }), ...board.agents],
       nextNumber: board.nextNumber + 1,
     })),
     pinToggled: Store.action(Schema.Struct({ id: AgentId }), (board: Board, { id }) =>
@@ -63,6 +73,25 @@ export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
       spaces: [...board.spaces, { id: SpaceId.make(`space-${board.nextNumber}`), name }],
       nextNumber: board.nextNumber + 1,
     })),
+    agentDropped: Store.action(
+      Schema.Struct({ id: AgentId, section: Schema.String, before: Schema.NullOr(AgentId) }),
+      (board: Board, { id, section, before }) =>
+        before === null
+          ? agentPlaced(board, id, section, board.agents.length)
+          : agentPlacedBefore(board, id, before),
+    ),
+    agentNudged: Store.action(
+      Schema.Struct({ id: AgentId, by: Schema.Int }),
+      (board: Board, { id, by }) => agentNudged(board, id, by),
+    ),
+    spaceDropped: Store.action(
+      Schema.Struct({ id: SpaceId, before: Schema.String }),
+      (board: Board, { id, before }) => spacePlacedBefore(board, id, before),
+    ),
+    spaceNudged: Store.action(
+      Schema.Struct({ id: SpaceId, by: Schema.Int }),
+      (board: Board, { id, by }) => spaceNudged(board, id, by),
+    ),
     sectionToggled: Store.action(
       Schema.Struct({ key: Schema.String }),
       (board: Board, { key }) => ({

@@ -99,6 +99,30 @@ const steps: ReadonlyArray<Step> = [
   ],
   [/^I go back$/, (page) => page.goBack()],
   [
+    /^I drag the agent "(.+)" onto "(.+)"$/,
+    (page, name, other) => row(page, name).dragTo(row(page, other)),
+  ],
+  [
+    /^I drag the agent "(.+)" into the "(.+)" section$/,
+    (page, name, title) => row(page, name).dragTo(section(page, title).getByRole("heading")),
+  ],
+  [
+    /^I drag the project "(.+)" above "(.+)"$/,
+    (page, title, other) =>
+      section(page, title).getByRole("heading").dragTo(section(page, other).getByRole("heading")),
+  ],
+  [
+    /^the sections are "(.+)"$/,
+    (page, titles) =>
+      page.waitForFunction(
+        (expected) =>
+          [...document.querySelectorAll("nav section[aria-label]")]
+            .map((node) => node.getAttribute("aria-label"))
+            .join(", ") === expected,
+        titles,
+      ),
+  ],
+  [
     /^I scroll down by (\d+)$/,
     (page, distance) =>
       page.evaluate((down) => {

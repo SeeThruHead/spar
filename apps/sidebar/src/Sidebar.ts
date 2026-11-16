@@ -24,6 +24,31 @@ type Editing = Data.TaggedEnum<{
 
 const Editing = Data.taggedEnum<Editing>()
 
+type Dragged = { readonly kind: "agent" | "space"; readonly id: string }
+
+type Dragging = {
+  readonly dragged: UiState.UiState<Dragged | null>
+  readonly over: UiState.UiState<string | null>
+}
+
+const lifted = (kind: Dragged["kind"], id: string): Dragged | null => ({ kind, id })
+
+const carried = (event: DragEvent, id: string): Action =>
+  Effect.sync(() => event.dataTransfer?.setData("text/plain", id))
+
+const settled = (dragging: Dragging): Action => [
+  UiState.set(dragging.dragged, null),
+  UiState.set(dragging.over, null),
+]
+
+const agentUnder = (event: DragEvent): AgentId | null => {
+  if (!(event.target instanceof Element)) return null
+
+  const id = event.target.closest("[data-agent]")?.getAttribute("data-agent")
+
+  return id === null || id === undefined ? null : AgentId.make(id)
+}
+
 type Shared = {
   readonly editing: UiState.UiState<Editing>
   readonly onClose: Action
@@ -40,6 +65,7 @@ const AgentRow = View.connect(
     readonly agent: Reactive.Reactive<Agent>
     readonly id: string
     readonly editing: UiState.UiState<Editing>
+    readonly dragging: Dragging
   }) {
     const store = yield* BoardStore
     const router = yield* Router.Router
@@ -47,7 +73,14 @@ const AgentRow = View.connect(
     const first = yield* props.agent.get
 
     return {
+      id: props.id,
       agent: props.agent,
+      lifted: Reactive.map(props.dragging.dragged, (now) => now?.id === props.id),
+      onLift: (event: DragEvent) => [
+        carried(event, props.id),
+        UiState.set(props.dragging.dragged, lifted("agent", props.id)),
+      ],
+      onRest: settled(props.dragging),
       link: router.link(agentRoute, { id: props.id }),
       menu: yield* View.child(Menu, {
         label: `Actions for ${first.name}`,
@@ -59,6 +92,8 @@ const AgentRow = View.connect(
             label: "Move to a project",
             onChoose: UiState.set(props.editing, Editing.Moving({ id })),
           },
+          { label: "Move up", onChoose: store.commands.agentNudged({ id, by: -1 }) },
+          { label: "Move down", onChoose: store.commands.agentNudged({ id, by: 1 }) },
         ],
       }),
     }
@@ -70,21 +105,46 @@ const SectionPanel = View.connect(
     readonly section: Reactive.Reactive<Section>
     readonly sectionKey: string
     readonly editing: UiState.UiState<Editing>
+    readonly dragging: Dragging
   }) {
     const store = yield* BoardStore
+    const space = SpaceId.make(props.sectionKey)
     const rows = yield* pipe(
       Reactive.map(props.section, (section) => section.rows),
       Reactive.mapBy(
         (agent: Agent) => agent.id,
         AgentRow,
-        (agent, id) => ({ agent, id, editing: props.editing }),
+        (agent, id) => ({ agent, id, editing: props.editing, dragging: props.dragging }),
       ),
     )
+    const dropped = (event: DragEvent) =>
+      Effect.flatMap(props.dragging.dragged.get, (now) => {
+        if (now === null) return Effect.void
+        if (now.kind === "space") {
+          return store.commands.spaceDropped({ id: SpaceId.make(now.id), before: props.sectionKey })
+        }
+
+        return store.commands.agentDropped({
+          id: AgentId.make(now.id),
+          section: props.sectionKey,
+          before: agentUnder(event),
+        })
+      })
 
     return {
       section: props.section,
       rows,
+      over: Reactive.map(props.dragging.over, (now) => now === props.sectionKey),
       onToggle: store.commands.sectionToggled({ key: props.sectionKey }),
+      onLift: (event: DragEvent) => [
+        carried(event, props.sectionKey),
+        UiState.set(props.dragging.dragged, lifted("space", props.sectionKey)),
+      ],
+      onRest: settled(props.dragging),
+      onOver: Events.prevent(UiState.set(props.dragging.over, props.sectionKey)),
+      onDrop: Events.prevent((event: DragEvent) => [dropped(event), settled(props.dragging)]),
+      onUp: store.commands.spaceNudged({ id: space, by: -1 }),
+      onDown: store.commands.spaceNudged({ id: space, by: 1 }),
     }
   }),
 )(SectionView)
@@ -245,13 +305,17 @@ export const Sidebar = View.connect(
     const online = yield* Events.online
     const filter = yield* UiState.make("")
     const editing = yield* UiState.make<Editing>(Editing.Nothing())
+    const dragging: Dragging = {
+      dragged: yield* UiState.make<Dragged | null>(null),
+      over: yield* UiState.make<string | null>(null),
+    }
     const shown = yield* Reactive.zip(store.select.board, filter)
     const sections = yield* pipe(
       Reactive.map(shown, ([board, text]) => sectionsOf(board, text)),
       Reactive.mapBy(
         (section: Section) => section.key,
         SectionPanel,
-        (section, sectionKey) => ({ section, sectionKey, editing }),
+        (section, sectionKey) => ({ section, sectionKey, editing, dragging }),
       ),
     )
 

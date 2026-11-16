@@ -67,6 +67,33 @@ Feature: Agent sidebar
     Then the page heading is "Agents"
     And the page is back where I scrolled to
 
+  Scenario: Dragging an agent to a place in another project
+    Given the app is open
+    When I drag the agent "Trip planning" onto "Flaky test hunt"
+    Then the "Hangar" section lists "Release notes, Trip planning, Flaky test hunt"
+    And the "Chats" section lists ""
+    When I reload the page
+    Then the "Hangar" section lists "Release notes, Trip planning, Flaky test hunt"
+
+  Scenario: Dragging an agent into a section puts it last there
+    Given the app is open
+    When I drag the agent "Backup check" into the "Pinned" section
+    Then the "Pinned" section lists "Inbox triage, Backup check"
+    And the "Homelab" section lists ""
+
+  Scenario: Putting projects in another order by dragging
+    Given the app is open
+    Then the sections are "Pinned, Chats, Hangar, Homelab"
+    When I drag the project "Homelab" above "Hangar"
+    Then the sections are "Pinned, Chats, Homelab, Hangar"
+
+  Scenario: Reordering with the keyboard instead of dragging
+    Given the app is open
+    When I choose "Move down" from the menu of "Release notes"
+    Then the "Hangar" section lists "Flaky test hunt, Release notes"
+    When I press "Move Hangar down"
+    Then the sections are "Pinned, Chats, Homelab, Hangar"
+
   Scenario: A link to an agent that does not exist
     Given the app is open at "/agents/nobody"
     Then I see the alert "There is no agent called nobody. It may have been removed."
