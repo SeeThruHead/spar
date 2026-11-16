@@ -165,6 +165,11 @@ type Driver = {
   readonly arrive: Effect.Effect<void>
 }
 
+const named =
+  (name: string) =>
+  <A>(effect: Effect.Effect<A>): Effect.Effect<A> =>
+    Effect.withSpan(effect, `Router.${name}`, { captureStackTrace: false })
+
 const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
   const start = yield* driver.read
   const location = yield* SubscriptionRef.make(start)
@@ -187,15 +192,15 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
   )
 
   const go = <Params>(target: Route<Params>, params: Params): Effect.Effect<void> =>
-    Effect.andThen(driver.visit(target.build(params)), follow)
+    Effect.andThen(driver.visit(target.build(params)), follow).pipe(named("go"))
 
   return {
     location: fromSubscriptionRef(location),
     arrivedBy: fromSubscriptionRef(arrivedBy),
     go,
     replace: <Params>(target: Route<Params>, params: Params): Effect.Effect<void> =>
-      Effect.andThen(driver.replace(target.build(params)), follow),
-    back: Effect.andThen(driver.back, followBy("history")),
+      Effect.andThen(driver.replace(target.build(params)), follow).pipe(named("replace")),
+    back: Effect.andThen(driver.back, followBy("history")).pipe(named("back")),
     link: <Params>(target: Route<Params>, params: Params): Link => ({
       href: target.build(params),
       onClick: modify("followLink", go(target, params)),

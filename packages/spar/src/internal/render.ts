@@ -338,15 +338,17 @@ const mountEach = <A>(
   positions: ReadonlyMap<string, Placed<A>>,
   keptCount: number,
   inside: Place,
+  made: Cell.Waiting<Entry<A>>,
 ): Effect.Effect<ReadonlyArray<Placed<A>>> =>
   Effect.forEach(wanted, ([key, item], index) => {
     const existing = positions.get(key)
     if (existing !== undefined) return Effect.sync(() => refreshed(existing, item))
 
-    return Effect.map(mountEntry(rows, key, item, inside), (entry) => ({
-      entry,
-      position: keptCount + index,
-    }))
+    return Effect.map(mountEntry(rows, key, item, inside), (entry) => {
+      Cell.defer(made, entry)
+
+      return { entry, position: keptCount + index }
+    })
   })
 
 const drawEach = <A>(
@@ -355,6 +357,7 @@ const drawEach = <A>(
   positions: ReadonlyMap<string, Placed<A>>,
   keptCount: number,
   inside: Place,
+  made: Cell.Waiting<Entry<A>>,
 ): Effect.Effect<ReadonlyArray<Placed<A>>> =>
   Effect.suspend(() => {
     const later = Cell.waiting<Later>()
@@ -364,7 +367,11 @@ const drawEach = <A>(
       const existing = positions.get(key)
       if (existing !== undefined) return refreshed(existing, item)
 
-      return { entry: drawEntry(rows, key, item, drawing, unsettled), position: keptCount + index }
+      const entry = drawEntry(rows, key, item, drawing, unsettled)
+
+      Cell.defer(made, entry)
+
+      return { entry, position: keptCount + index }
     })
 
     return Effect.as(
@@ -388,10 +395,12 @@ const fillRows = Effect.fnUntraced(function* <A>(
   ) =>
     Effect.flatMap(Ref.getAndSet(claiming, undefined), (claim) => {
       const inside: Place = { ...place, before: anchor, claim }
-      const placed =
+      const made = Cell.waiting<Entry<A>>()
+      const placed = (
         rows.kind === "drawn"
-          ? drawEach(rows, wanted, positions, keptCount, inside)
-          : mountEach(rows, wanted, positions, keptCount, inside)
+          ? drawEach(rows, wanted, positions, keptCount, inside, made)
+          : mountEach(rows, wanted, positions, keptCount, inside, made)
+      ).pipe(Effect.onError(() => Effect.forEach(Cell.take(made), removeEntry, { discard: true })))
 
       return claim === undefined
         ? placed
@@ -442,7 +451,9 @@ const fillRows = Effect.fnUntraced(function* <A>(
     (stop) => Effect.sync(stop),
   )
   yield* Effect.forkScoped(
-    Effect.tapDefect(Stream.runForEach(Stream.fromQueue(latest), reconcile), report),
+    Stream.runForEach(Stream.fromQueue(latest), (next) =>
+      Effect.catchDefect(reconcile(next), report),
+    ),
     { startImmediately: true },
   )
 })

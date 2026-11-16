@@ -23,7 +23,7 @@ type Options<R, LayerError> = {
   readonly shown?: Effect.Effect<void>
 }
 
-const shown = <R, LayerError>(
+const started = <R, LayerError>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
   existing: (target: HTMLElement) => Dom.Cursor | undefined,
@@ -59,9 +59,9 @@ const shown = <R, LayerError>(
 export const mount = <R, LayerError = never>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
-): Effect.Effect<never, LayerError> => shown(component, options, () => undefined)
+): Effect.Effect<never, LayerError> => started(component, options, () => undefined)
 
 export const hydrate = <R, LayerError = never>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
-): Effect.Effect<never, LayerError> => shown(component, options, Dom.cursorIn)
+): Effect.Effect<never, LayerError> => started(component, options, Dom.cursorIn)

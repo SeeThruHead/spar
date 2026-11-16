@@ -38,7 +38,7 @@ export class Pages extends Context.Service<
       const count = yield* Ref.make(0)
       const waiting = yield* Ref.make(HashMap.empty<string, Deferred.Deferred<void, string>>())
 
-      const settle = Effect.fnUntraced(function* (id: string, problem: string | null) {
+      const settle = Effect.fn("Pages.settle")(function* (id: string, problem: string | null) {
         const all = yield* Ref.getAndUpdate(waiting, HashMap.remove(id))
 
         yield* Effect.forEach(Option.toArray(HashMap.get(all, id)), (answer) =>
@@ -46,7 +46,7 @@ export class Pages extends Context.Service<
         )
       })
 
-      const ask = Effect.fnUntraced(function* (wanted: Ask) {
+      const ask = Effect.fn("Pages.ask")(function* (wanted: Ask) {
         const id = `${yield* Ref.updateAndGet(count, (last) => last + 1)}`
         const answer = yield* Deferred.make<void, string>()
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "@effect/vitest"
+import { screen } from "@testing-library/dom"
 import { Context, Effect, Layer, SubscriptionRef, pipe } from "effect"
 import { App, Reactive, View } from "spar"
 import * as Testing from "spar/testing"
-import { BrokenPartView, PageView, WidgetView } from "./crashes.tsx"
+import { BrokenPartView, FussyItemView, PageView, WidgetView } from "./crashes.tsx"
 import { RowsView } from "./graphics.tsx"
 import { ItemView, LoadingView } from "./views.tsx"
 import type { Item } from "./views.tsx"
@@ -181,12 +182,49 @@ describe("crashes", () => {
         )(RowsView),
       )
       yield* Testing.findText("Alpha")
-      yield* SubscriptionRef.update(list, (all) => [...all, { id: "b", label: "Beta" }])
+      yield* SubscriptionRef.update(list, (all) => [
+        ...all,
+        { id: "c", label: "Gamma" },
+        { id: "b", label: "Beta" },
+      ])
       yield* Effect.sleep("20 millis")
 
       expect(yield* reports.seen).toEqual(["this row cannot be shown"])
-      expect(yield* SubscriptionRef.get(released)).toBe(1)
-      expect((yield* Testing.find("listitem")).textContent).toBe("Alpha")
+      expect(yield* SubscriptionRef.get(released)).toBe(2)
+      expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual(["Alpha"])
+    }).pipe(Effect.provide(Reports.layer)),
+  )
+
+  it.live("rows drawn just before one that cannot be drawn are taken back as well", () =>
+    Effect.gen(function* () {
+      const reports = yield* Reports
+      const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
+
+      yield* Testing.mount(
+        View.connect(
+          Effect.fnUntraced(function* () {
+            return {
+              rows: yield* pipe(
+                Reactive.fromSubscriptionRef(list),
+                Reactive.mapBy(keyOf, FussyItemView, (item) => ({ item })),
+              ),
+            }
+          }),
+        )(RowsView),
+      )
+      yield* Testing.findText("Alpha")
+      yield* SubscriptionRef.update(list, (all) => [
+        ...all,
+        { id: "c", label: "Gamma" },
+        { id: "b", label: "Beta" },
+      ])
+      yield* Effect.sleep("20 millis")
+
+      expect((yield* reports.seen).map(String)).toEqual(["TypeError: Beta cannot be shown"])
+      expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual(["Alpha"])
+
+      yield* SubscriptionRef.update(list, (all) => all.filter((item) => item.label !== "Beta"))
+      yield* Testing.findText("Gamma")
     }).pipe(Effect.provide(Reports.layer)),
   )
 
