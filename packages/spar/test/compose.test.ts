@@ -29,15 +29,16 @@ const Draft = (saved: Ref.Ref<ReadonlyArray<string>>) =>
     }),
   )(DraftView)
 
-const Traced = pipe(
-  View.connect(
-    Effect.fnUntraced(function* () {
-      const span = yield* Effect.currentSpan
+const spanProps = Effect.fnUntraced(function* () {
+  const span = yield* Effect.currentSpan
 
-      return { span: span.name }
-    }, Effect.orDie),
-  )(SpanView),
-  View.withSpan("Traced"),
+  return { span: span.name }
+}, Effect.orDie)
+
+const Traced = View.connect(spanProps)(SpanView)
+
+const TracedUnnamed = View.connect(spanProps)(({ span }) =>
+  jsx("p", { role: "note", children: span }),
 )
 
 const Counted = (count: number) =>
@@ -103,11 +104,19 @@ describe("composition", () => {
     }),
   )
 
-  it.live("withSpan runs the component's mount inside a span of that name", () =>
+  it.live("a component mounts inside a span named after its view", () =>
     Effect.gen(function* () {
       yield* mount(Traced)
 
-      expect((yield* find("note")).textContent).toBe("Traced")
+      expect((yield* find("note")).textContent).toBe("SpanView")
+    }),
+  )
+
+  it.live("a component whose view has no name still mounts inside a span", () =>
+    Effect.gen(function* () {
+      yield* mount(TracedUnnamed)
+
+      expect((yield* find("note")).textContent).toBe("View (unnamed)")
     }),
   )
 

@@ -64,7 +64,6 @@ export const Thread = flow(
   View.connect(threadProps),
   View.recover("ThreadLoadFailed", ThreadErrorView),
   View.pending(ThreadSkeletonView),
-  View.withSpan("Thread"),
 )(ThreadView)
 
 export const Mail = View.connect(

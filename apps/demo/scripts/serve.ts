@@ -1,16 +1,10 @@
-const root = new URL("../dist/", import.meta.url).pathname
+import { collector, start } from "./site.ts"
 
-const port = Number(Bun.env["PORT"] ?? 4173)
-
-const server = Bun.serve({
-  port,
-  hostname: "127.0.0.1",
-  fetch: async (request) => {
-    const path = new URL(request.url).pathname
-    const file = Bun.file(`${root}${path === "/" ? "index.html" : path.slice(1)}`)
-
-    return (await file.exists()) ? new Response(file) : new Response("Not found", { status: 404 })
-  },
-})
+const server = start(Number(Bun.env["PORT"] ?? 4173))
 
 console.log(`Serving dist/ on http://127.0.0.1:${server.port}/`)
+console.log(
+  collector === undefined
+    ? "Traces are dropped (set OTLP_ENDPOINT to forward them)"
+    : `Traces are forwarded to ${collector}`,
+)

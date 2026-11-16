@@ -225,7 +225,9 @@
         "effecttsgo/global-json": "off",
         "effecttsgo/global-json-in-effect": "off",
         "effecttsgo/global-console": "off",
-        "effecttsgo/global-console-in-effect": "off"
+        "effecttsgo/global-console-in-effect": "off",
+        "effecttsgo/global-fetch": "off",
+        "effecttsgo/process-env": "off"
       }
     },
     {

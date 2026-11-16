@@ -52,10 +52,15 @@ const inViewScope = <A, E, Requirements>(
     ),
   )
 
+const spanName = (view: { readonly name: string }): string =>
+  view.name === "" ? "View (unnamed)" : view.name
+
 export const connect =
   <Props, Outer, E, Requirements>(props: (outer: Outer) => Effect.Effect<Props, E, Requirements>) =>
   (view: View<Props>): Component<Outer, E, Outside<Requirements>, Props> =>
-    make(view, (outer) => inViewScope(Effect.map(props(outer), view)))
+    make(view, (outer) =>
+      Effect.withSpan(inViewScope(Effect.map(props(outer), view)), spanName(view)),
+    )
 
 export const mapProps =
   <Outer, Props>(f: (outer: Outer) => Props) =>
@@ -63,13 +68,6 @@ export const mapProps =
     self: Mountable<Props, E, R, ViewProps>,
   ): Component<Outer, E, R, ViewProps> =>
     make(viewOf(self), (outer) => child(self, f(outer)))
-
-export const withSpan =
-  (name: string) =>
-  <Props, E = never, R = never, ViewProps = never>(
-    self: Mountable<Props, E, R, ViewProps>,
-  ): Component<Props, E, R, ViewProps> =>
-    make(viewOf(self), (props) => Effect.withSpan(child(self, props), name))
 
 export const branch =
   <Props, E2 = never, R2 = never>(

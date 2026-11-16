@@ -1,19 +1,11 @@
 import { Effect, Queue } from "effect"
 import { chromium } from "playwright"
 import type { Locator, Page } from "playwright"
+import { start } from "./site.ts"
 
 const root = new URL("..", import.meta.url).pathname
 
-const server = Bun.serve({
-  port: 0,
-  hostname: "127.0.0.1",
-  fetch: async (request) => {
-    const path = new URL(request.url).pathname
-    const file = Bun.file(`${root}dist/${path === "/" ? "index.html" : path.slice(1)}`)
-
-    return (await file.exists()) ? new Response(file) : new Response("Not found", { status: 404 })
-  },
-})
+const server = start(0)
 
 const shows = (locator: Locator, text: string | RegExp): Promise<void> =>
   locator.filter({ hasText: text }).first().waitFor({ timeout: 5000 })
@@ -102,11 +94,14 @@ const run = async (): Promise<void> => {
     (message) => message.type() === "error" && Queue.offerUnsafe(errors, message.text()),
   )
 
+  const tracesSent = page.waitForResponse((response) => response.url().includes("/otlp/v1/traces"))
+
   await page.goto(`http://127.0.0.1:${server.port}/`)
   await shows(page.getByRole("status"), "Loading thread welcome")
   await counter(page)
   await todos(page)
   await mail(page)
+  await tracesSent
   await page.screenshot({ path: `${root}artifacts/demo.png`, fullPage: true })
   await browser.close()
 

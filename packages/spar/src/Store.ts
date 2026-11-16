@@ -93,12 +93,18 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         reactions.filter((reaction) => reaction.action === handled)
 
       const command = (name: string, handled: Action<State, unknown>) =>
-        Effect.fn("Store.command")(
+        Effect.fn(channelOf(key, name))(
           function* (input: unknown) {
             const payload = yield* handled.encode(input)
             const reduce = yield* handled.reducer(payload)
             const id = yield* random.uuidV7()
             const entry: Entry = { id, action: name, payload }
+
+            yield* Effect.annotateCurrentSpan({
+              "spar.store": key,
+              "spar.action": name,
+              "spar.entry": id,
+            })
 
             yield* Effect.forEach(
               reactionsTo(handled),
