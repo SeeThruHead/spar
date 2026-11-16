@@ -1,6 +1,7 @@
 import { Events, Reactive } from "spar"
 import type { Action, Element, Form, Handle, Router } from "spar"
 import { Button, SubmitButton, TextField } from "@spar/ui"
+import { countsOf } from "./domain.ts"
 import type { Agent, Section } from "./domain.ts"
 
 type RowProps = {
@@ -36,9 +37,7 @@ export const SectionView = ({ section, rows, onToggle }: SectionProps) => (
         onClick={onToggle}
       >
         <span>{Reactive.map(section, (now) => now.title)}</span>
-        <span class="group-count">
-          {Reactive.map(section, (now) => `${now.count} agents, ${now.needsYou} waiting on you`)}
-        </span>
+        <span class="group-count">{Reactive.map(section, countsOf)}</span>
       </button>
     </h2>
     <ul>{rows}</ul>
@@ -64,6 +63,7 @@ export const SidebarView = (props: SidebarProps) => (
       <output aria-label="Waiting on you">{props.waiting}</output> waiting on you
       <span class="summary-net">
         <output aria-label="Connection">{props.online}</output>
+        {", "}
         <output aria-label="Not yet sent">{props.unsent}</output> not yet sent
       </span>
     </p>

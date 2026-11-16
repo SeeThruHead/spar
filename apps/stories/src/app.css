@@ -58,3 +58,7 @@ body {
     gap: 0.25rem 1rem;
   }
 }
+
+.stories > [role="status"] {
+  position: absolute;
+}

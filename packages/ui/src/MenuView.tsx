@@ -36,23 +36,25 @@ export const MenuListView = ({ label, place, items }: ListProps) => (
 
 type MenuProps = {
   readonly label: string
+  readonly text: string
   readonly trigger: Handle.Handle
   readonly open: Reactive.Reactive<boolean>
   readonly onToggle: Action
   readonly list: Element
 }
 
-export const MenuView = ({ label, trigger, open, onToggle, list }: MenuProps) => (
+export const MenuView = ({ label, text, trigger, open, onToggle, list }: MenuProps) => (
   <span class="spar-menu-anchor">
     <button
       ref={trigger}
       type="button"
       class="spar-button spar-quiet"
+      aria-label={label}
       aria-haspopup="menu"
       aria-expanded={open}
       onClick={onToggle}
     >
-      {label}
+      {text}
     </button>
     {list}
   </span>

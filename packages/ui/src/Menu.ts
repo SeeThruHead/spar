@@ -52,6 +52,7 @@ const List = pipe(
 export const Menu = View.connect(
   Effect.fnUntraced(function* (props: {
     readonly label: string
+    readonly text: string
     readonly items: ReadonlyArray<Item>
   }) {
     const open = yield* UiState.make(false)
@@ -68,6 +69,7 @@ export const Menu = View.connect(
 
     return {
       label: props.label,
+      text: props.text,
       trigger,
       open,
       onToggle: UiState.update(open, (shown) => !shown),

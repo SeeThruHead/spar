@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Schema } from "effect"
-import { AgentId, SpaceId, needsYou, sectionsOf, tagsOf, toggled } from "../src/domain.ts"
+import { AgentId, SpaceId, countsOf, needsYou, sectionsOf, tagsOf, toggled } from "../src/domain.ts"
 import type { Agent, Board } from "../src/domain.ts"
 
 const agent = (name: string, given: Partial<Agent> = {}): Agent => ({
@@ -47,6 +47,11 @@ describe("the sidebar's sections", () => {
       [2, 1],
     ])
     expect(needsYou(board)).toBe(2)
+    expect(sectionsOf(board, "").map(countsOf)).toEqual([
+      "1 agent, 1 waiting on you",
+      "2 agents, 0 waiting on you",
+      "2 agents, 1 waiting on you",
+    ])
   })
 
   it("a collapsed section keeps its counts and hides its rows", () => {

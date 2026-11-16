@@ -130,3 +130,6 @@ export const tagsOf = (text: string): ReadonlyArray<string> => [
 
 export const toggled = <A>(values: ReadonlyArray<A>, value: A): ReadonlyArray<A> =>
   values.includes(value) ? values.filter((found) => found !== value) : [...values, value]
+
+export const countsOf = (found: Section): string =>
+  `${found.count} ${found.count === 1 ? "agent" : "agents"}, ${found.needsYou} waiting on you`

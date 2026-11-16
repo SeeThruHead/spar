@@ -9,8 +9,8 @@ import {
   SubscriptionRef,
 } from "effect"
 import { ActionScope } from "./internal/actionScope.ts"
-import { write } from "./internal/action.ts"
-import type { UiWrite } from "./internal/action.ts"
+import { run, write } from "./internal/action.ts"
+import type { Action, UiWrite } from "./internal/action.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
@@ -39,6 +39,10 @@ export type Form<Valid, Input extends Inputs> = {
   readonly submitting: Reactive<boolean>
   readonly submit: <R>(
     onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
+  ) => Effect.Effect<void, never, R>
+  readonly submitThen: <R>(
+    onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
+    onDone: Action,
   ) => Effect.Effect<void, never, R>
   readonly reset: UiWrite
 }
@@ -133,8 +137,10 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
   const send = <R>(
     value: Valid,
     onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
+    onDone: Action,
   ): Effect.Effect<void, never, R> =>
     onValid(value).pipe(
+      Effect.andThen(run(onDone)),
       Effect.catch((rejected) =>
         SubscriptionRef.update(state, (now) => ({
           ...now,
@@ -148,30 +154,37 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
   const start = Effect.fnUntraced(function* <R>(
     value: Valid,
     onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
+    onDone: Action,
   ) {
     const outliving = yield* ActionScope
 
     yield* SubscriptionRef.update(state, (now) => ({ ...now, submitting: true, failure: "" }))
-    yield* Effect.forkIn(send(value, onValid), outliving, { startImmediately: true })
+    yield* Effect.forkIn(send(value, onValid, onDone), outliving, { startImmediately: true })
   })
 
-  const submit = <R>(
+  const submitThen = <R>(
     onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
+    onDone: Action,
   ): Effect.Effect<void, never, R> =>
     Effect.flatMap(SubscriptionRef.get(state), (now) => {
       if (now.submitting) return Effect.void
 
       return Result.match(check(now.values), {
         onFailure: () => SubscriptionRef.set(state, { ...now, attempted: true }),
-        onSuccess: (value) => start(value, onValid),
+        onSuccess: (value) => start(value, onValid, onDone),
       })
     })
+
+  const submit = <R>(
+    onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
+  ): Effect.Effect<void, never, R> => submitThen(onValid, [])
 
   const form: Form<Valid, Input> = {
     field,
     error: map(current, (now) => formProblem(now, problems(now.values))),
     submitting: map(current, (now) => now.submitting),
     submit,
+    submitThen,
     reset: write(SubscriptionRef.set(state, fresh)),
   }
 

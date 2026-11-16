@@ -267,3 +267,9 @@
 .spar-toast[data-tone="problem"] {
   border-color: var(--spar-problem);
 }
+
+.spar-dialog,
+.spar-menu,
+.spar-toast {
+  box-sizing: border-box;
+}

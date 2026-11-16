@@ -51,6 +51,7 @@ const AgentRow = View.connect(
       link: router.link(agentRoute, { id: props.id }),
       menu: yield* View.child(Menu, {
         label: `Actions for ${first.name}`,
+        text: "Actions",
         items: [
           { label: "Pin or unpin", onChoose: store.commands.pinToggled({ id }) },
           { label: "Edit tags", onChoose: UiState.set(props.editing, Editing.Tagging({ id })) },
@@ -101,15 +102,14 @@ const StartForm = View.connect(
       action: "Start agent",
       field: form.field("name"),
       busy: form.submitting,
-      onSubmit: [
-        form.submit(({ name }) =>
+      onSubmit: form.submitThen(
+        ({ name }) =>
           Effect.andThen(
             store.commands.started({ name: name.trim() }),
             toasts.show(`Started ${name.trim()}`, "success"),
           ),
-        ),
         onClose,
-      ],
+      ),
     }
   }),
 )(NameFormView)
@@ -126,10 +126,10 @@ const ProjectForm = View.connect(
       action: "Add project",
       field: form.field("name"),
       busy: form.submitting,
-      onSubmit: [
-        form.submit(({ name }) => store.commands.spaceAdded({ name: name.trim() })),
+      onSubmit: form.submitThen(
+        ({ name }) => store.commands.spaceAdded({ name: name.trim() }),
         onClose,
-      ],
+      ),
     }
   }),
 )(NameFormView)
@@ -160,16 +160,15 @@ const TagsForm = View.connect(
       action: "Save tags",
       field: form.field("name"),
       busy: form.submitting,
-      onSubmit: [
-        form.submit(({ name }) =>
+      onSubmit: form.submitThen(
+        ({ name }) =>
           Effect.forEach(
             Option.toArray(agent),
             (found) => store.commands.tagged({ id: found.id, tags: tagsOf(name) }),
             { discard: true },
           ),
-        ),
         onClose,
-      ],
+      ),
     }
   }),
 )(NameFormView)
@@ -197,8 +196,8 @@ const MoveForm = View.connect(
           ...spaces.map((space) => ({ value: space.id, label: space.name })),
         ],
       }),
-      onSubmit: [
-        form.submit(({ project }) =>
+      onSubmit: form.submitThen(
+        ({ project }) =>
           Effect.forEach(
             Option.toArray(agent),
             (found) =>
@@ -208,9 +207,8 @@ const MoveForm = View.connect(
               }),
             { discard: true },
           ),
-        ),
         onClose,
-      ],
+      ),
     }
   }),
 )(MoveFormView)

@@ -54,6 +54,7 @@ const Kit = View.connect(
       }),
       menu: yield* View.child(Menu, {
         label: "More",
+        text: "More",
         items: [
           { label: "Rename", onChoose: note("renamed") },
           { label: "Archive", onChoose: note("archived") },

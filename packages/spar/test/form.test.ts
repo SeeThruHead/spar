@@ -26,11 +26,17 @@ type Account = typeof Signup.Type
 const SignupForm = (
   accounts: Ref.Ref<ReadonlyArray<Account>>,
   server: Deferred.Deferred<void, Form.Rejected>,
+  clearing: boolean,
 ) =>
   View.connect(
     Effect.fnUntraced(function* () {
       const form = yield* Form.make(Signup, { email: "", age: "", terms: false })
       const welcome = yield* SubscriptionRef.make("")
+      const save = Effect.fnUntraced(function* (account: Account) {
+        yield* Ref.update(accounts, (all) => [...all, account])
+        yield* Deferred.await(server)
+        yield* SubscriptionRef.set(welcome, `Welcome, ${account.email}`)
+      })
 
       return {
         email: form.field("email"),
@@ -40,25 +46,21 @@ const SignupForm = (
         submitting: form.submitting,
         welcome: Reactive.fromSubscriptionRef(welcome),
         onReset: form.reset,
-        onSubmit: form.submit(
-          Effect.fnUntraced(function* (account: Account) {
-            yield* Ref.update(accounts, (all) => [...all, account])
-            yield* Deferred.await(server)
-            yield* SubscriptionRef.set(welcome, `Welcome, ${account.email}`)
-          }),
-        ),
+        onSubmit: clearing ? form.submitThen(save, form.reset) : form.submit(save),
       }
     }),
   )(SignupView)
 
-const started = Effect.gen(function* () {
+const startedWith = Effect.fnUntraced(function* (clearing: boolean) {
   const accounts = yield* Ref.make<ReadonlyArray<Account>>([])
   const server = yield* Deferred.make<void, Form.Rejected>()
 
-  yield* Testing.mount(SignupForm(accounts, server))
+  yield* Testing.mount(SignupForm(accounts, server, clearing))
 
   return { accounts: Ref.get(accounts), server }
 })
+
+const started = startedWith(false)
 
 const text = (label: string) => screen.getByLabelText(label).textContent
 
@@ -164,6 +166,26 @@ describe("forms", () => {
       yield* shows("Form problem", "That address cannot sign up here")
 
       expect(yield* accounts).toEqual([])
+    }),
+  )
+
+  it.live("an action given for after a submit runs only once the submit has worked", () =>
+    Effect.gen(function* () {
+      const { server } = yield* startedWith(true)
+
+      yield* Testing.click("button", "Create account")
+      yield* shows("Email problem", "Enter an email address")
+      yield* fillValid
+      yield* Testing.click("button", "Create account")
+      yield* Effect.sleep("20 millis")
+
+      expect(yield* Testing.find("textbox", "Email")).toHaveProperty("value", "ada@example.com")
+
+      yield* Deferred.succeed(server, undefined)
+      yield* shows("Welcome", "Welcome, ada@example.com")
+      yield* Testing.eventually(() =>
+        expect(screen.getByRole("textbox", { name: "Email" })).toHaveProperty("value", ""),
+      )
     }),
   )
 

@@ -132,3 +132,7 @@ body {
     border-block-end: 1px solid var(--spar-line);
   }
 }
+
+.shell > [role="status"] {
+  position: absolute;
+}

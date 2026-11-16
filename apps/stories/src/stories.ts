@@ -76,6 +76,7 @@ export const MenuStory = View.connect(
       chosen: Reactive.fromSubscriptionRef(chosen),
       menu: yield* View.child(Menu, {
         label: "More actions",
+        text: "More actions",
         items: [
           { label: "Rename", onChoose: SubscriptionRef.set(chosen, "Rename") },
           { label: "Duplicate", onChoose: SubscriptionRef.set(chosen, "Duplicate") },

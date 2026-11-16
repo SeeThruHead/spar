@@ -119,6 +119,8 @@ return {
 `Form.text(field)` and `Form.checkbox(field)` are the props to spread on an input. A field's problem
 shows once the field has been left or a submit was tried. Fail the submit Effect with
 `new Form.Rejected({ message, fields })` to put a server's messages on their fields.
+`form.submitThen(onValid, onDone)` also runs an action (closing a dialog, clearing the form) once
+the submit has worked, and not when the input was invalid or the server refused it.
 
 (`apps/sidebar/src/Sidebar.ts`, `packages/spar/test/form.test.ts`)
 

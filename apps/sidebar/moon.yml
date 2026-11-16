@@ -28,5 +28,9 @@ tasks:
     command: bun scripts/features.ts
     deps: [build]
     inputs: ["src/**/*", "scripts/**/*", "features/**/*", "index.html", "@group(upstream)"]
+  walkthrough:
+    command: bun scripts/walkthrough.ts
+    deps: [build]
+    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
   check:
     deps: [typecheck, lint, format, test]
