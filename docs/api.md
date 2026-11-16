@@ -81,6 +81,17 @@ A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`,
 
 (`apps/sidebar/src/BoardStore.ts`)
 
+### Several tabs
+
+Provide `Tabs.layerBrowser` in a browser and a durable store is one store across every open tab.
+A command takes a cross-tab lock, first applies whatever other tabs have recorded since, then
+records its own entry, so two tabs never write the same slot and a reducer always sees the latest
+state. Idle tabs hear about new entries and follow. A tab that fell behind a fold of old entries
+starts again from the saved state. Each command is written to the device before the lock is taken, so
+one made just before a reload or a close is carried out by the next tab to open (and reported as
+`Store.Abandoned` if that version no longer has the action). Without the layer a store behaves as if
+it were the only tab.
+
 ## Outbox
 
 `Outbox.Outbox.layer` (or `layerWith({ maxAttempts, attemptTimeout })`) needs a `KeyValueStore`.

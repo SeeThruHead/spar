@@ -2,8 +2,6 @@
 
 In the order I would do them.
 
-1. **Durable stores across tabs.** A durable store assumes one writing tab. Two tabs on the same
-   store would overwrite each other's log slots. The outbox already handles two tabs.
 2. **Row creation speed.** About 2 times Solid. The remaining cost is one Effect scope and several
    Effect steps per row.
 3. **Overlay placement.** Menus flip above or below their anchor but do not avoid the left and right

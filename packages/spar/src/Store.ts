@@ -1,5 +1,6 @@
 import {
   Array,
+  Cause,
   Context,
   Effect,
   Layer,
@@ -9,15 +10,18 @@ import {
   Schema,
   Scope,
   Semaphore,
+  Stream,
   Struct,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import * as Cell from "./internal/cell.ts"
 import { provideTo } from "./internal/context.ts"
+import { report } from "./internal/crash.ts"
 import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { Outbox } from "./Outbox.ts"
+import { Tabs } from "./Tabs.ts"
 
 const StoredEntry = Schema.Struct({
   id: Schema.String,
@@ -27,6 +31,12 @@ const StoredEntry = Schema.Struct({
 })
 
 const Snapshot = Schema.Struct({ seq: Schema.Int, state: Schema.Json })
+
+const Head = Schema.Struct({ seq: Schema.Int, compactedAt: Schema.Int })
+
+const Intent = Schema.Struct({ action: Schema.String, payload: Schema.Json })
+
+type Orphan = typeof Intent.Type & { readonly key: string }
 
 export type Entry = typeof StoredEntry.Type
 
@@ -122,6 +132,19 @@ type Journal<State> = {
   readonly entries: ReadonlyArray<Entry>
   readonly lastSeq: number
   readonly append: (entry: Entry, next: State) => Effect.Effect<void>
+  readonly news: (applied: number) => Effect.Effect<News<State>>
+  readonly exclusively: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly tell: Effect.Effect<void>
+  readonly told: Stream.Stream<void>
+  readonly intend: (action: string, payload: Schema.Json) => Effect.Effect<string>
+  readonly settle: (intent: string) => Effect.Effect<void>
+  readonly orphans: Effect.Effect<ReadonlyArray<Orphan>>
+}
+
+type News<State> = {
+  readonly restart: Option.Option<State>
+  readonly entries: ReadonlyArray<Entry>
+  readonly lastSeq: number
 }
 
 type Open<State, E, R> = (leftovers: ReadonlyArray<Entry>) => Effect.Effect<Journal<State>, E, R>
@@ -132,6 +155,15 @@ export class UnknownAction extends Schema.TaggedError<
 >()("UnknownAction", { action: Schema.String }) {
   override get message() {
     return `The log holds an action this store does not define: ${this.action}`
+  }
+}
+
+export class Abandoned extends Schema.TaggedError<Abandoned, { readonly brand: unique symbol }>()(
+  "Abandoned",
+  { store: Schema.String, action: Schema.String, cause: Schema.Defect() },
+) {
+  override get message() {
+    return `An earlier tab asked ${this.store} for "${this.action}" and closed before it was done. This version cannot carry it out, so it was dropped.`
   }
 }
 
@@ -196,46 +228,143 @@ export const replay = <State, A extends Actions<State>, S extends Selectors<Stat
 ): Effect.Effect<State, Schema.SchemaError | UnknownAction> =>
   replayFrom(definition, definition.initialState, entries)
 
+const ownerOf = (intent: string): string => intent.slice(0, intent.indexOf("/"))
+
+const nothingNew = <State>(applied: number): News<State> => ({
+  restart: Option.none(),
+  entries: [],
+  lastSeq: applied,
+})
+
 const inMemory =
   <State>(initialState: State): Open<State, never, never> =>
   () =>
-    Effect.succeed({ state: initialState, entries: [], lastSeq: 0, append: () => Effect.void })
+    Effect.succeed({
+      state: initialState,
+      entries: [],
+      lastSeq: 0,
+      append: () => Effect.void,
+      news: (applied) => Effect.succeed(nothingNew(applied)),
+      exclusively: (effect) => effect,
+      tell: Effect.void,
+      told: Stream.empty,
+      intend: () => Effect.succeed(""),
+      settle: () => Effect.void,
+      orphans: Effect.succeed([]),
+    })
 
 const onDevice = <State, Encoded, A extends Actions<State>, S extends Selectors<State>>(
   key: string,
   definition: Definition<State, A, S>,
   durable: Durable<State, Encoded>,
-): Open<State, Unreadable, KeyValueStore.KeyValueStore> =>
+): Open<State, Unreadable, KeyValueStore.KeyValueStore | SecureRandom.SecureRandom | Scope.Scope> =>
   Effect.fnUntraced(
     function* (leftovers: ReadonlyArray<Entry>) {
+      const tabs = yield* Tabs
+      const random = yield* SecureRandom.SecureRandom
+      const session = yield* random.uuidV7()
+      const shared = `spar/store/${key}`
       const keyValueStore = yield* KeyValueStore.KeyValueStore
       const device = KeyValueStore.prefix(keyValueStore, `spar/store/${key}/`)
       const snapshots = KeyValueStore.toSchemaStore(device, Snapshot)
       const log = KeyValueStore.toSchemaStore(KeyValueStore.prefix(device, "log/"), StoredEntry)
+      const heads = KeyValueStore.toSchemaStore(device, Head)
+      const intents = KeyValueStore.toSchemaStore(KeyValueStore.prefix(device, "pending/"), Intent)
+      const intended = yield* Ref.make(0)
+      const tabOf = (owner: string): string => `${shared}/tab/${owner}`
+
+      yield* tabs.stay(tabOf(session))
+
+      const intend = Effect.fnUntraced(function* (name: string, payload: Schema.Json) {
+        const count = yield* Ref.updateAndGet(intended, (last) => last + 1)
+        const intent = `${session}/${slot(count)}`
+
+        yield* intents.set(intent, { action: name, payload })
+
+        return intent
+      }, Effect.orDie)
+
+      const orphans = Effect.gen(function* () {
+        const all = yield* intents.keys
+        const owners = [...new Set(all.map(ownerOf))].filter((owner) => owner !== session)
+        const gone = yield* Effect.filter(owners, (owner) =>
+          Effect.map(tabs.here(tabOf(owner)), (open) => !open),
+        )
+        const found = yield* Effect.forEach(
+          all.toSorted().filter((intent) => gone.includes(ownerOf(intent))),
+          (intent) =>
+            intents.get(intent).pipe(
+              Effect.map(Option.map((left): Orphan => ({ key: intent, ...left }))),
+              Effect.catchTag("SchemaError", () =>
+                Effect.as(intents.remove(intent), Option.none<Orphan>()),
+              ),
+            ),
+        )
+
+        return found.flatMap(Option.toArray)
+      }).pipe(Effect.orDie)
       const stateJson = Schema.toCodecJson(durable.state)
+      const decodeState = Schema.decodeEffect(stateJson)
       const compactAfter = durable.compactAfter ?? compactAfterDefault
 
-      const snapshot = yield* snapshots.get("snapshot")
-      const base = yield* Option.match(snapshot, {
-        onNone: () => Effect.succeed({ state: definition.initialState, seq: 0 }),
-        onSome: ({ seq, state }) =>
-          Effect.map(Schema.decodeEffect(stateJson)(state), (decoded) => ({
-            state: decoded,
-            seq,
-          })),
+      const read = Effect.gen(function* () {
+        const snapshot = yield* snapshots.get("snapshot")
+        const base = yield* Option.match(snapshot, {
+          onNone: () => Effect.succeed({ state: definition.initialState, seq: 0 }),
+          onSome: ({ seq, state }) =>
+            Effect.map(decodeState(state), (decoded) => ({ state: decoded, seq })),
+        })
+
+        const keys = yield* log.keys
+        const found = yield* Effect.forEach(keys.toSorted(), (slotKey) => log.get(slotKey))
+        const saved = found.flatMap(Option.toArray).filter((entry) => entry.seq > base.seq)
+        const lastSaved = lastSeqOf(saved, base.seq)
+        const missed = bySeq(leftovers.filter((entry) => entry.seq > lastSaved))
+        const entries = [...saved, ...missed]
+
+        yield* Effect.forEach(missed, (entry) => log.set(slot(entry.seq), entry), {
+          discard: true,
+        })
+        yield* heads.set("head", { seq: lastSeqOf(entries, base.seq), compactedAt: base.seq })
+
+        return { base, entries, state: yield* replayFrom(definition, base.state, entries) }
       })
 
-      const keys = yield* log.keys
-      const found = yield* Effect.forEach(keys.toSorted(), (slotKey) => log.get(slotKey))
-      const saved = found.flatMap(Option.toArray).filter((entry) => entry.seq > base.seq)
-      const lastSaved = lastSeqOf(saved, base.seq)
-      const missed = bySeq(leftovers.filter((entry) => entry.seq > lastSaved))
-      const entries = [...saved, ...missed]
-
-      yield* Effect.forEach(missed, (entry) => log.set(slot(entry.seq), entry), { discard: true })
-
-      const state = yield* replayFrom(definition, base.state, entries)
+      const { base, entries, state } = yield* tabs.exclusively(shared, read)
       const compactedAt = yield* Ref.make(base.seq)
+
+      const restartFrom = (
+        applied: number,
+        compacted: number,
+      ): Effect.Effect<
+        Option.Option<State>,
+        KeyValueStore.KeyValueStoreError | Schema.SchemaError | Cause.NoSuchElementError
+      > => {
+        if (compacted <= applied) return Effect.succeedNone
+
+        return snapshots.get("snapshot").pipe(
+          Effect.flatMap(Effect.fromOption),
+          Effect.flatMap((snapshot) => decodeState(snapshot.state)),
+          Effect.asSome,
+        )
+      }
+
+      const news = Effect.fnUntraced(function* (applied: number) {
+        const head = yield* heads.get("head")
+        const now = Option.getOrUndefined(head)
+        if (now === undefined) return nothingNew<State>(applied)
+        if (now.seq <= applied) return nothingNew<State>(applied)
+
+        const restart = yield* restartFrom(applied, now.compactedAt)
+        const found = yield* Effect.forEach(
+          Array.range(Math.max(applied, now.compactedAt) + 1, now.seq),
+          (seq) => log.get(slot(seq)),
+        )
+
+        yield* Ref.set(compactedAt, now.compactedAt)
+
+        return { restart, entries: found.flatMap(Option.toArray), lastSeq: now.seq }
+      }, Effect.orDie)
 
       const compact = Effect.fnUntraced(function* (entry: Entry, next: State) {
         const encoded = yield* Schema.encodeUnknownEffect(stateJson)(next)
@@ -244,9 +373,11 @@ const onDevice = <State, Encoded, A extends Actions<State>, S extends Selectors<
         yield* snapshots.set("snapshot", { seq: entry.seq, state: encoded })
         yield* Effect.forEach(written, (slotKey) => log.remove(slotKey), { discard: true })
         yield* Ref.set(compactedAt, entry.seq)
+        yield* heads.set("head", { seq: entry.seq, compactedAt: entry.seq })
       })
 
       const append = Effect.fnUntraced(function* (entry: Entry, next: State) {
+        yield* heads.set("head", { seq: entry.seq, compactedAt: yield* Ref.get(compactedAt) })
         yield* log.set(slot(entry.seq), entry)
 
         const since = yield* Ref.get(compactedAt)
@@ -255,7 +386,21 @@ const onDevice = <State, Encoded, A extends Actions<State>, S extends Selectors<
         yield* compact(entry, next)
       }, Effect.orDie)
 
-      return { state, entries, lastSeq: lastSeqOf(entries, base.seq), append }
+      const journal: Journal<State> = {
+        state,
+        entries,
+        lastSeq: lastSeqOf(entries, base.seq),
+        append,
+        news,
+        exclusively: (effect) => tabs.exclusively(shared, effect),
+        tell: tabs.announce(shared),
+        told: tabs.announced(shared),
+        intend,
+        settle: (intent) => Effect.orDie(intents.remove(intent)),
+        orphans,
+      }
+
+      return journal
     },
     Effect.mapError((cause) => new Unreadable({ store: key, cause })),
   )
@@ -266,7 +411,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
   definition: Definition<State, A, S>,
   reactions: ReadonlyArray<Reaction<State, R>>,
   open: Open<State, E, RO>,
-): Layer.Layer<Self, E, R | RO | SecureRandom.SecureRandom> =>
+): Layer.Layer<Self, E, R | Exclude<RO, Scope.Scope> | SecureRandom.SecureRandom> =>
   Layer.effect(
     service,
     Effect.gen(function* () {
@@ -321,12 +466,41 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         travelTo,
       })
 
+      const absorb = Effect.gen(function* () {
+        const applied = yield* Ref.get(sequence)
+        const fresh = yield* journal.news(applied)
+        if (fresh.lastSeq <= applied) return
+
+        const before = cell.read()
+        const next = yield* Effect.orDie(
+          replayFrom(
+            definition,
+            Option.getOrElse(fresh.restart, () => before.state),
+            fresh.entries,
+          ),
+        )
+
+        yield* Ref.set(sequence, fresh.lastSeq)
+        cell.write({
+          state: next,
+          log: [...before.log, ...fresh.entries].slice(-logLimit),
+          trail: lastOf(
+            [...before.trail, { seq: fresh.lastSeq, state: next }],
+            inspector.keepStates,
+          ),
+          viewing: before.viewing,
+        })
+      })
+
       const record = Effect.fnUntraced(function* (
         name: string,
         handled: Action<State, unknown>,
         payload: Schema.Json,
         reduce: (state: State) => State,
+        intent: string,
       ) {
+        yield* absorb
+
         const id = yield* random.uuidV7()
         const seq = yield* Ref.updateAndGet(sequence, (last) => last + 1)
         const entry: Entry = { id, action: name, payload, seq }
@@ -344,31 +518,62 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           { discard: true },
         )
         yield* journal.append(entry, next)
+        yield* journal.settle(intent)
         cell.write({
           state: next,
           log: [...before.log, entry].slice(-logLimit),
           trail: lastOf([...before.trail, { seq, state: next }], inspector.keepStates),
           viewing: before.viewing,
         })
+        yield* journal.tell
 
         return { entry, next }
       })
+
+      const react = (
+        handled: Action<State, unknown>,
+        done: { readonly entry: Entry; readonly next: State },
+      ) =>
+        Effect.forEach(
+          reactionsTo(handled),
+          (reaction) => Effect.forkIn(reaction.run(done.entry, done.next), scope),
+          { discard: true },
+        )
+
+      const adopt = (orphan: Orphan) =>
+        Record.get(named, orphan.action).pipe(
+          Effect.fromOption,
+          Effect.flatMap((handled) =>
+            handled.reducer(orphan.payload).pipe(
+              Effect.flatMap((reduce) =>
+                record(orphan.action, handled, orphan.payload, reduce, orphan.key),
+              ),
+              Effect.map((done) => ({ handled, done })),
+            ),
+          ),
+          Effect.asSome,
+          Effect.catch((cause) =>
+            journal
+              .settle(orphan.key)
+              .pipe(
+                Effect.andThen(report(new Abandoned({ store: key, action: orphan.action, cause }))),
+                Effect.as(Option.none()),
+              ),
+          ),
+        )
 
       const command = (name: string, handled: Action<State, unknown>) => {
         const carryOut = Effect.fnUntraced(
           function* (input: unknown) {
             const payload = yield* handled.encode(input)
             const reduce = yield* handled.reducer(payload)
-            const { entry, next } = yield* Semaphore.withPermit(
+            const intent = yield* journal.intend(name, payload)
+            const done = yield* Semaphore.withPermit(
               turn,
-              record(name, handled, payload, reduce),
+              journal.exclusively(record(name, handled, payload, reduce, intent)),
             )
 
-            yield* Effect.forEach(
-              reactionsTo(handled),
-              (reaction) => Effect.forkIn(reaction.run(entry, next), scope),
-              { discard: true },
-            )
+            yield* react(handled, done)
           },
           Effect.orDie,
           (effect) => provideTo<void, never, R>(effect, context),
@@ -378,9 +583,33 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         return (input: unknown) => Effect.suspend(() => carryOut(input))
       }
 
+      yield* Effect.forkIn(
+        Stream.runForEach(journal.told, () =>
+          Effect.catchDefect(Semaphore.withPermit(turn, journal.exclusively(absorb)), report),
+        ),
+        scope,
+        { startImmediately: true },
+      )
       yield* provideTo(
         eachReaction((reaction, channel) => reaction.start(channel)),
         Context.add(context, Scope.Scope, scope),
+      )
+
+      const adopted = yield* provideTo(
+        Semaphore.withPermit(
+          turn,
+          journal.exclusively(Effect.flatMap(journal.orphans, Effect.forEach(adopt))),
+        ),
+        context,
+      )
+
+      yield* provideTo(
+        Effect.forEach(
+          adopted.flatMap(Option.toArray),
+          ({ handled, done }) => react(handled, done),
+          { discard: true },
+        ),
+        context,
       )
 
       return {

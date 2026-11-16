@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Devtools, Outbox, View } from "spar"
+import { Devtools, Outbox, Tabs, View } from "spar"
 import { AppView } from "./AppView.tsx"
 import { Counter } from "./counter/Counter.ts"
 import { CounterStore } from "./counter/CounterStore.ts"
@@ -28,5 +28,6 @@ export const layer = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(MailApi.layer, Outbox.Outbox.layer, Devtools.layer)),
   Layer.provide(Outbox.layerBrowser),
+  Layer.provide(Tabs.layerBrowser),
   Layer.provide(SecureRandom.layerWebCrypto),
 )

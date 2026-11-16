@@ -5,7 +5,7 @@ import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient } from "effect/http"
 import { Otlp } from "effect/observability"
 import { KeyValueStore } from "effect/persistence"
-import { App, Outbox, Router } from "spar"
+import { App, Outbox, Router, Tabs } from "spar"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "./BoardStore.ts"
 import { Server } from "./Server.ts"
@@ -27,6 +27,7 @@ const layer = BoardStoreLive.pipe(
     ),
   ),
   Layer.provide(Outbox.layerBrowser),
+  Layer.provide(Tabs.layerBrowser),
   Layer.provide(SecureRandom.layerWebCrypto),
   Layer.provide(KeyValueStore.layerStorage(() => localStorage)),
 )

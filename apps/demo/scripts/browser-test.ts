@@ -100,6 +100,38 @@ const afterReload = async (page: Page): Promise<void> => {
   await shows(section.getByLabel("Remaining"), /^0$/)
 }
 
+const twoTabs = async (page: Page): Promise<void> => {
+  const other = await page.context().newPage()
+  const here = page.getByRole("region", { name: "Todos", exact: true })
+  const there = other.getByRole("region", { name: "Todos", exact: true })
+
+  await other.goto(page.url())
+  await shows(there.getByRole("listitem"), "Buy milk")
+  await addTodo(there, "Feed the cat")
+  await shows(here.getByRole("listitem").filter({ hasText: "Feed the cat" }), "Feed the cat")
+  await addTodo(here, "Water the plants")
+  await shows(
+    there.getByRole("listitem").filter({ hasText: "Water the plants" }),
+    "Water the plants",
+  )
+  await here
+    .getByRole("listitem")
+    .filter({ hasText: "Feed the cat" })
+    .getByRole("button", { name: "Remove" })
+    .click()
+  await there
+    .getByRole("listitem")
+    .filter({ hasText: "Feed the cat" })
+    .waitFor({ state: "detached" })
+  await other.reload()
+  await shows(
+    there.getByRole("listitem").filter({ hasText: "Water the plants" }),
+    "Water the plants",
+  )
+  await shows(there.getByRole("listitem"), /Buy milk/)
+  await other.close()
+}
+
 const offline = async (page: Page): Promise<void> => {
   const thread = page.getByRole("article", { name: "Welcome to the hangar" })
   const unsent = thread.getByLabel("Unsent replies")
@@ -123,7 +155,8 @@ const isExpectedOffline = (text: string): boolean => text.includes("ERR_INTERNET
 
 const run = async (): Promise<void> => {
   const browser = await chromium.launch()
-  const page = await browser.newPage({ viewport: { width: 820, height: 1100 } })
+  const context = await browser.newContext({ viewport: { width: 820, height: 1100 } })
+  const page = await context.newPage()
   const errors = Effect.runSync(Queue.unbounded<string>())
 
   page.on("pageerror", (error) => Queue.offerUnsafe(errors, String(error)))
@@ -142,6 +175,7 @@ const run = async (): Promise<void> => {
   await tracesSent
   await page.screenshot({ path: `${root}artifacts/demo.png`, fullPage: true })
   await afterReload(page)
+  await twoTabs(page)
   await offline(page)
   await browser.close()
 
@@ -152,5 +186,5 @@ const run = async (): Promise<void> => {
 
 await run().finally(() => server.stop(true))
 console.log(
-  "Browser test passed: counter, keyed list, mail thread, state kept across a reload, sending held while offline",
+  "Browser test passed: counter, keyed list, mail thread, state kept across a reload, two tabs kept in step, sending held while offline",
 )

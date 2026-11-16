@@ -82,6 +82,7 @@ describe("a store kept on the device", () => {
       )
 
       expect(yield* savedKeys).toEqual([
+        "spar/store/test/Journal/head",
         "spar/store/test/Journal/log/000000000004",
         "spar/store/test/Journal/log/000000000005",
         "spar/store/test/Journal/snapshot",
