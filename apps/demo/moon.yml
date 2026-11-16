@@ -3,11 +3,16 @@ fileGroups:
   upstream:
     - /package.json
     - /tsconfig.base.json
+    - /packages/lint/oxlintrc.json
+    - /packages/lint/house-rules.ts
     - /packages/spar/package.json
     - /packages/spar/src/**/*
 tasks:
   typecheck:
     command: bun run typecheck
+    inputs: ["**/*", "@group(upstream)"]
+  lint:
+    command: bun run lint
     inputs: ["**/*", "@group(upstream)"]
   proofs:
     command: bun run proofs
@@ -24,4 +29,4 @@ tasks:
     deps: [build]
     inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
   check:
-    deps: [typecheck, format, proofs]
+    deps: [typecheck, lint, format, proofs]

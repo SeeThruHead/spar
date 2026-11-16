@@ -1,0 +1,25 @@
+{
+  "name": "@spar/lint",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c oxlintrc.json .",
+    "lint:fixtures": "effect-tsgo --tsrs-lint oxlint --no-ignore -c fixtures.oxlintrc.json -f json fixtures",
+    "test": "bun --bun vitest run",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "4.1.4",
+    "@effect/tsgo": "0.67.7",
+    "@effect/vitest": "4.1.4",
+    "@types/bun": "1.4.3",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "effect": "4.1.4",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

@@ -5,6 +5,7 @@
   "scripts": {
     "typecheck": "effect-tsgo tsrs -p tsconfig.json",
     "typecheck:forbidden": "effect-tsgo tsrs -p forbidden/tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src scripts",
     "proofs": "bun scripts/proofs.ts",
     "build": "bun scripts/build.ts",
     "serve": "bun scripts/serve.ts",
@@ -19,8 +20,10 @@
   },
   "devDependencies": {
     "@effect/tsgo": "0.67.7",
+    "@spar/lint": "workspace:*",
     "@types/bun": "1.4.3",
     "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
     "playwright": "1.65.1",
     "typescript": "7.0.2"
   }

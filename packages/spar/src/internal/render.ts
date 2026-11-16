@@ -1,6 +1,7 @@
 import { Array, Effect, Exit, Option, Predicate, Queue, Ref, Scope, Stream } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
+import * as Dom from "./dom.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Element, Row } from "./element.ts"
 import { isReactive } from "./reactive.ts"
@@ -13,14 +14,10 @@ type Entry = {
   readonly scope: Scope.Closeable
 }
 
-const properties: ReadonlySet<string> = new Set(["value", "checked"])
-
 const isEventName = (name: string): boolean => /^on[A-Z]/.test(name)
 
 const insert = (parent: Node, node: Node, before: Node | null): Effect.Effect<void> =>
-  Effect.sync(() => {
-    parent.insertBefore(node, before)
-  })
+  Effect.sync(() => Dom.insert(parent, node, before))
 
 const bind = <A>(
   source: Reactive<A>,
@@ -37,33 +34,17 @@ const bind = <A>(
     Effect.asVoid,
   )
 
-const writeProperty = (node: HTMLElement, name: string, value: unknown): void => {
-  if (Reflect.get(node, name) === value) return
-
-  Reflect.set(node, name, value)
-}
-
-const writeAttribute = (node: HTMLElement, name: string, value: unknown): void => {
-  if (properties.has(name)) return writeProperty(node, name, value)
-  if (value === false || Predicate.isNullish(value)) return node.removeAttribute(name)
-
-  return node.setAttribute(name, value === true ? "" : String(value))
-}
-
 const actions = (node: HTMLElement, type: string, handler: unknown): Stream.Stream<Action> =>
-  Stream.callback<Action>((queue) =>
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const listener = (event: Event): void => {
-          Queue.offerUnsafe(queue, toAction(handler, event))
-        }
-        node.addEventListener(type, listener)
+  Stream.callback<Action>((queue) => {
+    const listener = (event: Event): void => {
+      Queue.offerUnsafe(queue, toAction(handler, event))
+    }
 
-        return listener
-      }),
-      (listener) => Effect.sync(() => node.removeEventListener(type, listener)),
-    ),
-  )
+    return Effect.acquireRelease(
+      Effect.sync(() => node.addEventListener(type, listener)),
+      () => Effect.sync(() => node.removeEventListener(type, listener)),
+    )
+  })
 
 const listen = (
   node: HTMLElement,
@@ -81,9 +62,9 @@ const applyProp = (
 ): Effect.Effect<void, never, Scope.Scope> => {
   if (name === "children") return render(value, node, null)
   if (isEventName(name)) return listen(node, name, value)
-  if (isReactive(value)) return bind(value, (current) => writeAttribute(node, name, current))
+  if (isReactive(value)) return bind(value, (current) => Dom.setAttribute(node, name, current))
 
-  return Effect.sync(() => writeAttribute(node, name, value))
+  return Effect.sync(() => Dom.setAttribute(node, name, value))
 }
 
 const renderText = (
@@ -93,9 +74,9 @@ const renderText = (
 ): Effect.Effect<void, never, Scope.Scope> => {
   const node = document.createTextNode("")
 
-  return bind(source, (value) => {
-    node.data = String(value)
-  }).pipe(Effect.andThen(insert(parent, node, before)))
+  return bind(source, (value) => Dom.setText(node, value)).pipe(
+    Effect.andThen(insert(parent, node, before)),
+  )
 }
 
 const renderIntrinsic = (
@@ -109,27 +90,6 @@ const renderIntrinsic = (
   return Effect.forEach(Object.entries(props), ([name, value]) => applyProp(node, name, value), {
     discard: true,
   }).pipe(Effect.andThen(insert(parent, node, before)))
-}
-
-const span = (start: Node, end: Node): ReadonlyArray<Node> => {
-  if (start === end) return [end]
-
-  return Option.match(Option.fromNullishOr(start.nextSibling), {
-    onNone: () => [start],
-    onSome: (next) => [start, ...span(next, end)],
-  })
-}
-
-const place = (parent: Node, entries: ReadonlyArray<Entry>, anchor: Node): void => {
-  entries.reduceRight<Node>(
-    (cursor, entry) =>
-      span(entry.start, entry.end).reduceRight<Node>((next, node) => {
-        if (node.nextSibling !== next) parent.insertBefore(node, next)
-
-        return node
-      }, cursor),
-    anchor,
-  )
 }
 
 const createEntry = Effect.fnUntraced(function* (
@@ -153,11 +113,7 @@ const createEntry = Effect.fnUntraced(function* (
 
 const removeEntry = (parent: Node, entry: Entry): Effect.Effect<void> =>
   Scope.close(entry.scope, Exit.void).pipe(
-    Effect.andThen(
-      Effect.sync(() => {
-        span(entry.start, entry.end).forEach((node) => parent.removeChild(node))
-      }),
-    ),
+    Effect.andThen(Effect.sync(() => Dom.removeSpan(parent, entry.start, entry.end))),
   )
 
 const renderKeyed = Effect.fnUntraced(function* (
@@ -186,12 +142,14 @@ const renderKeyed = Effect.fnUntraced(function* (
       ),
     )
 
-    yield* Effect.sync(() => place(parent, current, anchor))
+    yield* Effect.sync(() => Dom.placeSpans(parent, current, anchor))
     yield* Ref.set(entries, current)
   })
 
   yield* insert(parent, anchor, before)
-  yield* reconcile(yield* rows.get)
+
+  const initial = yield* rows.get
+  yield* reconcile(initial)
   yield* Effect.forkScoped(Stream.runForEach(rows.changes, reconcile), { startImmediately: true })
 })
 
@@ -214,7 +172,7 @@ export const render = (
   before: Node | null,
 ): Effect.Effect<void, never, Scope.Scope> => {
   if (Predicate.isString(child) || Predicate.isNumber(child)) {
-    return insert(parent, document.createTextNode(String(child)), before)
+    return insert(parent, document.createTextNode(Dom.toText(child)), before)
   }
   if (isReactive(child)) return renderText(child, parent, before)
   if (Array.isArray(child)) {

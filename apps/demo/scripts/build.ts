@@ -1,9 +1,12 @@
 import { Effect, Schema } from "effect"
 import { sparJsx } from "spar/transform/bun"
 
-class BuildFailed extends Schema.TaggedError<BuildFailed>()("BuildFailed", {
-  message: Schema.String,
-}) {}
+class BuildFailed extends Schema.TaggedError<BuildFailed, { readonly brand: unique symbol }>()(
+  "BuildFailed",
+  {
+    message: Schema.String,
+  },
+) {}
 
 const root = new URL("..", import.meta.url).pathname
 

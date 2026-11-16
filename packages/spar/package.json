@@ -13,6 +13,7 @@
   },
   "scripts": {
     "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../lint/oxlintrc.json src test",
     "test": "bun --bun vitest run",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
@@ -24,11 +25,13 @@
   "devDependencies": {
     "@effect/tsgo": "0.67.7",
     "@effect/vitest": "4.1.4",
+    "@spar/lint": "workspace:*",
     "@testing-library/dom": "10.4.1",
     "@types/bun": "1.4.3",
     "@vitest/coverage-istanbul": "5.0.5",
     "happy-dom": "20.0.11",
     "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
     "typescript": "7.0.2",
     "vitest": "5.0.5"
   }

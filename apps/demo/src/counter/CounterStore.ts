@@ -8,7 +8,7 @@ const initialState: State = { count: 0 }
 export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/CounterStore", {
   initialState,
   actions: {
-    incremented: Store.action(Schema.Struct({ by: Schema.Number }), (state: State, { by }) => ({
+    incremented: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
       count: state.count + by,
     })),
     reset: Store.action(Schema.Void, (): State => initialState),

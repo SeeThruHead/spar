@@ -7,6 +7,8 @@
   ],
   "type": "module",
   "scripts": {
+    "prepare": "bun run setup",
+    "setup": "lefthook install",
     "moon": "moon",
     "check": "moon run :check",
     "check:affected": "moon run :check --affected",
@@ -16,10 +18,12 @@
   "devDependencies": {
     "@effect/tsgo": "0.67.7",
     "@moonrepo/cli": "2.6.4",
+    "lefthook": "2.2.2",
     "oxfmt": "0.73.0",
     "typescript": "7.0.2"
   },
   "overrides": {
+    "@effect/platform-bun": "4.1.4",
     "@effect/vitest": "4.1.4",
     "effect": "4.1.4"
   }

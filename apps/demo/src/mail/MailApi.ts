@@ -1,13 +1,19 @@
 import { Context, Effect, HashSet, Layer, Ref, Schema } from "effect"
 
-export class ThreadLoadFailed extends Schema.TaggedError<ThreadLoadFailed>()("ThreadLoadFailed", {
+export class ThreadLoadFailed extends Schema.TaggedError<
+  ThreadLoadFailed,
+  { readonly brand: unique symbol }
+>()("ThreadLoadFailed", {
   threadId: Schema.String,
   message: Schema.String,
 }) {}
 
-export class SendFailed extends Schema.TaggedError<SendFailed>()("SendFailed", {
-  message: Schema.String,
-}) {}
+export class SendFailed extends Schema.TaggedError<SendFailed, { readonly brand: unique symbol }>()(
+  "SendFailed",
+  {
+    message: Schema.String,
+  },
+) {}
 
 export type Thread = {
   readonly id: string

@@ -9,7 +9,7 @@ export type Violation = {
   readonly column: number
 }
 
-const isNode = Schema.is(Schema.Struct({ type: Schema.String, start: Schema.Number }))
+const isNode = Schema.is(Schema.Struct({ type: Schema.String, start: Schema.Finite }))
 
 const isEffectCall = Schema.is(
   Schema.Struct({

@@ -15,7 +15,7 @@ const initialState: State = { count: 0, notes: [] }
 class Ledger extends Store.Tag<Ledger>()("test/Ledger", {
   initialState,
   actions: {
-    incremented: Store.action(Schema.Struct({ by: Schema.Number }), (state: State, { by }) => ({
+    incremented: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
       ...state,
       count: state.count + by,
     })),
@@ -50,7 +50,10 @@ class Sent extends Context.Service<
   )
 }
 
-class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
+class Offline extends Schema.TaggedError<Offline, { readonly brand: unique symbol }>()(
+  "Offline",
+  {},
+) {}
 
 const reactions = [
   Store.after(

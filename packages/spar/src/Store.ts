@@ -71,6 +71,8 @@ export const action = <Payload, Encoded, State>(
   }
 }
 
+const channelOf = (key: string, name: string): string => `${key}/${name}`
+
 const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<State>, R>(
   service: Context.Key<Self, Shape<State, A, S>>,
   key: string,
@@ -87,20 +89,20 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const ref = yield* SubscriptionRef.make({ state: initialState, log: Array.of<Entry>() })
       const current = fromSubscriptionRef(ref)
       const state = map(current, (snapshot) => snapshot.state)
-      const channel = (name: string) => `${key}/${name}`
-      const reactionsTo = (definition: Action<State, unknown>) =>
-        reactions.filter((reaction) => reaction.action === definition)
+      const reactionsTo = (handled: Action<State, unknown>) =>
+        reactions.filter((reaction) => reaction.action === handled)
 
-      const command = (name: string, definition: Action<State, unknown>) =>
+      const command = (name: string, handled: Action<State, unknown>) =>
         Effect.fn("Store.command")(
           function* (input: unknown) {
-            const payload = yield* definition.encode(input)
-            const reduce = yield* definition.reducer(payload)
-            const entry: Entry = { id: yield* random.uuidV7(), action: name, payload }
+            const payload = yield* handled.encode(input)
+            const reduce = yield* handled.reducer(payload)
+            const id = yield* random.uuidV7()
+            const entry: Entry = { id, action: name, payload }
 
             yield* Effect.forEach(
-              reactionsTo(definition),
-              (reaction) => reaction.persist(channel(name), entry),
+              reactionsTo(handled),
+              (reaction) => reaction.persist(channelOf(key, name), entry),
               { discard: true },
             )
 
@@ -110,7 +112,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
             }))
 
             yield* Effect.forEach(
-              reactionsTo(definition),
+              reactionsTo(handled),
               (reaction) => Effect.forkIn(reaction.run(entry, next.state), scope),
               { discard: true },
             )
@@ -119,11 +121,11 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           (effect) => provideTo<void, never, R>(effect, context),
         )
 
-      const resume = (name: string, definition: Action<State, unknown>) =>
+      const resume = (name: string, handled: Action<State, unknown>) =>
         Effect.forEach(
-          reactionsTo(definition),
+          reactionsTo(handled),
           (reaction) =>
-            Effect.flatMap(reaction.resume(channel(name)), (deliveries) =>
+            Effect.flatMap(reaction.resume(channelOf(key, name)), (deliveries) =>
               Effect.forkIn(deliveries, scope),
             ),
           { discard: true },
@@ -132,7 +134,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = actions
 
       yield* provideTo(
-        Effect.forEach(Record.toEntries(named), ([name, definition]) => resume(name, definition), {
+        Effect.forEach(Record.toEntries(named), ([name, handled]) => resume(name, handled), {
           discard: true,
         }),
         context,
@@ -145,7 +147,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           selectors,
           Struct.lambda<ToReactive<State>>((selector) => map(state, selector)),
         ),
-        commands: Record.map(named, (definition, name) => command(name, definition)),
+        commands: Record.map(named, (handled, name) => command(name, handled)),
       }
     }),
   )
@@ -172,13 +174,13 @@ export const Tag =
   }
 
 export const after = <State, Payload, R>(
-  action: Action<State, Payload>,
+  trigger: Action<State, Payload>,
   effect: (payload: Payload, state: State) => Effect.Effect<void, never, R>,
 ): Reaction<State, R> => ({
-  action,
+  action: trigger,
   persist: () => Effect.void,
   run: (entry, state) =>
-    action.decode(entry.payload).pipe(
+    trigger.decode(entry.payload).pipe(
       Effect.orDie,
       Effect.flatMap((payload) => effect(payload, state)),
     ),
@@ -186,12 +188,12 @@ export const after = <State, Payload, R>(
 })
 
 export const outbox = <State, Payload, E, R>(
-  action: Action<State, Payload>,
+  trigger: Action<State, Payload>,
   send: (payload: Payload, idempotencyKey: string) => Effect.Effect<void, E, R>,
 ): Reaction<State, R | Outbox> => {
   const deliver = Effect.fnUntraced(function* (key: string, encoded: Schema.Json) {
     const service = yield* Outbox
-    const payload = yield* Effect.orDie(action.decode(encoded))
+    const payload = yield* Effect.orDie(trigger.decode(encoded))
 
     yield* service.deliver(key, send(payload, key))
   })
@@ -202,17 +204,17 @@ export const outbox = <State, Payload, E, R>(
     yield* service.persist({ key: entry.id, channel, payload: entry.payload })
   })
 
-  const resume = Effect.fnUntraced(function* (channel: string) {
-    const service = yield* Outbox
-    const entries = yield* service.persisted(channel)
+  const resume = (channel: string) =>
+    Outbox.use((service) => service.persisted(channel)).pipe(
+      Effect.map((entries) =>
+        Effect.forEach(entries, (entry) => deliver(entry.key, entry.payload), {
+          concurrency: "unbounded",
+          discard: true,
+        }),
+      ),
+    )
 
-    return Effect.forEach(entries, (entry) => deliver(entry.key, entry.payload), {
-      concurrency: "unbounded",
-      discard: true,
-    })
-  })
-
-  return { action, persist, run: (entry) => deliver(entry.id, entry.payload), resume }
+  return { action: trigger, persist, run: (entry) => deliver(entry.id, entry.payload), resume }
 }
 
 export const replay = <State, A extends Actions<State>, S extends Selectors<State>>(

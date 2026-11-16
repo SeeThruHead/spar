@@ -1,3 +1,4 @@
+import { Effect, Queue } from "effect"
 import { chromium } from "playwright"
 import type { Locator, Page } from "playwright"
 
@@ -82,10 +83,13 @@ const mail = async (page: Page): Promise<void> => {
 const run = async (): Promise<void> => {
   const browser = await chromium.launch()
   const page = await browser.newPage({ viewport: { width: 820, height: 1100 } })
-  const failures: Array<string> = []
+  const errors = Effect.runSync(Queue.unbounded<string>())
 
-  page.on("pageerror", (error) => failures.push(String(error)))
-  page.on("console", (message) => (message.type() === "error" ? failures.push(message.text()) : 0))
+  page.on("pageerror", (error) => Queue.offerUnsafe(errors, String(error)))
+  page.on(
+    "console",
+    (message) => message.type() === "error" && Queue.offerUnsafe(errors, message.text()),
+  )
 
   await page.goto(`http://127.0.0.1:${server.port}/`)
   await shows(page.getByRole("status"), "Loading thread welcome")
@@ -94,6 +98,8 @@ const run = async (): Promise<void> => {
   await mail(page)
   await page.screenshot({ path: `${root}artifacts/demo.png`, fullPage: true })
   await browser.close()
+
+  const failures = Effect.runSync(Queue.clear(errors))
 
   if (failures.length > 0) throw new Error(`The page logged errors:\n${failures.join("\n")}`)
 }

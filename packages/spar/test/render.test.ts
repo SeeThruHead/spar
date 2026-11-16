@@ -61,9 +61,12 @@ class Probe extends Context.Service<
   )
 }
 
-class LoadFailed extends Schema.TaggedError<LoadFailed>()("LoadFailed", {
-  message: Schema.String,
-}) {}
+class LoadFailed extends Schema.TaggedError<LoadFailed, { readonly brand: unique symbol }>()(
+  "LoadFailed",
+  {
+    message: Schema.String,
+  },
+) {}
 
 const layer = Layer.mergeAll(Board.layer(), Probe.layer).pipe(
   Layer.provide(SecureRandom.layerWebCrypto),
@@ -111,8 +114,10 @@ const Disclosure = View.connect(
 )(DisclosureView)
 
 const Loaded = View.connect(
-  Effect.fnUntraced(function* (_: { readonly id: string }) {
+  Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
     const probe = yield* Probe
+
+    yield* Effect.annotateCurrentSpan("report.id", id)
 
     return { title: yield* Deferred.await(probe.loaded) }
   }),
@@ -122,7 +127,7 @@ const Loader = pipe(Loaded, View.recover("LoadFailed", FailedView), View.pending
 
 const LoaderPage = pipe(
   Loader,
-  View.mapProps((_: Record<never, never>) => ({ id: "report" })),
+  View.mapProps(() => ({ id: "report" })),
 )
 
 const find = (role: string, name?: string) =>
@@ -139,21 +144,21 @@ const gone = (role: string) =>
 
 const labels = Effect.sync(() => screen.getAllByRole("listitem").map((node) => node.textContent))
 
-const mount = <R>(component: View.Component<Record<never, never>, never, R>) =>
-  Effect.gen(function* () {
-    const target = yield* Effect.acquireRelease(
-      Effect.sync(() => document.body.appendChild(document.createElement("div"))),
-      (node) => Effect.sync(() => node.remove()),
-    )
+const mount = Effect.fnUntraced(function* <R>(component: View.Component<App.NoProps, never, R>) {
+  const target = yield* Effect.acquireRelease(
+    Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+    (node) => Effect.sync(() => node.remove()),
+  )
+  const context = yield* Effect.context<R>()
 
-    const layer = Layer.succeedContext(yield* Effect.context<R>())
-
-    yield* Effect.forkScoped(App.mount(component, { target, layer }), { startImmediately: true })
+  yield* Effect.forkScoped(App.mount(component, { target, layer: Layer.succeedContext(context) }), {
+    startImmediately: true,
   })
+})
 
 const LoaderStory = pipe(
   LoaderPage.view,
-  View.mapProps((_: Record<never, never>) => ({ title: "Sample title" })),
+  View.mapProps(() => ({ title: "Sample title" })),
 )
 
 describe("rendering", () => {

@@ -1,6 +1,6 @@
 ---
 id: spa-msnp
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-11-16T04:22:57Z
