@@ -1,0 +1,26 @@
+{
+  "name": "@spar/browsers",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./scripts/launch.ts"
+  },
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../lint/oxlintrc.json scripts",
+    "in": "bun scripts/in.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "playwright": "1.65.1"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@spar/lint": "workspace:*",
+    "@types/bun": "1.4.3",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "typescript": "7.0.2"
+  }
+}

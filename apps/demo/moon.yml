@@ -25,8 +25,8 @@ tasks:
     inputs: ["src/**/*", "scripts/build.ts", "index.html", "@group(upstream)"]
     outputs: ["dist"]
   browser:
-    command: bun scripts/browser-test.ts
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/browser-test.ts
     deps: [build]
-    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
+    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)", "$SPAR_BROWSER"]
   check:
     deps: [typecheck, lint, format, proofs]

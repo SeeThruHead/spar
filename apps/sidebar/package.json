@@ -8,8 +8,8 @@
     "test": "bun --bun vitest run",
     "build": "vite build",
     "dev": "vite",
-    "features": "bun run build && bun scripts/features.ts",
-    "walkthrough": "bun run build && bun scripts/walkthrough.ts",
+    "features": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/features.ts",
+    "walkthrough": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/walkthrough.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@effect/tsgo": "0.67.7",
     "@effect/vitest": "4.1.4",
+    "@spar/browsers": "workspace:*",
     "@spar/lint": "workspace:*",
     "@types/bun": "1.4.3",
     "@vitest/coverage-istanbul": "5.0.5",

@@ -1,4 +1,4 @@
-import { chromium } from "playwright"
+import { engine, launch } from "@spar/browsers"
 import type { Browser, Page } from "playwright"
 
 type Scenario = { readonly name: string; readonly steps: ReadonlyArray<string> }
@@ -154,7 +154,7 @@ const play = async (
 }
 
 const scenarios = parse(await Bun.file(`${root}features/sidebar.feature`).text())
-const browser = await chromium.launch()
+const browser = await launch()
 const runs = sizes.flatMap((size) => scenarios.map((scenario) => ({ size, scenario })))
 const failures = await runs
   .reduce<Promise<ReadonlyArray<string>>>(
@@ -172,4 +172,4 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log(`${scenarios.length} scenarios passed at ${sizes.length} sizes`)
+console.log(`${scenarios.length} scenarios passed at ${sizes.length} sizes in ${engine()}`)

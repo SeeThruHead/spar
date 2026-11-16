@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { chromium } from "playwright"
+import { engine, launch } from "@spar/browsers"
 import type { Browser, Page } from "playwright"
 
 type Size = { readonly name: string; readonly width: number; readonly height: number }
@@ -144,7 +144,7 @@ const walk = async (browser: Browser, size: Size): Promise<ReadonlyArray<string>
   return [...start, ...dialog, ...toast, ...menu, ...agent, ...narrow]
 }
 
-const browser = await chromium.launch()
+const browser = await launch()
 const findings = await sizes
   .reduce<Promise<ReadonlyArray<string>>>(
     (collected, size) => collected.then(async (all) => [...all, ...(await walk(browser, size))]),
@@ -157,7 +157,7 @@ const findings = await sizes
 
 console.log(
   findings.length === 0
-    ? `Walked the app by keyboard at ${sizes.length} sizes and found nothing`
+    ? `Walked the app by keyboard at ${sizes.length} sizes in ${engine()} and found nothing`
     : [...new Set(findings)].join("\n"),
 )
 

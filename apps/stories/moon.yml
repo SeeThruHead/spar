@@ -22,8 +22,8 @@ tasks:
     inputs: ["src/**/*", "index.html", "vite.config.ts", "@group(upstream)"]
     outputs: ["dist"]
   play:
-    command: bun scripts/play.ts
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/play.ts
     deps: [build]
-    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
+    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)", "$SPAR_BROWSER"]
   check:
     deps: [typecheck, lint, format]

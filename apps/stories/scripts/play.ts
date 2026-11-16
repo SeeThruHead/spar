@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { chromium } from "playwright"
+import { engine, launch } from "@spar/browsers"
 import type { Browser, Page } from "playwright"
 
 type Size = { readonly name: string; readonly width: number; readonly height: number }
@@ -167,7 +167,7 @@ const visit = async (
   )
 }
 
-const browser = await chromium.launch()
+const browser = await launch()
 const visits = sizes.flatMap((size) => stories.map((story) => ({ size, story })))
 const problems = await visits
   .reduce<Promise<ReadonlyArray<string>>>(
@@ -186,5 +186,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `${stories.length} stories played at ${sizes.length} sizes with no accessibility problems`,
+  `${stories.length} stories played at ${sizes.length} sizes with no accessibility problems in ${engine()}`,
 )

@@ -1,5 +1,5 @@
 import { Effect, Queue } from "effect"
-import { chromium } from "playwright"
+import { engine, launch } from "@spar/browsers"
 import type { Locator, Page } from "playwright"
 import { start } from "./site.ts"
 
@@ -151,10 +151,13 @@ const offline = async (page: Page): Promise<void> => {
   await shows(unsent, /^0$/)
 }
 
-const isExpectedOffline = (text: string): boolean => text.includes("ERR_INTERNET_DISCONNECTED")
+const offlineNoise = ["ERR_INTERNET_DISCONNECTED", "WebKit encountered an internal error"]
+
+const isExpectedOffline = (text: string): boolean =>
+  offlineNoise.some((noise) => text.includes(noise))
 
 const run = async (): Promise<void> => {
-  const browser = await chromium.launch()
+  const browser = await launch()
   const context = await browser.newContext({ viewport: { width: 820, height: 1100 } })
   const page = await context.newPage()
   const errors = Effect.runSync(Queue.unbounded<string>())
@@ -186,5 +189,5 @@ const run = async (): Promise<void> => {
 
 await run().finally(() => server.stop(true))
 console.log(
-  "Browser test passed: counter, keyed list, mail thread, state kept across a reload, two tabs kept in step, sending held while offline",
+  `Browser test passed in ${engine()}: counter, keyed list, mail thread, state kept across a reload, two tabs kept in step, sending held while offline`,
 )

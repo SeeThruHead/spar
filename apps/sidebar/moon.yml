@@ -25,12 +25,20 @@ tasks:
     inputs: ["src/**/*", "index.html", "vite.config.ts", "@group(upstream)"]
     outputs: ["dist"]
   features:
-    command: bun scripts/features.ts
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/features.ts
     deps: [build]
-    inputs: ["src/**/*", "scripts/**/*", "features/**/*", "index.html", "@group(upstream)"]
+    inputs:
+      [
+        "src/**/*",
+        "scripts/**/*",
+        "features/**/*",
+        "index.html",
+        "@group(upstream)",
+        "$SPAR_BROWSER",
+      ]
   walkthrough:
-    command: bun scripts/walkthrough.ts
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/walkthrough.ts
     deps: [build]
-    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
+    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)", "$SPAR_BROWSER"]
   check:
     deps: [typecheck, lint, format, test]

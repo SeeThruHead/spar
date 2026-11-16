@@ -42,7 +42,7 @@ jobs:
           bun-version: "1.4.4"
       - name: Install
         run: bun install --frozen-lockfile
-      - name: Chromium for the browser tests
+      - name: Chromium and Firefox for the browser tests (WebKit runs from the Playwright container)
         run: bun run --cwd apps/demo browser:install
       - name: Drive the demo in a real browser
         run: bun run moon run demo:browser
@@ -56,3 +56,11 @@ jobs:
         run: bun run moon run bench:memory
       - name: Walk the sidebar app by keyboard at three sizes with an accessibility audit
         run: bun run moon run sidebar:walkthrough
+      - name: The same four suites in Firefox
+        run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough --concurrency 1
+        env:
+          SPAR_BROWSER: firefox
+      - name: The same four suites in WebKit
+        run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough --concurrency 1
+        env:
+          SPAR_BROWSER: webkit

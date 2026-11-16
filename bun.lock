@@ -41,6 +41,7 @@
       },
       "devDependencies": {
         "@effect/tsgo": "0.67.7",
+        "@spar/browsers": "workspace:*",
         "@spar/lint": "workspace:*",
         "@types/bun": "1.4.3",
         "oxfmt": "0.73.0",
@@ -59,6 +60,7 @@
       "devDependencies": {
         "@effect/tsgo": "0.67.7",
         "@effect/vitest": "4.1.4",
+        "@spar/browsers": "workspace:*",
         "@spar/lint": "workspace:*",
         "@types/bun": "1.4.3",
         "@vitest/coverage-istanbul": "5.0.5",
@@ -80,6 +82,7 @@
       },
       "devDependencies": {
         "@effect/tsgo": "0.67.7",
+        "@spar/browsers": "workspace:*",
         "@spar/lint": "workspace:*",
         "@types/bun": "1.4.3",
         "axe-core": "4.14.0",
@@ -88,6 +91,20 @@
         "playwright": "1.65.1",
         "typescript": "7.0.2",
         "vite": "8.3.8",
+      },
+    },
+    "packages/browsers": {
+      "name": "@spar/browsers",
+      "dependencies": {
+        "playwright": "1.65.1",
+      },
+      "devDependencies": {
+        "@effect/tsgo": "0.67.7",
+        "@spar/lint": "workspace:*",
+        "@types/bun": "1.4.3",
+        "oxfmt": "0.73.0",
+        "oxlint": "1.91.0",
+        "typescript": "7.0.2",
       },
     },
     "packages/lint": {
@@ -401,6 +418,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.1.1", "", {}, "sha512-glFIJDvLNDtJhT9qrMFWLPbvS+skxgt4L0K8Ei2YtnhPysAJnsI7nyxSJxKj4ADeKX0OLjC4ntRkwpLOoS3rwA=="],
 
     "@spar/bench": ["@spar/bench@workspace:apps/bench"],
+
+    "@spar/browsers": ["@spar/browsers@workspace:packages/browsers"],
 
     "@spar/demo": ["@spar/demo@workspace:apps/demo"],
 
