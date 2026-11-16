@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect, Queue, Ref, SubscriptionRef, pipe } from "effect"
+import { Effect, Queue, Ref, Stream, SubscriptionRef, pipe } from "effect"
 import { Reactive, UiState, View } from "spar"
 import { jsx } from "spar/jsx-runtime"
 import { CountView, DraftView, EmptyView, SpanView } from "./forms.tsx"
@@ -152,6 +152,23 @@ describe("composition", () => {
       expect(note.textContent).toBe("kept")
       expect(note.hasAttribute("title")).toBe(false)
       expect(screen.getAllByRole("note")).toEqual([note])
+    }),
+  )
+
+  it.effect("two reactive values zipped together follow whichever changes", () =>
+    Effect.gen(function* () {
+      const left = yield* SubscriptionRef.make("a")
+      const numbers = yield* Queue.unbounded<number>()
+      const right = yield* Reactive.fromStream(1, Stream.fromQueue(numbers))
+      const both = yield* Reactive.zip(Reactive.fromSubscriptionRef(left), right)
+
+      expect(yield* both.get).toEqual(["a", 1])
+
+      yield* SubscriptionRef.set(left, "b")
+      yield* Queue.offer(numbers, 2)
+      yield* Effect.yieldNow
+
+      expect(yield* both.get).toEqual(["b", 2])
     }),
   )
 

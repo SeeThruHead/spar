@@ -49,6 +49,27 @@
         "typescript": "7.0.2",
       },
     },
+    "apps/sidebar": {
+      "name": "@spar/sidebar",
+      "dependencies": {
+        "@spar/ui": "workspace:*",
+        "effect": "4.1.4",
+        "spar": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/tsgo": "0.67.7",
+        "@effect/vitest": "4.1.4",
+        "@spar/lint": "workspace:*",
+        "@types/bun": "1.4.3",
+        "@vitest/coverage-istanbul": "5.0.5",
+        "oxfmt": "0.73.0",
+        "oxlint": "1.91.0",
+        "playwright": "1.65.1",
+        "typescript": "7.0.2",
+        "vite": "8.3.8",
+        "vitest": "5.0.5",
+      },
+    },
     "apps/stories": {
       "name": "@spar/stories",
       "dependencies": {
@@ -383,6 +404,8 @@
     "@spar/demo": ["@spar/demo@workspace:apps/demo"],
 
     "@spar/lint": ["@spar/lint@workspace:packages/lint"],
+
+    "@spar/sidebar": ["@spar/sidebar@workspace:apps/sidebar"],
 
     "@spar/stories": ["@spar/stories@workspace:apps/stories"],
 

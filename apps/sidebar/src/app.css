@@ -1,0 +1,134 @@
+body {
+  margin: 0;
+  font:
+    16px/1.5 system-ui,
+    sans-serif;
+  background: var(--spar-surface);
+  color: var(--spar-text);
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) 1fr;
+  min-height: 100dvh;
+}
+
+.sidebar {
+  padding: 1rem;
+  border-inline-end: 1px solid var(--spar-line);
+  background: var(--spar-raised);
+  overflow-y: auto;
+}
+
+.shell main {
+  padding: 1.5rem;
+  max-width: 40rem;
+}
+
+.summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--spar-muted);
+}
+
+.summary-net {
+  display: block;
+}
+
+.filter {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.filter input {
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--spar-line);
+  border-radius: var(--spar-radius);
+  background: var(--spar-surface);
+  color: var(--spar-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+
+.group h2 {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+}
+
+.group-toggle {
+  font: inherit;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  inline-size: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--spar-text);
+  text-align: start;
+  cursor: pointer;
+}
+
+.group-count {
+  color: var(--spar-muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-inline-start: 4px solid var(--spar-line);
+  margin-block: 0.25rem;
+  background: var(--spar-surface);
+  border-radius: var(--spar-radius);
+}
+
+.agent[data-status="blocked"] {
+  border-inline-start-color: var(--spar-danger);
+}
+
+.agent[data-status="working"] {
+  border-inline-start-color: var(--spar-accent);
+}
+
+.agent a {
+  flex: 1;
+  display: grid;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.6rem;
+  color: var(--spar-text);
+  text-decoration: none;
+}
+
+.agent-status,
+.agent-tags {
+  color: var(--spar-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--spar-line);
+  }
+}

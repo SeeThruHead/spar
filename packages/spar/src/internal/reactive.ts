@@ -82,6 +82,17 @@ export const fromStream = Effect.fnUntraced(function* <A, R>(
   return fromCell(current)
 })
 
+export const zip = Effect.fnUntraced(function* <A, B>(left: Reactive<A>, right: Reactive<B>) {
+  const first = yield* left.get
+  const second = yield* right.get
+  const both = Cell.make<readonly [A, B]>([first, second])
+
+  yield* left[Observe]((value) => both.write([value, both.read()[1]]), Function.constVoid)
+  yield* right[Observe]((value) => both.write([both.read()[0], value]), Function.constVoid)
+
+  return fromCell(both)
+})
+
 export const map: {
   <A, B>(f: (value: A) => B): (self: Reactive<A>) => Reactive<B>
   <A, B>(self: Reactive<A>, f: (value: A) => B): Reactive<B>

@@ -50,3 +50,5 @@ jobs:
         run: bun run moon run bench:leaks
       - name: Play every component story at phone, tablet and desktop sizes with an accessibility audit
         run: bun run moon run stories:play
+      - name: Run the sidebar app's feature scenarios
+        run: bun run moon run sidebar:features

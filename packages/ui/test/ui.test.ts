@@ -61,10 +61,8 @@ const Kit = View.connect(
       }),
       dialog: yield* pipe(
         open,
-        Reactive.when(Dialog, {
-          id: "details",
-          title: "Details",
-          content: TextView({ text: "All the details" }),
+        Reactive.when(Dialog({ id: "details", title: "Details" }, TextView), {
+          text: "All the details",
           onClose: UiState.set(open, false),
         }),
       ),

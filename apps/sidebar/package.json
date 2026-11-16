@@ -1,0 +1,33 @@
+{
+  "name": "@spar/sidebar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src test scripts",
+    "test": "bun --bun vitest run",
+    "build": "vite build",
+    "dev": "vite",
+    "features": "bun run build && bun scripts/features.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "@spar/ui": "workspace:*",
+    "effect": "4.1.4",
+    "spar": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@effect/vitest": "4.1.4",
+    "@spar/lint": "workspace:*",
+    "@types/bun": "1.4.3",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "playwright": "1.65.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.0.5"
+  }
+}
