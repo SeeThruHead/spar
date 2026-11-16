@@ -56,10 +56,20 @@ const inViewScope = <A, E, Requirements>(
 const spanName = (view: { readonly name: string }): string =>
   view.name === "" ? "View (unnamed)" : view.name
 
+type Extra<Props, ViewProps> = [Props] extends [never]
+  ? never
+  : Exclude<keyof Props, keyof ViewProps>
+
+type OnlyWhatTheViewTakes<Props, ViewProps> = [Extra<Props, ViewProps>] extends [never]
+  ? unknown
+  : { readonly "props the view does not take": Extra<Props, ViewProps> }
+
 export const connect =
   <Props, Outer, E, Requirements>(props: (outer: Outer) => Effect.Effect<Props, E, Requirements>) =>
-  (view: View<Props>): Component<Outer, E, Outside<Requirements>, Props> =>
-    make(view, (outer) =>
+  <ViewProps = Props>(
+    view: View<ViewProps> & View<Props> & OnlyWhatTheViewTakes<Props, ViewProps>,
+  ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
+    make<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
       Effect.withSpan(inViewScope(Effect.map(props(outer), view)), spanName(view)),
     )
 

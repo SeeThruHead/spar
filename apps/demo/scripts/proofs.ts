@@ -53,6 +53,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "CounterStore",
   },
   {
+    file: "service-leaked-into-a-view.ts",
+    rule: "Handing a view a prop it does not take (here, a whole store)",
+    by: "types",
+    expect: '"props the view does not take": "store"',
+  },
+  {
     file: "ui-state-in-command.ts",
     rule: "Passing UI state to a store command",
     by: "types",
