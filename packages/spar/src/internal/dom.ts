@@ -44,9 +44,12 @@ const isProperty = (node: Host, name: string): boolean => {
 
 const isScalar = Predicate.or(isAttributeText, Predicate.or(Predicate.isBoolean, Predicate.isNull))
 
+const wouldOnlyMoveTheCaret = (node: Host, name: string, value: unknown): boolean =>
+  name === "value" && Reflect.get(node, name) === value
+
 const setProperty = (node: Host, name: string, value: unknown): void => {
   if (!isScalar(value)) return
-  if (Reflect.get(node, name) === value) return
+  if (wouldOnlyMoveTheCaret(node, name, value)) return
 
   Reflect.set(node, name, value)
 }
@@ -163,6 +166,10 @@ export type Box = {
 
 export const focus = (node: Host): void => {
   node.focus()
+}
+
+export const focusInPlace = (node: Host): void => {
+  node.focus({ preventScroll: true })
 }
 
 export const scrollIntoView = (node: Host): void => {

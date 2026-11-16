@@ -1,7 +1,16 @@
 import { Effect } from "effect"
 import { Handle, Router, View } from "spar"
 import { Toast } from "@spar/ui"
-import { Controls, DialogStory, MenuStory, TabsStory, ToastStory } from "./stories.ts"
+import {
+  Controls,
+  DialogStory,
+  ListboxStory,
+  MenuStory,
+  PopoverStory,
+  TabsStory,
+  ToastStory,
+  TooltipStory,
+} from "./stories.ts"
 import { LinkView, MissingView, ShellView, WelcomeView } from "./StoryViews.tsx"
 
 const home = Router.route("/")
@@ -10,6 +19,9 @@ const tabs = Router.route("/tabs")
 const menu = Router.route("/menu")
 const dialog = Router.route("/dialog")
 const toast = Router.route("/toast")
+const tooltip = Router.route("/tooltip")
+const popover = Router.route("/popover")
+const listbox = Router.route("/listbox")
 
 export const Shell = View.connect(
   Effect.fnUntraced(function* () {
@@ -26,6 +38,9 @@ export const Shell = View.connect(
         LinkView({ title: "Menu", link: router.link(menu, {}) }),
         LinkView({ title: "Dialog", link: router.link(dialog, {}) }),
         LinkView({ title: "Toasts", link: router.link(toast, {}) }),
+        LinkView({ title: "Tooltip", link: router.link(tooltip, {}) }),
+        LinkView({ title: "Popover", link: router.link(popover, {}) }),
+        LinkView({ title: "Listbox", link: router.link(listbox, {}) }),
       ],
       page: yield* Router.outlet({
         routes: [
@@ -35,6 +50,9 @@ export const Shell = View.connect(
           Router.on(menu, MenuStory),
           Router.on(dialog, DialogStory),
           Router.on(toast, ToastStory),
+          Router.on(tooltip, TooltipStory),
+          Router.on(popover, PopoverStory),
+          Router.on(listbox, ListboxStory),
         ],
         otherwise: MissingView,
       }),

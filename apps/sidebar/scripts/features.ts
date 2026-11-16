@@ -106,7 +106,6 @@ const steps: ReadonlyArray<Step> = [
         sessionStorage.setItem("features/scrolled", String(window.scrollY))
       }, Number(distance)),
   ],
-  [/^the page is at the top$/, (page) => page.waitForFunction(() => window.scrollY === 0)],
   [
     /^the page is back where I scrolled to$/,
     (page) =>

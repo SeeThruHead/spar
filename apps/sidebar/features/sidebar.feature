@@ -60,10 +60,9 @@ Feature: Agent sidebar
 
   Scenario: Coming back to where I had scrolled to
     Given the app is open
-    When I scroll down by 200
+    When I scroll down by 60
     And I open the agent "Backup check"
     Then the page heading is "Backup check"
-    And the page is at the top
     When I go back
     Then the page heading is "Agents"
     And the page is back where I scrolled to

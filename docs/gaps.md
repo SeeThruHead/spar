@@ -2,8 +2,6 @@
 
 In the order I would do them.
 
-3. **Overlay placement.** Menus flip above or below their anchor but do not avoid the left and right
-   edges. There is no Tooltip, no standalone Popover, and Select is the native control.
 4. **Devtools.** No export or import of a log, no outbox view, no MCP server for agents. Only
    actions made in the current session can be stepped to.
 5. **Server rendering and hydration.** Not started.

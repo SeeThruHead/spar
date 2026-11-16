@@ -1,10 +1,13 @@
 import { Effect, Schema, SubscriptionRef, pipe } from "effect"
 import { Form, Reactive, UiState, View } from "spar"
-import { Dialog, Menu, Select, Tabs, Toast } from "@spar/ui"
+import { Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
   ControlsView,
   DialogStoryView,
+  ListboxStoryView,
   MenuStoryView,
+  PopoverStoryView,
+  TooltipStoryView,
   TabsStoryView,
   TextView,
   ToastStoryView,
@@ -116,3 +119,44 @@ export const ToastStory = View.connect(
     }
   }),
 )(ToastStoryView)
+
+export const TooltipStory = View.connect(
+  Effect.fnUntraced(function* () {
+    return { tip: yield* Tooltip.make("Removes the project for everyone on the team") }
+  }),
+)(TooltipStoryView)
+
+export const PopoverStory = View.connect(
+  Effect.fnUntraced(function* () {
+    return {
+      popover: yield* View.child(Popover, {
+        label: "Sharing",
+        text: "Share",
+        content: TextView({
+          text: "Anyone with the link can view this project. Members can also edit it and invite others.",
+        }),
+      }),
+    }
+  }),
+)(PopoverStoryView)
+
+export const ListboxStory = View.connect(
+  Effect.fnUntraced(function* () {
+    const size = yield* UiState.make("m")
+
+    return {
+      chosen: size,
+      listbox: yield* View.child(Listbox, {
+        label: "Size",
+        name: "size",
+        choices: [
+          { value: "s", label: "Small" },
+          { value: "m", label: "Medium" },
+          { value: "l", label: "Large" },
+        ],
+        value: size,
+        onChange: (value) => UiState.set(size, value),
+      }),
+    }
+  }),
+)(ListboxStoryView)

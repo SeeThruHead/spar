@@ -188,6 +188,48 @@ describe("overlays", () => {
         "",
         "80px",
       ])
+      expect([menu.style.right, menu.style.maxWidth, menu.style.maxHeight]).toEqual([
+        "",
+        "calc(100vw - 16px)",
+        `${window.innerHeight - 130 - 8}px`,
+      ])
+
+      box.mockReturnValue(new DOMRect(window.innerWidth - 100, 700, 80, 30))
+
+      yield* Effect.sync(() => window.dispatchEvent(new Event("resize")))
+      yield* Testing.eventually(() =>
+        expect([menu.style.left, menu.style.right, menu.style.maxHeight]).toEqual([
+          "",
+          "20px",
+          "692px",
+        ]),
+      )
+
+      box.mockReturnValue(new DOMRect(-30, 100, 80, 30))
+
+      yield* Effect.sync(() => window.dispatchEvent(new Event("resize")))
+      yield* Testing.eventually(() =>
+        expect([menu.style.left, menu.style.right]).toEqual(["8px", ""]),
+      )
+
+      box.mockReturnValue(new DOMRect(window.innerWidth - 40, 100, 80, 30))
+
+      yield* Effect.sync(() => window.dispatchEvent(new Event("resize")))
+      yield* Testing.eventually(() =>
+        expect([menu.style.left, menu.style.right]).toEqual(["", "8px"]),
+      )
+
+      box.mockReturnValue(new DOMRect(40, window.innerHeight - 10, 80, 30))
+
+      yield* Effect.sync(() => window.dispatchEvent(new Event("resize")))
+      yield* Testing.eventually(() =>
+        expect(menu.style.maxHeight).toBe(`${window.innerHeight - 10 - 8}px`),
+      )
+
+      box.mockReturnValue(new DOMRect(40, 4, 80, window.innerHeight))
+
+      yield* Effect.sync(() => window.dispatchEvent(new Event("resize")))
+      yield* Testing.eventually(() => expect(menu.style.maxHeight).toBe("0px"))
 
       box.mockReturnValue(new DOMRect(40, 700, 80, 30))
 
@@ -260,7 +302,7 @@ describe("overlays", () => {
 
       expect([menu.style.position, menu.style.left, menu.style.top]).toEqual([
         "fixed",
-        "0px",
+        "8px",
         "0px",
       ])
 

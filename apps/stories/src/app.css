@@ -62,3 +62,8 @@ body {
 .stories > [role="status"] {
   position: absolute;
 }
+
+.at-the-edge {
+  display: flex;
+  justify-content: flex-end;
+}

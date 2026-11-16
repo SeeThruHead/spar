@@ -26,7 +26,7 @@ const Menu = View.connect(
 
     yield* Events.onDocument("pointerdown", UiState.set(open, false))
     yield* Events.onWindow("keydown", (event) =>
-      event.key === "Escape" ? UiState.set(open, false) : [],
+      event.key === "Escape" ? [Events.cancel(event), UiState.set(open, false)] : [],
     )
 
     return { open, menu: yield* pipe(open, Reactive.when(MenuItemsView, {})) }
@@ -100,7 +100,8 @@ describe("events beyond one element", () => {
 
         expect(screen.queryByRole("menu")).toBe(menu)
 
-        yield* Effect.sync(() => fireEvent.keyDown(window, { key: "Escape" }))
+        expect(fireEvent.keyDown(window, { key: "a" })).toBe(true)
+        expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(false)
         yield* gone("menu")
 
         expect(button.getAttribute("aria-expanded")).toBe("false")

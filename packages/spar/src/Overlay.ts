@@ -74,10 +74,13 @@ export const dismissable = Effect.fnUntraced(function* (options: {
 
 export type Placement = {
   readonly position: "fixed"
-  readonly left: Reactive<string>
+  readonly left: Reactive<string | null>
+  readonly right: Reactive<string | null>
   readonly top: Reactive<string | null>
   readonly bottom: Reactive<string | null>
   readonly minWidth: Reactive<string>
+  readonly maxWidth: string
+  readonly maxHeight: Reactive<string>
 }
 
 const corner: Dom.Box = { x: 0, y: 0, width: 0, height: 0 }
@@ -93,7 +96,17 @@ const viewportMoves: Source<Event> = {
   },
 }
 
-const fitsBelow = (box: Dom.Box): boolean => window.innerHeight - (box.y + box.height) >= box.y
+const margin = 8
+
+const spaceBelow = (box: Dom.Box): number => window.innerHeight - (box.y + box.height)
+
+const fitsBelow = (box: Dom.Box): boolean => spaceBelow(box) >= box.y
+
+const room = (box: Dom.Box): number => (fitsBelow(box) ? spaceBelow(box) : box.y)
+
+const spaceRight = (box: Dom.Box): number => window.innerWidth - (box.x + box.width)
+
+const startsLeft = (box: Dom.Box): boolean => box.x <= spaceRight(box)
 
 export const position = Effect.fnUntraced(function* (anchor: Handle.Handle) {
   const measured = Effect.map(
@@ -107,10 +120,13 @@ export const position = Effect.fnUntraced(function* (anchor: Handle.Handle) {
   )
   const placement: Placement = {
     position: "fixed",
-    left: map(box, (now) => `${now.x}px`),
+    left: map(box, (now) => (startsLeft(now) ? `${Math.max(now.x, margin)}px` : null)),
+    right: map(box, (now) => (startsLeft(now) ? null : `${Math.max(spaceRight(now), margin)}px`)),
     top: map(box, (now) => (fitsBelow(now) ? `${now.y + now.height}px` : null)),
     bottom: map(box, (now) => (fitsBelow(now) ? null : `${window.innerHeight - now.y}px`)),
     minWidth: map(box, (now) => `${now.width}px`),
+    maxWidth: `calc(100vw - ${margin * 2}px)`,
+    maxHeight: map(box, (now) => `${Math.max(room(now) - margin, 0)}px`),
   }
 
   return placement

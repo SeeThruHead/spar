@@ -273,3 +273,55 @@
 .spar-toast {
   box-sizing: border-box;
 }
+
+.spar-menu {
+  overflow: auto;
+}
+
+.spar-anchor {
+  position: relative;
+  display: inline-block;
+}
+
+.spar-popover {
+  box-sizing: border-box;
+  padding: 0.75rem;
+  overflow: auto;
+  background: var(--spar-surface);
+  color: var(--spar-text);
+  border: 1px solid var(--spar-line);
+  border-radius: var(--spar-radius);
+  box-shadow: var(--spar-shadow);
+}
+
+.spar-tooltip {
+  box-sizing: border-box;
+  padding: 0.25rem 0.5rem;
+  pointer-events: none;
+  font-size: 0.875rem;
+  background: var(--spar-text);
+  color: var(--spar-surface);
+  border-radius: calc(var(--spar-radius) - 2px);
+}
+
+.spar-listbox [role="option"] {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border-radius: calc(var(--spar-radius) - 2px);
+  cursor: pointer;
+}
+
+.spar-listbox [role="option"]:hover,
+.spar-listbox [role="option"]:focus {
+  background: var(--spar-raised);
+}
+
+.spar-listbox [role="option"][aria-selected="true"] {
+  font-weight: 600;
+}
+
+.spar-listbox-button::after {
+  content: " ▾";
+}

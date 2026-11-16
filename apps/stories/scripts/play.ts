@@ -47,6 +47,26 @@ const shows = (page: Page, label: string, text: string): Promise<void> =>
 const focusIsOn = (page: Page, name: string): Promise<unknown> =>
   page.waitForFunction((expected) => document.activeElement?.textContent?.trim() === expected, name)
 
+const staysOnScreen = async (page: Page, role: "tooltip" | "dialog" | "listbox"): Promise<void> => {
+  const box = await page.getByRole(role).boundingBox()
+  const view = page.viewportSize()
+  if (box === null || view === null) throw new Error(`The ${role} has no place on the page`)
+  if (box.x < 0 || box.x + box.width > view.width) {
+    throw new Error(`The ${role} runs off the side: ${box.x} to ${box.x + box.width}`)
+  }
+  if (box.y < 0 || box.y + box.height > view.height) {
+    throw new Error(`The ${role} runs off the top or bottom: ${box.y} to ${box.y + box.height}`)
+  }
+}
+
+const optionHasFocus = (page: Page, name: string): Promise<unknown> =>
+  page.waitForFunction((expected) => {
+    const active = document.activeElement
+    if (active?.getAttribute("role") !== "option") return false
+
+    return active.textContent.trim() === expected
+  }, name)
+
 const stories: ReadonlyArray<Story> = [
   {
     path: "/controls",
@@ -120,6 +140,63 @@ const stories: ReadonlyArray<Story> = [
       await page.getByText("The server could not be reached").waitFor()
       await page.getByRole("button", { name: "Dismiss" }).first().click()
       await page.getByText("Your changes are saved").waitFor({ state: "detached" })
+    },
+  },
+  {
+    path: "/tooltip",
+    title: "Tooltip",
+    play: async (page) => {
+      const button = page.getByRole("button", { name: "Delete project" })
+
+      await button.hover()
+      await page.getByRole("tooltip").waitFor()
+      await page.getByRole("heading", { name: "Tooltip" }).hover()
+      await page.getByRole("tooltip").waitFor({ state: "detached" })
+      await button.focus()
+      await page.getByRole("tooltip").waitFor()
+      await page.keyboard.press("Escape")
+      await page.getByRole("tooltip").waitFor({ state: "detached" })
+      await button.blur()
+      await button.focus()
+      await page
+        .getByRole("button", { name: "Delete project", description: /Removes the project/ })
+        .waitFor()
+      await staysOnScreen(page, "tooltip")
+    },
+  },
+  {
+    path: "/popover",
+    title: "Popover",
+    play: async (page) => {
+      await page.getByRole("button", { name: "Sharing" }).click()
+      await page.getByRole("dialog", { name: "Sharing" }).waitFor()
+      await staysOnScreen(page, "dialog")
+      await page.keyboard.press("Escape")
+      await page.getByRole("dialog").waitFor({ state: "detached" })
+      await focusIsOn(page, "Share")
+      await page.keyboard.press("Enter")
+      await page.getByRole("dialog", { name: "Sharing" }).waitFor()
+    },
+  },
+  {
+    path: "/listbox",
+    title: "Listbox",
+    play: async (page) => {
+      await page.getByRole("combobox", { name: "Size" }).focus()
+      await page.keyboard.press("ArrowDown")
+      await page.getByRole("listbox", { name: "Size" }).waitFor()
+      await optionHasFocus(page, "Medium")
+      await page.keyboard.press("l")
+      await optionHasFocus(page, "Large")
+      await page.keyboard.press("Enter")
+      await page.getByRole("listbox").waitFor({ state: "detached" })
+      await shows(page, "Chosen size", "l")
+      await page.getByRole("combobox", { name: "Size" }).click()
+      await page.getByRole("option", { name: "Small" }).click()
+      await shows(page, "Chosen size", "s")
+      await page.getByRole("combobox", { name: "Size" }).click()
+      await page.getByRole("listbox", { name: "Size" }).waitFor()
+      await staysOnScreen(page, "listbox")
     },
   },
 ]

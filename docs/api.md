@@ -154,7 +154,9 @@ layout that stays mounted while inner pages change. The service has `location`, 
 navigation. `Router.live(route, Page)` keeps the page mounted while only the query changes and
 gives it `params` as a reactive value, where `Router.on` mounts a fresh page for every change. In
 a browser, a new page starts at the top and going back or forward puts the page where it was
-scrolled to, waiting for late content for up to two seconds. Layers: `Router.Router.layerBrowser` and `Router.Router.layerMemory(url)`.
+scrolled to, waiting for late content for up to two seconds. `Router.focusOnChange(handle)` moves
+focus to the page on every navigation; after a link it lets the browser bring the page into view,
+and after back or forward it leaves the scroll position alone. Layers: `Router.Router.layerBrowser` and `Router.Router.layerMemory(url)`.
 
 (`apps/sidebar/src/Shell.ts`, `packages/spar/test/router.test.ts`)
 
@@ -163,7 +165,8 @@ scrolled to, waiting for late content for up to two seconds. Layers: `Router.Rou
 Inside a component wrapped in `View.portal`: `Overlay.modal({ onDismiss, initialFocus? })` makes
 everything beneath inert, locks scrolling, keeps Tab inside, dismisses on Escape and returns focus;
 `Overlay.dismissable({ onDismiss, anchor? })` is for menus; `Overlay.position(anchor)` gives styles
-that place the layer by its anchor.
+that place the layer by its anchor: below it or above, whichever has more room, from the left edge
+or the right, never past the edge of the window, and no taller than the room there is.
 
 ## Devtools
 
@@ -186,3 +189,14 @@ state, with Back, Forward, Live and Go to.
 `Button`, `SubmitButton`, `TextField`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Menu`,
 `Dialog(frame, Content)` and `Toast` (`Toast.Toasts` service, `Toast.Viewport`). Import
 `@spar/ui/styles.css` once. One page per component in `apps/stories`.
+
+- `Popover` (`label`, `text`, `content`): a button that opens a panel beside it. The panel takes
+  focus, closes on Escape or a press elsewhere, and gives focus back.
+- `Tooltip.make(text)`: gives `trigger`, props to spread on the button it describes, and `bubble`,
+  an element to put next to it. Shown on hover and on focus, put away on leave, blur or Escape.
+- `Listbox` (`label`, `name`, `choices`, `value`, `onChange`): a select drawn by the kit, for when
+  the native control will not do. Arrow keys, Home, End, typing a first letter, Enter or Space to
+  choose, and a hidden input so it posts with a form. `Select` stays the native control.
+
+`Events.cancel(event)` is an action that stops what the browser would do with an event, for a
+handler that only sometimes takes a key over.

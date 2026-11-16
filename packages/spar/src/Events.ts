@@ -1,7 +1,7 @@
 import { Effect, Function } from "effect"
 import type { Scope, Stream } from "effect"
 import { modify } from "./internal/action.ts"
-import type { Handler, Modified } from "./internal/action.ts"
+import type { Action, Handler, Modified } from "./internal/action.ts"
 import { events, listen, on } from "./internal/listen.ts"
 import type { Source } from "./internal/listen.ts"
 import { ViewScope } from "./internal/viewScope.ts"
@@ -13,6 +13,9 @@ export const prevent = <Event>(handler: Handler<Event>): Modified<Event> =>
 
 export const stop = <Event>(handler: Handler<Event>): Modified<Event> =>
   modify("stopPropagation", handler)
+
+export const cancel = (event: { readonly preventDefault: () => void }): Action =>
+  Effect.sync(() => event.preventDefault())
 
 export const onWindow = <Type extends keyof WindowEventMap>(
   type: Type,

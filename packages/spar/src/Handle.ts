@@ -39,6 +39,8 @@ const withNode = (self: Handle, use: (node: Dom.Host) => void): Effect.Effect<vo
 
 export const focus = (self: Handle): Effect.Effect<void> => withNode(self, Dom.focus)
 
+export const focusInPlace = (self: Handle): Effect.Effect<void> => withNode(self, Dom.focusInPlace)
+
 export const scrollIntoView = (self: Handle): Effect.Effect<void> =>
   withNode(self, Dom.scrollIntoView)
 

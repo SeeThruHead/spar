@@ -1,6 +1,7 @@
 import { Events } from "spar"
 import type { Action, Element, Form, Handle, Reactive, Router } from "spar"
 import { Button, Checkbox, SubmitButton, Switch, TextField } from "@spar/ui"
+import type { Tooltip } from "@spar/ui"
 
 export const LinkView = ({
   title,
@@ -128,5 +129,37 @@ export const ToastStoryView = ({ idle, onNotify, onWarn }: ToastStoryProps) => (
     <h1>Toasts</h1>
     <Button label="Show a notice" tone="primary" disabled={idle} onPress={onNotify} />
     <Button label="Show a problem" tone="danger" disabled={idle} onPress={onWarn} />
+  </section>
+)
+
+export const TooltipStoryView = ({ tip }: { readonly tip: Tooltip.Tooltip }) => (
+  <section>
+    <h1>Tooltip</h1>
+    <button type="button" class="spar-button" {...tip.trigger}>
+      Delete project
+    </button>
+    {tip.bubble}
+  </section>
+)
+
+export const PopoverStoryView = ({ popover }: { readonly popover: Element }) => (
+  <section>
+    <h1>Popover</h1>
+    <p class="at-the-edge">{popover}</p>
+  </section>
+)
+
+type ListboxStoryProps = {
+  readonly listbox: Element
+  readonly chosen: Reactive.Reactive<string>
+}
+
+export const ListboxStoryView = ({ listbox, chosen }: ListboxStoryProps) => (
+  <section>
+    <h1>Listbox</h1>
+    {listbox}
+    <p>
+      Chosen: <output aria-label="Chosen size">{chosen}</output>
+    </p>
   </section>
 )

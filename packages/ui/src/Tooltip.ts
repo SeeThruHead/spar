@@ -1,0 +1,54 @@
+import { Effect, pipe } from "effect"
+import { Handle, Overlay, Reactive, UiState, View } from "spar"
+import type { Action, Element, Handler } from "spar"
+import { Ids } from "./ids.ts"
+import { TooltipBubbleView } from "./TooltipView.tsx"
+
+const Bubble = pipe(
+  View.connect(
+    Effect.fnUntraced(function* (props: {
+      readonly id: string
+      readonly text: string
+      readonly anchor: Handle.Handle
+    }) {
+      return { id: props.id, text: props.text, place: yield* Overlay.position(props.anchor) }
+    }),
+  )(TooltipBubbleView),
+  View.portal,
+)
+
+export type Tooltip = {
+  readonly trigger: {
+    readonly ref: Handle.Handle
+    readonly "aria-describedby": string
+    readonly onPointerenter: Action
+    readonly onPointerleave: Action
+    readonly onFocus: Action
+    readonly onBlur: Action
+    readonly onKeydown: Handler<KeyboardEvent>
+  }
+  readonly bubble: Element
+}
+
+export const make = Effect.fnUntraced(function* (text: string) {
+  const ids = yield* Ids
+  const id = yield* ids.next
+  const shown = yield* UiState.make(false)
+  const anchor = yield* Handle.make
+  const show = UiState.set(shown, true)
+  const hide = UiState.set(shown, false)
+  const tooltip: Tooltip = {
+    trigger: {
+      ref: anchor,
+      "aria-describedby": id,
+      onPointerenter: show,
+      onPointerleave: hide,
+      onFocus: show,
+      onBlur: hide,
+      onKeydown: (event) => (event.key === "Escape" ? hide : []),
+    },
+    bubble: yield* pipe(shown, Reactive.when(Bubble, { id, text, anchor })),
+  }
+
+  return tooltip
+})

@@ -246,9 +246,21 @@ describe("the router", () => {
   it.live("focus moves to the page after a navigation", () =>
     Effect.gen(function* () {
       yield* app()
+      const router = yield* Router.Router
+      const focusing = vi.spyOn(HTMLElement.prototype, "focus")
+
       yield* Testing.click("link", "Settings")
       yield* heading("Profile")
       yield* Testing.eventually(() => expect(document.activeElement?.tagName).toBe("MAIN"))
+
+      expect(focusing.mock.calls.at(-1)).toEqual([])
+
+      yield* router.back
+      yield* heading("Home")
+      yield* Testing.eventually(() =>
+        expect(focusing.mock.calls.at(-1)).toEqual([{ preventScroll: true }]),
+      )
+      focusing.mockRestore()
     }).pipe(Effect.provide(Router.Router.layerMemory("/"))),
   )
 

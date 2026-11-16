@@ -154,6 +154,8 @@ const locate = (url: string): Location => {
   return { pathname: parsed.pathname, search: parsed.search }
 }
 
+export type Arrival = "link" | "history"
+
 type Driver = {
   readonly read: Effect.Effect<Location>
   readonly moved: Stream.Stream<Location>
@@ -166,11 +168,20 @@ type Driver = {
 const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
   const start = yield* driver.read
   const location = yield* SubscriptionRef.make(start)
-  const follow = Effect.flatMap(driver.read, (now) => SubscriptionRef.set(location, now))
+  const arrivedBy = yield* SubscriptionRef.make<Arrival>("link")
+  const followBy = (by: Arrival) =>
+    Effect.andThen(
+      SubscriptionRef.set(arrivedBy, by),
+      Effect.flatMap(driver.read, (now) => SubscriptionRef.set(location, now)),
+    )
+  const follow = followBy("link")
 
   yield* Effect.forkScoped(
     Stream.runForEach(driver.moved, (now) =>
-      Effect.andThen(SubscriptionRef.set(location, now), Effect.forkScoped(driver.arrive)),
+      SubscriptionRef.set(arrivedBy, "history").pipe(
+        Effect.andThen(SubscriptionRef.set(location, now)),
+        Effect.andThen(Effect.forkScoped(driver.arrive)),
+      ),
     ),
     { startImmediately: true },
   )
@@ -180,10 +191,11 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
 
   return {
     location: fromSubscriptionRef(location),
+    arrivedBy: fromSubscriptionRef(arrivedBy),
     go,
     replace: <Params>(target: Route<Params>, params: Params): Effect.Effect<void> =>
       Effect.andThen(driver.replace(target.build(params)), follow),
-    back: Effect.andThen(driver.back, follow),
+    back: Effect.andThen(driver.back, followBy("history")),
     link: <Params>(target: Route<Params>, params: Params): Link => ({
       href: target.build(params),
       onClick: modify("followLink", go(target, params)),
@@ -262,6 +274,7 @@ export class Router extends Context.Service<
   Router,
   {
     readonly location: Reactive<Location>
+    readonly arrivedBy: Reactive<Arrival>
     readonly go: <Params>(target: Route<Params>, params: Params) => Effect.Effect<void>
     readonly replace: <Params>(target: Route<Params>, params: Params) => Effect.Effect<void>
     readonly back: Effect.Effect<void>
@@ -353,7 +366,11 @@ export const focusOnChange = Effect.fnUntraced(function* (handle: Handle.Handle)
   const router = yield* Router
 
   yield* Effect.forkScoped(
-    Stream.runForEach(Stream.drop(router.location.changes, 1), () => Handle.focus(handle)),
+    Stream.runForEach(Stream.drop(router.location.changes, 1), () =>
+      Effect.flatMap(router.arrivedBy.get, (by) =>
+        by === "history" ? Handle.focusInPlace(handle) : Handle.focus(handle),
+      ),
+    ),
     { startImmediately: true },
   )
 })
