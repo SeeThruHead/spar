@@ -228,7 +228,9 @@
         "effecttsgo/global-console": "off",
         "effecttsgo/global-console-in-effect": "off",
         "effecttsgo/global-fetch": "off",
-        "effecttsgo/process-env": "off"
+        "effecttsgo/process-env": "off",
+        "effecttsgo/new-promise": "off",
+        "effecttsgo/global-timers": "off"
       }
     },
     {
@@ -272,6 +274,22 @@
       ],
       "rules": {
         "typescript/no-generated-empty-object-type": "off"
+      }
+    },
+    {
+      "files": [
+        "**/packages/spar/src/internal/cell.ts"
+      ],
+      "rules": {
+        "house/no-mutation": "off"
+      }
+    },
+    {
+      "files": [
+        "**/packages/spar/src/internal/listen.ts"
+      ],
+      "rules": {
+        "house/run-at-entry-only": "off"
       }
     }
   ]

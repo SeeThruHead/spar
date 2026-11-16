@@ -1,5 +1,4 @@
 import { Effect, Queue, Stream } from "effect"
-import type { Cause } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
 import { ActionScope } from "./actionScope.ts"
@@ -27,30 +26,30 @@ export const events = <E, A>(source: Source<E>, take: (event: E) => A): Stream.S
     )
   })
 
+export const starter = Effect.fnUntraced(function* () {
+  const outliving = yield* ActionScope
+  const services = yield* Effect.context()
+  const start = Effect.runForkWith(services)
+
+  return (action: Action): void => {
+    start(
+      Effect.forkIn(Effect.catchDefect(run(action), report), outliving, {
+        startImmediately: true,
+      }),
+    )
+  }
+})
+
 export const listen = Effect.fnUntraced(function* (
   target: EventTarget,
   type: string,
   handler: unknown,
 ) {
-  const outliving = yield* ActionScope
-  const pending = yield* Queue.unbounded<Action, Cause.Done>()
-  const listener = (event: Event): void => {
-    Queue.offerUnsafe(pending, toAction(handler, event))
-  }
+  const start = yield* starter()
+  const listener = (event: Event): void => start(toAction(handler, event))
 
   yield* Effect.acquireRelease(
     Effect.sync(() => target.addEventListener(type, listener)),
-    () =>
-      Effect.andThen(
-        Effect.sync(() => target.removeEventListener(type, listener)),
-        Queue.end(pending),
-      ),
-  )
-  yield* Effect.forkIn(
-    Stream.runForEach(Stream.fromQueue(pending), (action) =>
-      Effect.catchDefect(run(action), report),
-    ),
-    outliving,
-    { startImmediately: true },
+    () => Effect.sync(() => target.removeEventListener(type, listener)),
   )
 })

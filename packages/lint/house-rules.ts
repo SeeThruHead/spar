@@ -54,7 +54,7 @@ const reportAll =
 
 const posix = (file: string): string => file.split(Path.sep).join("/")
 
-const entryPoints = /\/(?:scripts|tools)\/[^/]+\.ts$|\/src\/main\.ts$/
+const entryPoints = /\/(?:scripts|tools)\/[^/]+\.ts$|\/src\/(?:[^/]+\/)?main\.ts$/
 
 const isEntryPoint = (file: string): boolean => entryPoints.test(posix(file))
 

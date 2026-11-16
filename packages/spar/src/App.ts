@@ -1,5 +1,6 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Scheduler } from "effect"
 import { ActionScope } from "./internal/actionScope.ts"
+import { browserScheduler } from "./internal/soon.ts"
 import * as Dom from "./internal/dom.ts"
 import { Frame } from "./internal/frame.ts"
 import { render } from "./internal/render.ts"
@@ -35,4 +36,5 @@ export const mount = <R, LayerError = never>(
     Effect.andThen(Effect.never),
     Effect.provide(options.layer),
     Effect.scoped,
+    Effect.provideService(Scheduler.Scheduler, browserScheduler),
   )

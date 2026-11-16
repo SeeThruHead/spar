@@ -3,7 +3,9 @@ import { Context, Effect, Layer, SubscriptionRef, pipe } from "effect"
 import { App, Reactive, View } from "spar"
 import * as Testing from "spar/testing"
 import { BrokenPartView, PageView, WidgetView } from "./crashes.tsx"
-import { LoadingView } from "./views.tsx"
+import { RowsView } from "./graphics.tsx"
+import { ItemView, LoadingView } from "./views.tsx"
+import type { Item } from "./views.tsx"
 
 const Widget = pipe(
   View.connect(() => Effect.die("the widget's data is corrupt"))(WidgetView),
@@ -55,6 +57,12 @@ class Reports extends Context.Service<
       )
     }),
   )
+}
+
+const keyOf = (item: Item): string => {
+  if (item.id === "broken") throw new TypeError("this item has no key")
+
+  return item.id
 }
 
 const label = (): string | null | undefined =>
@@ -116,6 +124,32 @@ describe("crashes", () => {
         ])
         expect((yield* Testing.findText("Loading report")).tagName).toBe("P")
       }).pipe(Effect.provide(Reports.layer)),
+  )
+
+  it.live("a list that cannot work out its rows is reported and keeps what it showed", () =>
+    Effect.gen(function* () {
+      const reports = yield* Reports
+      const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
+
+      yield* Testing.mount(
+        View.connect(
+          Effect.fnUntraced(function* () {
+            return {
+              rows: yield* pipe(
+                Reactive.fromSubscriptionRef(list),
+                Reactive.mapBy(keyOf, ItemView, (item) => ({ item })),
+              ),
+            }
+          }),
+        )(RowsView),
+      )
+      yield* Testing.findText("Alpha")
+      yield* SubscriptionRef.set(list, [{ id: "broken", label: "Beta" }])
+      yield* Effect.sleep("20 millis")
+
+      expect((yield* reports.seen).map(String)).toEqual(["TypeError: this item has no key"])
+      expect((yield* Testing.find("listitem")).textContent).toBe("Alpha")
+    }).pipe(Effect.provide(Reports.layer)),
   )
 
   it.live("without a reporter a crash is logged and the page carries on", () =>

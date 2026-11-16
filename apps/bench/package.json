@@ -1,0 +1,31 @@
+{
+  "name": "@spar/bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json && effect-tsgo tsrs -p src/solid/tsconfig.json",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src/spar src/foldkit src/shared scripts",
+    "build": "vite build --config vite.spar.config.ts && vite build --config vite.solid.config.ts && vite build --config vite.foldkit.config.ts",
+    "bench": "bun run build && bun scripts/bench.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.1.4",
+    "effect": "4.1.4",
+    "foldkit": "0.170.0",
+    "solid-js": "1.9.19",
+    "spar": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@spar/lint": "workspace:*",
+    "@types/bun": "1.4.3",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "playwright": "1.65.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vite-plugin-solid": "2.11.16"
+  }
+}

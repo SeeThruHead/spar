@@ -3,7 +3,9 @@ import {
   Exit,
   Option,
   Predicate,
+  Queue,
   Ref,
+  Scheduler,
   Schema,
   Scope,
   Stream,
@@ -15,9 +17,9 @@ import { HandleTypeId, isHandle } from "./handle.ts"
 import type { Handle } from "./handle.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Element, Intrinsic, Row } from "./element.ts"
-import { listen } from "./listen.ts"
+import { listen, starter } from "./listen.ts"
 import { settled } from "./order.ts"
-import { isReactive } from "./reactive.ts"
+import { Observe, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 
 export class DuplicateKey extends Schema.TaggedError<
@@ -48,23 +50,13 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 const insert = (node: Node, place: Place): Effect.Effect<void> =>
   Effect.sync(() => Dom.insert(place.parent, node, place.before))
 
-const bind = <A>(
-  source: Reactive<A>,
-  apply: (value: A) => void,
-): Effect.Effect<void, never, Scope.Scope> =>
-  source.get.pipe(
-    Effect.map(apply),
-    Effect.andThen(
-      Effect.forkScoped(
-        Effect.tapDefect(
-          Stream.runForEach(source.changes, (value) => Effect.sync(() => apply(value))),
-          report,
-        ),
-        { startImmediately: true },
-      ),
-    ),
-    Effect.asVoid,
-  )
+const bind = Effect.fnUntraced(function* <A>(source: Reactive<A>, write: (value: A) => void) {
+  const start = yield* starter()
+  const initial = yield* source.get
+
+  write(initial)
+  yield* source[Observe](write, (defect) => start(report(defect)))
+})
 
 const apply = (
   value: unknown,
@@ -179,44 +171,59 @@ const renderKeyed = Effect.fnUntraced(function* (rows: Reactive<ReadonlyArray<Ro
   const scope = yield* Effect.scope
   const entries = yield* Ref.make<ReadonlyArray<Entry>>([])
 
-  const reconcile = Effect.fnUntraced(function* (next: ReadonlyArray<Row>) {
-    const previous = yield* Ref.get(entries)
-    const keys = new Set(next.map((row) => row.key))
+  const reconcile = Effect.fnUntraced(
+    function* (next: ReadonlyArray<Row>) {
+      const previous = yield* Ref.get(entries)
+      const keys = new Set(next.map((row) => row.key))
 
-    if (keys.size !== next.length) {
-      return yield* Effect.die(new DuplicateKey({ keys: repeated(next.map((row) => row.key)) }))
-    }
+      if (keys.size !== next.length) {
+        return yield* Effect.die(new DuplicateKey({ keys: repeated(next.map((row) => row.key)) }))
+      }
 
-    const kept = previous.filter((entry) => keys.has(entry.key))
-    const positions = new Map(kept.map((entry, position) => [entry.key, { entry, position }]))
+      const kept = previous.filter((entry) => keys.has(entry.key))
+      const positions = new Map(kept.map((entry, position) => [entry.key, { entry, position }]))
 
-    yield* Effect.forEach(
-      previous.filter((entry) => !keys.has(entry.key)),
-      removeEntry,
-      { discard: true },
-    )
+      yield* Effect.forEach(
+        previous.filter((entry) => !keys.has(entry.key)),
+        removeEntry,
+        { discard: true },
+      )
 
-    const placed = yield* Effect.forEach(next, (row, index) => {
-      const existing = positions.get(row.key)
-      if (existing !== undefined) return Effect.as(row.refresh, existing)
+      const placed = yield* Effect.forEach(next, (row, index) => {
+        const existing = positions.get(row.key)
+        if (existing !== undefined) return Effect.as(row.refresh, existing)
 
-      return Effect.map(createEntry(row, inside, scope), (entry) => ({
-        entry,
-        position: kept.length + index,
-      }))
-    })
-    const current = placed.map((each) => each.entry)
-    const staying = settled(placed.map((each) => each.position))
+        return Effect.map(createEntry(row, inside, scope), (entry) => ({
+          entry,
+          position: kept.length + index,
+        }))
+      })
+      const current = placed.map((each) => each.entry)
+      const staying = settled(placed.map((each) => each.position))
 
-    yield* Effect.sync(() => Dom.placeSpans(place.parent, current, staying, anchor))
-    yield* Ref.set(entries, current)
-  })
+      yield* Effect.sync(() => Dom.placeSpans(place.parent, current, staying, anchor))
+      yield* Ref.set(entries, current)
+    },
+    Effect.provideService(Scheduler.PreventSchedulerYield, true),
+  )
 
   yield* insert(anchor, place)
 
+  const start = yield* starter()
+  const latest = yield* Queue.sliding<ReadonlyArray<Row>>(1)
   const initial = yield* rows.get
+
   yield* reconcile(initial)
-  yield* Effect.forkScoped(Stream.runForEach(rows.changes, reconcile), { startImmediately: true })
+  yield* rows[Observe](
+    (next) => {
+      Queue.offerUnsafe(latest, next)
+    },
+    (defect) => start(report(defect)),
+  )
+  yield* Effect.forkScoped(
+    Effect.tapDefect(Stream.runForEach(Stream.fromQueue(latest), reconcile), report),
+    { startImmediately: true },
+  )
 })
 
 const renderElement = (element: Element, place: Place): Effect.Effect<void, never, Scope.Scope> => {

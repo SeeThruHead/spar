@@ -9,12 +9,12 @@ import {
   Scope,
   Semaphore,
   Struct,
-  SubscriptionRef,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
+import * as Cell from "./internal/cell.ts"
 import { provideTo } from "./internal/context.ts"
-import { fromSubscriptionRef, map } from "./internal/reactive.ts"
+import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { Outbox } from "./Outbox.ts"
 
@@ -265,8 +265,8 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const leftovers = leftBehind.flat(2)
       const journal = yield* open(leftovers)
       const sequence = yield* Ref.make(lastSeqOf(leftovers, journal.lastSeq))
-      const ref = yield* SubscriptionRef.make({ state: journal.state, log: journal.entries })
-      const current = fromSubscriptionRef(ref)
+      const cell = Cell.make({ state: journal.state, log: journal.entries })
+      const current = fromCell(cell)
       const state = map(current, (snapshot) => snapshot.state)
 
       const record = Effect.fnUntraced(function* (
@@ -278,7 +278,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         const id = yield* random.uuidV7()
         const seq = yield* Ref.updateAndGet(sequence, (last) => last + 1)
         const entry: Entry = { id, action: name, payload, seq }
-        const before = yield* SubscriptionRef.get(ref)
+        const before = cell.read()
         const next = reduce(before.state)
 
         yield* Effect.annotateCurrentSpan({
@@ -292,10 +292,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           { discard: true },
         )
         yield* journal.append(entry, next)
-        yield* SubscriptionRef.set(ref, {
-          state: next,
-          log: [...before.log, entry].slice(-logLimit),
-        })
+        cell.write({ state: next, log: [...before.log, entry].slice(-logLimit) })
 
         return { entry, next }
       })
