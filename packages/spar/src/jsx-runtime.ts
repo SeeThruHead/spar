@@ -2,6 +2,7 @@ import { Predicate } from "effect"
 import type { Handler } from "./internal/action.ts"
 import { fragment, intrinsic } from "./internal/element.ts"
 import type { Element as SparElement } from "./internal/element.ts"
+import type { Handle } from "./internal/handle.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import type { View } from "./View.ts"
 
@@ -55,6 +56,7 @@ export type Classes = Readonly<Record<string, Attribute<boolean>>>
 
 type Common = {
   readonly children?: Children
+  readonly ref?: Handle
   readonly class?: Attribute<string> | Classes
   readonly style?: Attribute<string> | Styles
   readonly for?: Attribute<string>

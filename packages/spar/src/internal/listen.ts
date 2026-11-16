@@ -1,6 +1,8 @@
 import { Effect, Queue, Stream } from "effect"
-import type { Scope } from "effect"
+import type { Cause } from "effect"
 import { run, toAction } from "./action.ts"
+import type { Action } from "./action.ts"
+import { ActionScope } from "./actionScope.ts"
 
 export type Source<E> = {
   readonly add: (listener: (event: E) => void) => void
@@ -24,15 +26,26 @@ export const events = <E, A>(source: Source<E>, take: (event: E) => A): Stream.S
     )
   })
 
-export const listen = (
+export const listen = Effect.fnUntraced(function* (
   target: EventTarget,
   type: string,
   handler: unknown,
-): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.forkScoped(
-    Stream.runForEach(
-      events(on(target, type), (event) => toAction(handler, event)),
-      run,
-    ),
-    { startImmediately: true },
-  ).pipe(Effect.asVoid)
+) {
+  const outliving = yield* ActionScope
+  const pending = yield* Queue.unbounded<Action, Cause.Done>()
+  const listener = (event: Event): void => {
+    Queue.offerUnsafe(pending, toAction(handler, event))
+  }
+
+  yield* Effect.acquireRelease(
+    Effect.sync(() => target.addEventListener(type, listener)),
+    () =>
+      Effect.andThen(
+        Effect.sync(() => target.removeEventListener(type, listener)),
+        Queue.end(pending),
+      ),
+  )
+  yield* Effect.forkIn(Stream.runForEach(Stream.fromQueue(pending), run), outliving, {
+    startImmediately: true,
+  })
+})

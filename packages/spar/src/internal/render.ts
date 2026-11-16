@@ -1,5 +1,17 @@
-import { Effect, Exit, Predicate, Ref, Schema, Scope, Stream } from "effect"
+import {
+  Effect,
+  Exit,
+  Option,
+  Predicate,
+  Ref,
+  Schema,
+  Scope,
+  Stream,
+  SubscriptionRef,
+} from "effect"
 import * as Dom from "./dom.ts"
+import { HandleTypeId, isHandle } from "./handle.ts"
+import type { Handle } from "./handle.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Element, Intrinsic, Row } from "./element.ts"
 import { listen } from "./listen.ts"
@@ -69,6 +81,11 @@ const applyEach = (
     { discard: true },
   )
 
+const attach = (node: Dom.Host, handle: Handle): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.acquireRelease(SubscriptionRef.set(handle[HandleTypeId], Option.some(node)), () =>
+    SubscriptionRef.set(handle[HandleTypeId], Option.none()),
+  )
+
 const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
   if (tag === "foreignObject") return "html"
 
@@ -83,6 +100,7 @@ const applyProp = (
 ): Effect.Effect<void, never, Scope.Scope> => {
   if (name === "children") return render(value, { parent: node, before: null, namespace })
   if (isEventName(name)) return listen(node, name.slice(2).toLowerCase(), value)
+  if (isHandle(value)) return attach(node, value)
   if (name === "class" && isRecord(value)) {
     return applyEach(value, (names, on) => Dom.toggleClass(node, names, on))
   }

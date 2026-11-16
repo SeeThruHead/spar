@@ -128,3 +128,24 @@ export const placeSpans = (
 export const clear = (target: Node & ParentNode): void => {
   target.replaceChildren()
 }
+
+export type Box = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+export const focus = (node: Host): void => {
+  node.focus()
+}
+
+export const scrollIntoView = (node: Host): void => {
+  node.scrollIntoView({ block: "nearest", inline: "nearest" })
+}
+
+export const measure = (node: Host): Box => {
+  const { x, y, width, height } = node.getBoundingClientRect()
+
+  return { x, y, width, height }
+}
