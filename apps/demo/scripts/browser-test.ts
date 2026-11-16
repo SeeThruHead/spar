@@ -1,0 +1,102 @@
+import { chromium } from "playwright"
+import type { Locator, Page } from "playwright"
+
+const root = new URL("..", import.meta.url).pathname
+
+const server = Bun.serve({
+  port: 0,
+  hostname: "127.0.0.1",
+  fetch: async (request) => {
+    const path = new URL(request.url).pathname
+    const file = Bun.file(`${root}dist/${path === "/" ? "index.html" : path.slice(1)}`)
+
+    return (await file.exists()) ? new Response(file) : new Response("Not found", { status: 404 })
+  },
+})
+
+const shows = (locator: Locator, text: string | RegExp): Promise<void> =>
+  locator.filter({ hasText: text }).first().waitFor({ timeout: 5000 })
+
+const counter = async (page: Page): Promise<void> => {
+  const section = page.getByRole("region", { name: "Counter" })
+
+  await shows(section.getByLabel("Count"), /^0$/)
+  await section.getByRole("button", { name: "Add one" }).click()
+  await section.getByRole("button", { name: "Add one" }).click()
+  await shows(section.getByLabel("Count"), /^2$/)
+  await shows(section.getByLabel("Doubled"), /^4$/)
+  await section.getByRole("button", { name: "Reset" }).click()
+  await shows(section.getByLabel("Count"), /^0$/)
+}
+
+const addTodo = async (section: Locator, title: string): Promise<void> => {
+  await section.getByLabel("New todo").fill(title)
+  await section.getByRole("button", { name: "Add todo" }).click()
+  await shows(section.getByRole("listitem"), title)
+}
+
+const todos = async (page: Page): Promise<void> => {
+  const section = page.getByRole("region", { name: "Todos" })
+  const items = section.getByRole("listitem")
+
+  await addTodo(section, "Buy milk")
+  await addTodo(section, "Walk the dog")
+  await section.getByLabel("New todo").and(page.locator(":placeholder-shown")).waitFor()
+  await shows(section.getByLabel("Remaining"), /^2$/)
+
+  await items.first().evaluate((node) => node.setAttribute("data-kept", "yes"))
+  await section.getByRole("checkbox", { name: "Buy milk" }).check()
+  await shows(section.getByLabel("Remaining"), /^1$/)
+
+  await section.getByRole("button", { name: "Reverse order" }).click()
+  await shows(items.first(), "Walk the dog")
+  await items
+    .last()
+    .and(page.locator('[data-kept="yes"]'))
+    .filter({ hasText: "Buy milk" })
+    .waitFor()
+
+  await items.first().getByRole("button", { name: "Remove" }).click()
+  await items.filter({ hasText: "Walk the dog" }).waitFor({ state: "detached" })
+}
+
+const mail = async (page: Page): Promise<void> => {
+  const thread = page.getByRole("article", { name: "Welcome to the hangar" })
+
+  await thread.waitFor()
+  await shows(page.getByRole("alert"), 'The server has no thread called "missing"')
+
+  await thread.getByRole("button", { name: "Actions" }).click()
+  await thread.getByRole("menu", { name: "Thread actions" }).waitFor()
+  await thread.getByRole("button", { name: "Actions", expanded: true }).waitFor()
+  await thread.getByRole("menuitem", { name: "Archive" }).click()
+  await shows(thread.getByLabel("Thread status"), "Archived")
+  await thread.getByRole("menu").waitFor({ state: "detached" })
+
+  await thread.getByLabel("Reply", { exact: true }).fill("On my way")
+  await thread.getByRole("button", { name: "Send reply" }).click()
+  await shows(thread.getByRole("list", { name: "Replies" }).getByRole("listitem"), "On my way")
+  await shows(thread.getByLabel("Unsent replies"), /^0$/)
+}
+
+const run = async (): Promise<void> => {
+  const browser = await chromium.launch()
+  const page = await browser.newPage({ viewport: { width: 820, height: 1100 } })
+  const failures: Array<string> = []
+
+  page.on("pageerror", (error) => failures.push(String(error)))
+  page.on("console", (message) => (message.type() === "error" ? failures.push(message.text()) : 0))
+
+  await page.goto(`http://127.0.0.1:${server.port}/`)
+  await shows(page.getByRole("status"), "Loading thread welcome")
+  await counter(page)
+  await todos(page)
+  await mail(page)
+  await page.screenshot({ path: `${root}artifacts/demo.png`, fullPage: true })
+  await browser.close()
+
+  if (failures.length > 0) throw new Error(`The page logged errors:\n${failures.join("\n")}`)
+}
+
+await run().finally(() => server.stop(true))
+console.log("Browser test passed: counter, keyed list, mail thread")

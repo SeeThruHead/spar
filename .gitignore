@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+dist/
+.moon/cache/
+test-results/
+.ci-reports/
+playwright-report/
+.DS_Store
+.stryker-tmp/
+reports/
+artifacts/

@@ -1,0 +1,27 @@
+{
+  "name": "@spar/demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "typecheck:forbidden": "effect-tsgo tsrs -p forbidden/tsconfig.json",
+    "proofs": "bun scripts/proofs.ts",
+    "build": "bun scripts/build.ts",
+    "serve": "bun scripts/serve.ts",
+    "test:browser": "bun run build && bun scripts/browser-test.ts",
+    "browser:install": "playwright install chromium-headless-shell",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "effect": "4.1.4",
+    "spar": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@types/bun": "1.4.3",
+    "oxfmt": "0.73.0",
+    "playwright": "1.65.1",
+    "typescript": "7.0.2"
+  }
+}

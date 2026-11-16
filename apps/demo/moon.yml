@@ -1,0 +1,27 @@
+$schema: https://moonrepo.dev/schemas/project.json
+fileGroups:
+  upstream:
+    - /package.json
+    - /tsconfig.base.json
+    - /packages/spar/package.json
+    - /packages/spar/src/**/*
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", "@group(upstream)"]
+  proofs:
+    command: bun run proofs
+    inputs: ["**/*", "@group(upstream)"]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  build:
+    command: bun run build
+    inputs: ["src/**/*", "scripts/build.ts", "index.html", "@group(upstream)"]
+    outputs: ["dist"]
+  browser:
+    command: bun scripts/browser-test.ts
+    deps: [build]
+    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)"]
+  check:
+    deps: [typecheck, format, proofs]

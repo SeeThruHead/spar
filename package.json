@@ -1,0 +1,26 @@
+{
+  "name": "spar-workspace",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "moon": "moon",
+    "check": "moon run :check",
+    "check:affected": "moon run :check --affected",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@moonrepo/cli": "2.6.4",
+    "oxfmt": "0.73.0",
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "@effect/vitest": "4.1.4",
+    "effect": "4.1.4"
+  }
+}

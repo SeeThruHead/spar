@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "printWidth": 100,
+  "ignorePatterns": [
+    "**/.tickets/**",
+    "**/.moon/cache/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/artifacts/**"
+  ]
+}

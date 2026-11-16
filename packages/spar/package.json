@@ -1,0 +1,35 @@
+{
+  "name": "spar",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./jsx-runtime": "./src/jsx-runtime.ts",
+    "./jsx-dev-runtime": "./src/jsx-runtime.ts",
+    "./transform/check": "./src/transform/check.ts",
+    "./transform/bun": "./src/transform/bun.ts",
+    "./transform/vite": "./src/transform/vite.ts"
+  },
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "test": "bun --bun vitest run",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "effect": "4.1.4",
+    "oxc-parser": "0.99.0"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@effect/vitest": "4.1.4",
+    "@testing-library/dom": "10.4.1",
+    "@types/bun": "1.4.3",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "happy-dom": "20.0.11",
+    "oxfmt": "0.73.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}
