@@ -80,6 +80,13 @@ const here = (name: string): Effect.Effect<boolean> =>
 
 const dataOf = (event: Event): unknown => Reflect.get(event, "data")
 
+const shownAgain: Stream.Stream<void> = Stream.suspend(() =>
+  events(on(document, "visibilitychange"), () => document.visibilityState).pipe(
+    Stream.filter((state) => state === "visible"),
+    Stream.map(Function.constVoid),
+  ),
+)
+
 export const layerBrowser = Layer.effect(
   Tabs,
   Effect.gen(function* () {
@@ -97,6 +104,7 @@ export const layerBrowser = Layer.effect(
         events(on(peers, "message"), dataOf).pipe(
           Stream.filter((told) => told === name),
           Stream.map(Function.constVoid),
+          Stream.merge(shownAgain),
         ),
     }
   }),

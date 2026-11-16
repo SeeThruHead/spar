@@ -108,8 +108,10 @@ const twoTabs = async (page: Page): Promise<void> => {
   await other.goto(page.url())
   await shows(there.getByRole("listitem"), "Buy milk")
   await addTodo(there, "Feed the cat")
+  await page.bringToFront()
   await shows(here.getByRole("listitem").filter({ hasText: "Feed the cat" }), "Feed the cat")
   await addTodo(here, "Water the plants")
+  await other.bringToFront()
   await shows(
     there.getByRole("listitem").filter({ hasText: "Water the plants" }),
     "Water the plants",

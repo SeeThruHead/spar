@@ -450,6 +450,7 @@ describe("tabs in a browser", () => {
           Deferred.doneUnsafe(heard, Effect.succeed(String(event.data))),
         ),
       )
+      yield* Effect.sleep("5 millis")
       yield* tabs.announce("ledger")
       yield* Effect.sync(() => neighbour.postMessage("something else"))
       yield* Effect.sync(() => neighbour.postMessage("ledger"))
@@ -457,10 +458,22 @@ describe("tabs in a browser", () => {
       expect(yield* Deferred.await(heard)).toBe("ledger")
 
       yield* Effect.sleep("10 millis")
-      yield* Fiber.interrupt(told)
 
       expect(yield* Ref.get(times)).toBe(1)
       expect(closed.mock.calls).toHaveLength(0)
+
+      const state = vi.spyOn(document, "visibilityState", "get")
+
+      state.mockReturnValue("hidden")
+      yield* Effect.sync(() => document.dispatchEvent(new Event("visibilitychange")))
+      state.mockReturnValue("visible")
+      yield* Effect.sync(() => document.dispatchEvent(new Event("visibilitychange")))
+      yield* Effect.sleep("10 millis")
+      state.mockRestore()
+
+      expect(yield* Ref.get(times)).toBe(2)
+
+      yield* Fiber.interrupt(told)
 
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
