@@ -1,15 +1,17 @@
 import { Schema } from "effect"
-import { launch } from "@spar/browsers"
+import { freePort, launch } from "@spar/browsers"
 import { Recorded } from "spar/devtools/spans"
 import { createServer } from "vite"
 
 const root = new URL("..", import.meta.url).pathname
 
-const backendOrigin = "http://127.0.0.1:4185"
+const backendPort = await freePort()
+
+const backendOrigin = `http://127.0.0.1:${backendPort}`
 
 const backend = Bun.spawn(["bun", "scripts/backend.ts"], {
   cwd: root,
-  env: { ...Bun.env, PORT: "4185" },
+  env: { ...Bun.env, PORT: String(backendPort) },
   stdout: "ignore",
   stderr: "inherit",
 })

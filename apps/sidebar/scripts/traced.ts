@@ -1,8 +1,8 @@
 import { Schema } from "effect"
-import { launch } from "@spar/browsers"
+import { freePort, launch } from "@spar/browsers"
 import { Recorded } from "spar/devtools/spans"
 
-const port = 4198
+const port = await freePort()
 
 const origin = `http://127.0.0.1:${port}`
 

@@ -2,7 +2,7 @@ import { Effect, Layer, Queue, Schedule } from "effect"
 import type { Schema } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
-import { engine, launch } from "@spar/browsers"
+import { engine, freePort, launch } from "@spar/browsers"
 import type { Locator, Page } from "playwright"
 import { start } from "./site.ts"
 
@@ -166,7 +166,7 @@ const offline = async (page: Page): Promise<void> => {
 
 const offlineNoise = ["ERR_INTERNET_DISCONNECTED", "WebKit encountered an internal error"]
 
-const devtoolsPort = 4189
+const devtoolsPort = await freePort()
 
 const devtoolsUrl = `http://127.0.0.1:${devtoolsPort}`
 
