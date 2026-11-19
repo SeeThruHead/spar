@@ -37,9 +37,9 @@ Built since, and smaller than they sound, but not done:
 - **For agents:** an action's payload Schema is not reported, several actions cannot be sent in
   one call, and with several tabs open the tools speak for the one that reported last
   (`docs/devtools-compared.md`).
-- **Queries are not keyed by parameters.** One query store holds one value, so the agent page's
-  server record still loads in its component's Effect. Optimistic updates on a query, retries and
-  dropping unused data are not built either.
+- **The agent page's server record still loads in its component's Effect** and not through a
+  query, though queries now take an input. Refetch on focus and reconnect, pagination, optimistic
+  updates on a query, retries and dropping unused data are not built.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
 - **The showcase is `apps/sidebar`, and server rendering is shown by `apps/ssr`.** No single app

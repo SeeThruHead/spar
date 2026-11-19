@@ -1,54 +1,89 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Deferred, Effect, Layer, Option, Ref, Schedule, Schema } from "effect"
+import {
+  Context,
+  Deferred,
+  Effect,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Schema,
+  SubscriptionRef,
+} from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Query, Reactive, Store, Timeline, View } from "spar"
+import { Props, Query, Reactive, Store, Timeline, View } from "spar"
 import * as Testing from "spar/testing"
-import { TallyView } from "./units.tsx"
+import { OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
 
 type User = typeof User.Type
 
-type Asked = Deferred.Deferred<ReadonlyArray<User>, string>
+type Asked = {
+  readonly what: string
+  readonly answer: Deferred.Deferred<unknown, string>
+}
 
 class Directory extends Context.Service<
   Directory,
   {
     readonly asked: Ref.Ref<ReadonlyArray<Asked>>
-    readonly list: Effect.Effect<ReadonlyArray<User>, string>
+    readonly users: Effect.Effect<ReadonlyArray<User>, string>
+    readonly stock: Effect.Effect<number, string>
+    readonly orders: (userId: number) => Effect.Effect<ReadonlyArray<string>, string>
   }
 >()("test/Directory") {
   static readonly layer = Layer.effect(
     Directory,
     Effect.gen(function* () {
       const asked = yield* Ref.make<ReadonlyArray<Asked>>([])
+      const waitFor = Effect.fnUntraced(function* <A>(
+        what: string,
+        schema: Schema.Codec<A, unknown>,
+      ) {
+        const answer = yield* Deferred.make<unknown, string>()
+
+        yield* Ref.update(asked, (all) => [...all, { what, answer }])
+
+        const given = yield* Deferred.await(answer)
+
+        return yield* Effect.orDie(Schema.decodeUnknownEffect(schema)(given))
+      })
 
       return Directory.of({
         asked,
-        list: Effect.gen(function* () {
-          const answer = yield* Deferred.make<ReadonlyArray<User>, string>()
-
-          yield* Ref.update(asked, (all) => [...all, answer])
-
-          return yield* Deferred.await(answer)
-        }),
+        users: waitFor("users", Schema.Array(User)),
+        stock: waitFor("stock", Schema.Finite),
+        orders: (userId) => waitFor(`orders ${userId}`, Schema.Array(Schema.String)),
       })
     }),
   )
 }
 
+const directory = Effect.service(Directory)
+
 class Users extends Query.Tag<Users>()("test/Users", {
+  input: Schema.Void,
   success: Schema.Array(User),
   failure: Schema.String,
-  load: Effect.flatMap(Effect.service(Directory), (directory) => directory.list),
+  load: () => Effect.flatMap(directory, (found) => found.users),
   staleAfter: "1 minute",
 }) {}
 
-class Always extends Query.Tag<Always>()("test/Always", {
-  success: Schema.Array(User),
+class Stock extends Query.Tag<Stock>()("test/Stock", {
+  input: Schema.Void,
+  success: Schema.Finite,
   failure: Schema.String,
-  load: Effect.flatMap(Effect.service(Directory), (directory) => directory.list),
+  load: () => Effect.flatMap(directory, (found) => found.stock),
+}) {}
+
+class Orders extends Query.Tag<Orders>()("test/Orders", {
+  input: Schema.Int,
+  success: Schema.Array(Schema.String),
+  failure: Schema.String,
+  load: (userId: number) => Effect.flatMap(directory, (found) => found.orders(userId)),
+  staleAfter: "1 minute",
 }) {}
 
 const RosterState = Schema.Struct({ renamed: Schema.Int })
@@ -78,58 +113,201 @@ const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
     Roster.layer([Users.invalidatedBy(Roster.actions.renamed)]).pipe(
-      Layer.provideMerge(Users.live),
+      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live)),
       Layer.provideMerge(Directory.layer),
       Layer.provide(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
     ),
   )
-  const directory = yield* Effect.provide(Effect.service(Directory), built)
-  const answer = (index: number, users: ReadonlyArray<User>) =>
-    Effect.flatMap(Ref.get(directory.asked), (asked) =>
-      Effect.forEach(asked.slice(index, index + 1), (waiting) => Deferred.succeed(waiting, users)),
-    )
-  const refuse = (index: number, reason: string) =>
-    Effect.flatMap(Ref.get(directory.asked), (asked) =>
-      Effect.forEach(asked.slice(index, index + 1), (waiting) => Deferred.fail(waiting, reason)),
+  const found = yield* Effect.provide(directory, built)
+  const whats = Effect.map(Ref.get(found.asked), (asked) => asked.map((each) => each.what))
+  const settle = (what: string, exit: (waiting: Asked) => Effect.Effect<boolean>) =>
+    Effect.flatMap(Ref.get(found.asked), (asked) =>
+      Effect.andThen(
+        Effect.forEach(asked.filter((each) => each.what === what).slice(-1), exit),
+        Effect.yieldNow,
+      ),
     )
 
   return {
     built,
     noted,
+    whats,
     users: yield* Effect.provide(Effect.service(Users), built),
     roster: yield* Effect.provide(Effect.service(Roster), built),
-    calls: Effect.map(Ref.get(directory.asked), (asked) => asked.length),
-    answer,
-    refuse,
+    answer: (what: string, value: unknown) =>
+      settle(what, (waiting) => Deferred.succeed(waiting.answer, value)),
+    refuse: (what: string, reason: string) =>
+      settle(what, (waiting) => Deferred.fail(waiting.answer, reason)),
   }
 })
 
-describe("server data in a store", () => {
-  it.effect("loads on demand, once, and is loading, then loaded, as typed states", () =>
-    Effect.gen(function* () {
-      const { built, noted, users, calls, answer } = yield* opened
+const readings = <A, E>(handle: Query.Handle<A, E>) =>
+  Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
 
-      expect(yield* users.select.status.get).toBe("idle")
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.provide(Users.ensure, built)
+describe("the natural way: a value from one place feeds a query declared in another", () => {
+  it.effect(
+    "what waits for nothing starts at once, and a dependent query waits only for its input",
+    () =>
+      Effect.gen(function* () {
+        const { built, noted, whats, answer } = yield* opened
+        const declared = yield* Effect.provide(
+          Effect.gen(function* () {
+            const users = yield* Users.ask()
+            const stock = yield* Stock.ask()
+            const firstUser = Reactive.map(users.value, (loaded) =>
+              Option.fromNullishOr(loaded?.[0]?.id),
+            )
+            const orders = yield* Orders.ask(firstUser)
+
+            return { users, stock, orders }
+          }),
+          built,
+        )
+
+        yield* Effect.yieldNow
+        expect(yield* whats).toEqual(["users", "stock"])
+        expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
+
+        yield* answer("stock", 40)
+        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* whats).toEqual(["users", "stock"])
+        expect(yield* declared.orders.status.get).toBe("waiting")
+
+        yield* answer("users", [ada, grace])
+        yield* Effect.yieldNow
+        expect(yield* whats).toEqual(["users", "stock", "orders 1"])
+        expect(yield* readings(declared.orders)).toEqual(["loading", null, null, true])
+
+        yield* answer("orders 1", ["tea", "ink"])
+        expect(yield* readings(declared.orders)).toEqual(["loaded", ["tea", "ink"], null, false])
+        expect(
+          (yield* Ref.get(noted))
+            .filter((seen) => seen.kind === "command")
+            .map((seen) => seen.name),
+        ).toEqual([
+          "test/Users/requested",
+          "test/Stock/requested",
+          "test/Stock/loaded",
+          "test/Users/loaded",
+          "test/Orders/requested",
+          "test/Orders/loaded",
+        ])
+      }),
+  )
+
+  it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const selected = yield* SubscriptionRef.make(1)
+      const orders = yield* Effect.provide(
+        Orders.ask(Reactive.fromSubscriptionRef(selected)),
+        built,
+      )
+
       yield* Effect.yieldNow
-      expect([yield* users.select.status.get, yield* users.select.loading.get]).toEqual([
-        "loading",
-        true,
-      ])
-      expect(yield* calls).toBe(1)
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(selected, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 1", "orders 2"])
+      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+
+      yield* answer("orders 2", ["ink"])
+      expect(yield* orders.value.get).toEqual(["ink"])
+
+      yield* SubscriptionRef.set(selected, 1)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 1", "orders 2"])
+      expect(yield* readings(orders)).toEqual(["loaded", ["tea"], null, false])
+      expect(yield* Effect.provide(Orders.read(2), built)).toEqual(["ink"])
+      expect(yield* Effect.provide(Orders.read(99), built)).toBeNull()
+    }),
+  )
+
+  it.effect("a plain value is an input too, and two declarations of it share one request", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const first = yield* Effect.provide(Orders.ask(7), built)
+      const second = yield* Effect.provide(Orders.ask(7), built)
+
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 7"])
+      expect(yield* first.status.get).toBe("loading")
+      yield* answer("orders 7", ["pen"])
+      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+    }),
+  )
+
+  it.live("in components: the parent passes a prop, the child declares its query with it", () =>
+    Effect.gen(function* () {
+      const OrdersOf = View.taking(
+        { userId: Props.Reactive(Schema.Int) },
+        Effect.fnUntraced(function* ({ userId }) {
+          const orders = yield* Orders.ask(userId)
+
+          return {
+            status: orders.status,
+            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+          }
+        }),
+      )(OrdersView)
+      const selected = yield* SubscriptionRef.make(1)
+      const Shelf = View.connect(
+        Effect.fnUntraced(function* () {
+          return {
+            orders: yield* View.child(OrdersOf, {
+              userId: Reactive.fromSubscriptionRef(selected),
+            }),
+          }
+        }),
+      )(ShelfView)
+
+      yield* Testing.mount(Shelf)
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders status"]')?.textContent).toBe("loading"),
+      )
+
+      const found = yield* directory
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      expect(asked.map((each) => each.what)).toEqual(["orders 1"])
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, ["tea", "ink"]))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("2"),
+      )
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+})
+
+describe("server data in a store", () => {
+  it.effect("loads when asked for, once, and is loading, then loaded, as typed states", () =>
+    Effect.gen(function* () {
+      const { built, noted, users, whats, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* readings(shown)).toEqual(["loading", null, null, true])
+      expect(yield* whats).toEqual(["users"])
 
       yield* TestClock.adjust("5 seconds")
-      yield* answer(0, [ada])
-      yield* Effect.yieldNow
+      yield* answer("users", [ada])
 
-      expect(yield* users.state.get).toEqual({
-        status: "loaded",
-        value: [ada],
-        error: null,
-        loadedAt: 5000,
-        request: 1,
-      })
+      expect(yield* readings(shown)).toEqual(["loaded", [ada], null, false])
+      expect(Object.values(yield* users.select.entries.get)).toEqual([
+        { status: "loaded", value: [ada], error: null, loadedAt: 5000, request: 1, input: null },
+      ])
       expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name])).toEqual([
         ["command", "test/Users/requested"],
         ["command", "test/Users/loaded"],
@@ -139,180 +317,147 @@ describe("server data in a store", () => {
 
   it.effect("asking again while it loads is refused and seen, not sent twice", () =>
     Effect.gen(function* () {
-      const { built, noted, users, calls } = yield* opened
+      const { built, noted, users, whats } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
 
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.provide(Users.refetch, built)
+      yield* shown.refetch
       yield* Effect.yieldNow
 
-      expect(yield* calls).toBe(1)
-      expect(yield* users.refused.get).toEqual(
-        Option.some({ action: "requested", reason: "It is already loading", payload: null }),
+      expect(yield* whats).toEqual(["users"])
+      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
+        Option.some("It is already loading"),
       )
       expect((yield* Ref.get(noted)).map((seen) => seen.kind)).toEqual(["command", "refused"])
     }),
   )
 
-  it.effect("stays fresh for its stale time, then loads again when next needed", () =>
+  it.effect("stays fresh for its stale time, counted from when it loaded", () =>
     Effect.gen(function* () {
-      const { built, users, calls, answer } = yield* opened
+      const { built, whats, answer } = yield* opened
 
-      yield* Effect.provide(Users.ensure, built)
+      yield* TestClock.adjust("5 seconds")
+      yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
-      yield* answer(0, [ada])
-      yield* Effect.yieldNow
+      yield* answer("users", [ada])
       yield* TestClock.adjust("1 minute")
-      yield* Effect.provide(Users.ensure, built)
+      yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
-      expect(yield* calls).toBe(1)
+      expect(yield* whats).toEqual(["users"])
 
       yield* TestClock.adjust("1 second")
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.yieldNow
-      expect(yield* calls).toBe(2)
-      expect([yield* users.select.status.get, yield* users.select.value.get]).toEqual([
-        "loading",
-        [ada],
-      ])
 
-      yield* answer(1, [ada, grace])
+      const later = yield* Effect.provide(Users.ask(), built)
+
       yield* Effect.yieldNow
-      expect(yield* users.select.value.get).toEqual([ada, grace])
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(later)).toEqual(["loading", [ada], null, true])
+      yield* answer("users", [ada, grace])
+      expect(yield* later.value.get).toEqual([ada, grace])
+    }),
+  )
+
+  it.effect("with no stale time it is stale as soon as time has passed", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      yield* answer("stock", 3)
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock"])
+      yield* TestClock.adjust("1 milli")
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
     }),
   )
 
   it.effect("a failure is a typed state, and the next need tries again", () =>
     Effect.gen(function* () {
-      const { built, users, calls, refuse, answer } = yield* opened
+      const { built, whats, refuse, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
 
-      yield* Effect.provide(Users.ensure, built)
       yield* Effect.yieldNow
-      yield* refuse(0, "The directory is down")
-      yield* Effect.yieldNow
+      yield* refuse("users", "The directory is down")
+      expect(yield* readings(shown)).toEqual(["failed", null, "The directory is down", false])
 
-      expect([yield* users.select.status.get, yield* users.select.error.get]).toEqual([
-        "failed",
-        "The directory is down",
-      ])
-
-      yield* Effect.provide(Users.ensure, built)
+      yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
-      expect(yield* calls).toBe(2)
-      yield* answer(1, [grace])
-      yield* Effect.yieldNow
-      expect([
-        yield* users.select.status.get,
-        yield* users.select.value.get,
-        yield* users.select.error.get,
-      ]).toEqual(["loaded", [grace], null])
+      expect(yield* whats).toEqual(["users", "users"])
+      yield* answer("users", [grace])
+      expect(yield* readings(shown)).toEqual(["loaded", [grace], null, false])
     }),
   )
 
-  it.effect("an answer to an earlier request is refused", () =>
+  it.effect("an answer to an earlier request, or to nothing that was asked, is refused", () =>
     Effect.gen(function* () {
       const { built, users } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+      const [key] = Object.keys((yield* users.state.get).entries)
 
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.yieldNow
-      yield* users.commands.loaded({ request: 0, value: [grace], at: 1 })
-      expect(yield* users.select.status.get).toBe("loading")
-      yield* users.commands.failed({ request: 7, error: "late" })
-      expect(yield* users.select.status.get).toBe("loading")
-      expect(yield* users.refused.get).toEqual(
-        Option.some({
-          action: "failed",
-          reason: "This answers an earlier request",
-          payload: { request: 7, error: "late" },
-        }),
+      yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
+      expect(yield* shown.status.get).toBe("loading")
+      yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
+      expect(yield* shown.status.get).toBe("loading")
+      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
+        Option.some("This answers an earlier request"),
       )
     }),
   )
 
   it.effect("a command in another store invalidates it, and it loads again at once", () =>
     Effect.gen(function* () {
-      const { built, users, roster, calls, answer } = yield* opened
+      const { built, roster, whats, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
 
-      yield* Effect.provide(Users.ensure, built)
       yield* Effect.yieldNow
-      yield* answer(0, [ada])
-      yield* Effect.yieldNow
-
+      yield* answer("users", [ada])
       yield* roster.commands.renamed()
       yield* Effect.yieldNow
       yield* Effect.yieldNow
-      expect(yield* calls).toBe(2)
-      expect(yield* users.state.get).toMatchObject({
-        status: "loading",
-        value: [ada],
-        loadedAt: null,
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
+
+      yield* answer("users", [grace])
+      expect(yield* shown.value.get).toEqual([grace])
+    }),
+  )
+
+  it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
+    Effect.gen(function* () {
+      const Shown = Stock.beside(
+        View.connect(
+          Effect.fnUntraced(function* () {
+            const stock = yield* Stock.ask()
+
+            return {
+              status: stock.status,
+              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+            }
+          }),
+        )(OrdersView),
+      )
+
+      yield* Testing.mount(Shown)
+
+      const found = yield* directory
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
       })
 
-      yield* answer(1, [grace])
-      yield* Effect.yieldNow
-      expect(yield* users.select.value.get).toEqual([grace])
-    }),
-  )
-
-  it.effect("with no stale time it is stale as soon as time has passed", () =>
-    Effect.gen(function* () {
-      const built = yield* Layer.build(
-        Always.live.pipe(
-          Layer.provideMerge(Directory.layer),
-          Layer.provide(SecureRandom.layerWebCrypto),
-        ),
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, 12))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("12"),
       )
-      const directory = yield* Effect.provide(Effect.service(Directory), built)
-
-      yield* Effect.provide(Always.ensure, built)
-      yield* Effect.yieldNow
-      yield* Effect.flatMap(Ref.get(directory.asked), (asked) =>
-        Effect.forEach(asked, (waiting) => Deferred.succeed(waiting, [ada])),
-      )
-      yield* Effect.yieldNow
-      yield* Effect.provide(Always.ensure, built)
-      yield* Effect.yieldNow
-      expect(yield* Ref.get(directory.asked)).toHaveLength(1)
-      yield* TestClock.adjust("1 milli")
-      yield* Effect.provide(Always.ensure, built)
-      yield* Effect.yieldNow
-      expect(yield* Ref.get(directory.asked)).toHaveLength(2)
-    }),
-  )
-
-  it.effect(
-    "freshness is counted from when it was loaded, and loading is only true while it loads",
-    () =>
-      Effect.gen(function* () {
-        const { built, users, calls, answer } = yield* opened
-
-        expect(yield* users.select.loading.get).toBe(false)
-        yield* TestClock.adjust("5 seconds")
-        yield* Effect.provide(Users.ensure, built)
-        yield* Effect.yieldNow
-        yield* answer(0, [ada])
-        yield* Effect.yieldNow
-        expect(yield* users.select.loading.get).toBe(false)
-
-        yield* TestClock.adjust("56 seconds")
-        yield* Effect.provide(Users.ensure, built)
-        yield* Effect.yieldNow
-        expect(yield* calls).toBe(1)
-
-        yield* users.commands.invalidated()
-        yield* Effect.provide(Users.ensure, built)
-        yield* Effect.yieldNow
-        expect(yield* calls).toBe(2)
-      }),
+    }).pipe(Effect.provide(Directory.layer)),
   )
 
   it("its states and a refusal are plain data with a Schema", () => {
-    expect(["idle", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status))).toEqual([
-      true,
-      true,
-      true,
-      true,
-      false,
-    ])
+    expect(
+      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
+    ).toEqual([true, true, true, true, false])
     expect(
       Schema.is(Store.Refusal)({
         action: "requested",
@@ -322,38 +467,4 @@ describe("server data in a store", () => {
     ).toBe(true)
     expect(Schema.is(Store.Refusal)({ action: "requested" })).toBe(false)
   })
-
-  it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
-    Effect.gen(function* () {
-      const Shown = Users.beside(
-        View.connect(
-          Effect.fnUntraced(function* () {
-            const users = yield* Users
-
-            yield* Users.ensure
-
-            return {
-              label: "users",
-              count: Reactive.map(users.select.value, (value) => value?.length ?? 0),
-              onAdd: users.commands.requested(),
-            }
-          }),
-        )(TallyView),
-      )
-
-      yield* Testing.mount(Shown)
-      yield* Testing.find("button", "Add to users")
-
-      const directory = yield* Directory
-      const asked = yield* Effect.repeat(Ref.get(directory.asked), {
-        until: (all) => all.length === 1,
-        schedule: Schedule.spaced("5 millis"),
-      })
-
-      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting, [ada, grace]))
-      yield* Testing.eventually(() =>
-        expect(document.querySelector('[aria-label="users count"]')?.textContent).toBe("2"),
-      )
-    }).pipe(Effect.provide(Directory.layer)),
-  )
 })

@@ -51,7 +51,7 @@ The view never runs an Effect and the Effect never writes markup.
 | Show a list                               | `Reactive.mapBy(key, RowView, props)` in the Effect, passed as a `Props.Element`         | `.map` inside JSX                                      |
 | Show one thing or another                 | `Reactive.when` in the Effect, or `View.branch`                                          | A ternary inside JSX                                   |
 | Mount a child that needs services         | `yield* View.child(Child, props)` in the Effect, passed as a `Props.Element`             | Writing a connected component as a JSX tag             |
-| Load data from the server                 | A `Query.Tag`, and `yield* TheQuery.ensure` where it is needed                           | Fetching in a component and passing the result down    |
+| Load data from the server                 | A `Query.Tag`, and `yield* TheQuery.ask(input)` where it is needed                       | Fetching in a component and passing the result down    |
 | Use loaded data in an action              | Read the query store in the action's `Store.after` effect, then `send` the result        | Props or arguments that carry server data              |
 | Stop a command that is wrong right now    | A guard as the third argument of `Store.action`, returning the reason                    | Disabling the button and hoping nothing else sends it  |
 | Run a flow with a wait in it              | A state field, an action that starts it, `Store.after` that waits and `send`s the finish | A lock, a queue, a flag in UI state                    |
@@ -738,21 +738,24 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                         | What it does                                                                              |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { success, failure, load, staleAfter })` | Declares the query: Schemas for what it loads and how it fails, the Effect that loads it. |
-| `Self.live`                                                      | Its layer, for the whole app.                                                             |
-| `Self.beside(component)`                                         | The query beside one component, as `.with` does for a store.                              |
-| `Self.ensure`                                                    | Loads when idle, failed or older than `staleAfter`. Call it where the data is needed.     |
-| `Self.refetch`, `Self.invalidate`                                | Load again now; mark stale and load again.                                                |
-| `Self.invalidatedBy(action)`                                     | A reaction for another store's layer: that action invalidates this query.                 |
+| Function                                                                | What it does                                                                                         |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })` | Declares the query: Schemas for its input, what it loads and how it fails, and `load(input)`.        |
+| `Self.ask(input)`                                                       | Declares, in a component's Effect, that this input is needed. Returns a handle at once.              |
+| `Self.read(input)`                                                      | The loaded value for an input, or null. For another store's after-effect.                            |
+| `Self.live`                                                             | Its layer, for the whole app.                                                                        |
+| `Self.beside(component)`                                                | The query beside one component, as `.with` does for a store.                                         |
+| `Self.invalidate`, `Self.invalidatedBy(action)`                         | Load everything it holds again; a reaction for another store's layer that does so after that action. |
 
-The service has `select.status` (`idle`, `loading`, `loaded`, `failed`), `select.value`,
-`select.error`, `select.loading` and the store's own `commands`, `log` and `refused`. One request
-runs at a time (a second is refused) and an answer to an earlier request is refused. Another
-store's action reads the loaded data in its after-effect: `const users = yield* UsersQuery`.
-Not built yet: queries keyed by parameters, optimistic updates on a query, retries, dropping
-unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
+`ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
+means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
+`loaded` or `failed`), `value`, `error`, `loading` and `refetch`, all reactive. It asks again
+when the input changes; an input that is still fresh is a cache hit. One request runs for each
+input at a time (a second is refused) and an answer to an earlier request is refused. Because
+nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
+and a query whose input comes from another query's value waits only for that value.
+Not built yet: refetch on focus and reconnect, pagination, optimistic updates on a query,
+retries, dropping unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ### Backend
 
@@ -990,35 +993,95 @@ controls.
 
 React Query plus props is two systems: a cache that components subscribe to, and the app's own
 state, with server data carried between them through props and callbacks. In Spar there is one.
-A query is a store.
+A query is a store, and declaring that a component needs one is a line in that component.
+
+#### The natural way works
+
+A parent reads a value from a store and passes it to a child as a prop. The child declares a
+query that uses the prop. That is all anybody writes:
 
 ```ts
-export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
-  success: Schema.Array(User),
+class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
+  input: Schema.Int,
+  success: Schema.Array(Order),
   failure: ServerUnreachable,
-  load: Effect.flatMap(Effect.service(Server), (server) => server.users),
+  load: (userId) => Effect.flatMap(Effect.service(Server), (server) => server.orders(userId)),
   staleAfter: "30 seconds",
 }) {}
+
+const Orders = View.taking(
+  { userId: Props.Reactive(Schema.Int) },
+  Effect.fnUntraced(function* ({ userId }) {
+    const orders = yield* OrdersQuery.ask(userId)
+
+    return { status: orders.status, count: Reactive.map(orders.value, (all) => all?.length ?? 0) }
+  }),
+)(OrdersView)
+
+const Parent = View.connect(
+  Effect.fnUntraced(function* () {
+    const people = yield* PeopleStore
+
+    return { orders: yield* View.child(Orders, { userId: people.select.selectedId }) }
+  }),
+)(ParentView)
 ```
 
-What that gives, each as an entry in the log and a span in the trace:
+There is no loader in another file, no fragment, no compile step and no list of dependencies.
+What makes that enough:
 
-| React Query                          | Spar                                                                                                        |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `status`, `data`, `error`            | `select.status` (`idle`, `loading`, `loaded`, `failed`), `select.value`, `select.error`, each with a Schema |
-| Fetch on mount                       | `yield* UsersQuery.ensure` in the component's Effect: loads when idle, failed or stale, and not otherwise   |
-| `staleTime`                          | `staleAfter`                                                                                                |
-| `refetch()`                          | `UsersQuery.refetch`, or `commands.requested()`                                                             |
-| Deduping identical requests          | One request at a time. A second while loading is refused, visibly ("It is already loading")                 |
-| A late answer overwriting            | Refused: an answer carries the number of the request it answers                                             |
-| `invalidateQueries` after a mutation | `UsersQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                               |
-| Keeps old data while loading         | Yes: `value` stays while `status` is `loading`                                                              |
-| Optimistic update                    | Through `Store.outbox` on an ordinary store. Not on a query store yet                                       |
-| Queries keyed by parameters          | Not yet: one query store holds one value. A query beside a view (`.beside`) gives one for each place        |
-| Retries, garbage collection          | Not built. Retry with a schedule inside `load`                                                              |
+- **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
+  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and nothing in a
+  component's Effect does, so every query in the tree being mounted is declared in the same
+  pass and they all start together. Nesting components does not make a waterfall.
+- **The query runs in its store, not in the component.** The store is provided at the root
+  (`OrdersQuery.live`), so the request and its result outlive the component that asked, and two
+  components that ask for the same input share one request.
+- **The input is a value that changes.** `ask` takes a plain value, a reactive value, or a
+  reactive `Option`. When it changes, the query for the new input starts; going back to an input
+  that is still fresh is a cache hit.
+- **A real dependency is an input that is not there yet.** Give `ask` a reactive `Option` made
+  from another query's value and it is `waiting` until that value arrives, then starts at once.
+  That is the only waterfall there is, and it is visible as a state.
 
-Place it like any store: `UsersQuery.live` in the app's layers, or
-`UsersQuery.beside(component)` to ship it with the view that shows it.
+```ts
+const users = yield * UsersQuery.ask()
+const stock = yield * StockQuery.ask()
+const first = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+const orders = yield * OrdersQuery.ask(first)
+```
+
+Users and stock start together. Orders starts the moment users has answered, whether or not
+stock has. The test that controls the order of the answers and checks exactly that is
+`packages/spar/test/query.test.ts`.
+
+The one line of the natural version that matters: the prop has to be passed as the reactive
+value it is (`Props.Reactive`), not read out into a plain number first. A plain number works as
+an input, but it cannot change and it does not know where it came from.
+
+#### What a query gives
+
+Each of these is an entry in the log and a span in the trace.
+
+| React Query                           | Spar                                                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `useQuery` in a component             | `yield* TheQuery.ask(input)` in the component's Effect                                        |
+| `status`, `data`, `error`             | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading` |
+| Query keys                            | The input, with a Schema. The cache is keyed by its encoded value                             |
+| `staleTime`                           | `staleAfter`                                                                                  |
+| `refetch()`                           | The handle's `refetch`                                                                        |
+| Deduping identical requests           | One request for each input at a time. A second while loading is refused, visibly              |
+| A late answer overwriting a newer one | Refused: an answer carries the number of the request it answers                               |
+| `invalidateQueries` after a mutation  | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                   |
+| Keeps old data while loading          | Yes: `value` stays while `status` is `loading`                                                |
+| `enabled: !!id` for a dependent query | Pass a reactive `Option`: the query is `waiting` while it is none                             |
+| Optimistic update                     | Through `Store.outbox` on an ordinary store. Not on a query store yet                         |
+| Refetch on focus and reconnect        | Not yet                                                                                       |
+| Pagination and infinite lists         | Not yet                                                                                       |
+| Retries, dropping unused data         | Not built. Retry with a schedule inside `load`                                                |
+
+Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
+ship it with the view that shows it.
 
 #### Another store's action reads it directly
 
@@ -1029,8 +1092,7 @@ rows are selected, and "Export CSV" is one command with no arguments:
 export const exportsCsv = Store.after(
   PeopleStore.actions.exportRequested,
   Effect.fnUntraced(function* (_payload, state: State, send) {
-    const users = yield* UsersQuery
-    const loaded = yield* users.select.value.get
+    const loaded = yield* UsersQuery.read()
 
     yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
   }),
@@ -1038,7 +1100,7 @@ export const exportsCsv = Store.after(
 ```
 
 The view calls `people.commands.exportRequested()`. The store takes the selection from its own
-state and the emails from the users store. No prop carries a user, and the view never sees an
+state and the emails from the users query. No prop carries a user, and the view never sees an
 email it does not draw. The request and the result are one trace
 (`apps/sidebar/src/People.ts`, `apps/sidebar/test/people.test.ts`).
 
@@ -1052,23 +1114,24 @@ Foldkit's side is read from the installed package (0.170.0): `foldkit/asyncData`
 experimental `foldkit/experimental/query`, which its "API Cache Query" example is built on. Its
 plain "API Cache" example does the same by hand with `AsyncData` fields in the Model.
 
-|                         | Foldkit                                                                                                            | Spar                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Where server data lives | In the one Model, as a Query submodel holding an `AsyncData` value                                                 | In a query store                                                                                 |
-| Declaring one           | `Query.define({ name, data, error, execute })`, with `args` for a keyed one                                        | `Query.Tag<Self>()(key, { success, failure, load, staleAfter })`                                 |
-| States                  | `AsyncData`: `Idle`, `Loading`, `Refreshing(data)`, `Failure(error)`, `Stale(error, data)`, `Success(data)`        | `status` of `idle`, `loading`, `loaded`, `failed`, with `value` and `error` beside it            |
-| Wiring it in            | The parent adds the submodel to its Model, lifts the query's update into its own, and folds the completion Message | Provide the layer, or use `.beside(component)`. Nothing is folded by hand                        |
-| Loading                 | `loadIfMissing`, `revalidate`, `revalidateOrLoad` return the next Model and a Command from `update`                | `ensure`, `refetch`, `invalidate` are Effects; `invalidatedBy` ties it to another store's action |
-| A late answer           | A generation number on each fetch                                                                                  | A request number on each answer, refused when it is not the current one                          |
-| Stale time              | Not in the query's config as shipped: revalidation is asked for                                                    | `staleAfter`                                                                                     |
-| Keyed by arguments      | Yes (`KeyedQuery`)                                                                                                 | No                                                                                               |
-| Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An action's after-effect yields the other store and reads its selector                           |
+|                         | Foldkit                                                                                                            | Spar                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Where server data lives | In the one Model, as a Query submodel holding an `AsyncData` value                                                 | In a query store                                                                         |
+| Declaring one           | `Query.define({ name, data, error, execute })`, with `args` for a keyed one                                        | `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })`                  |
+| States                  | `AsyncData`: `Idle`, `Loading`, `Refreshing(data)`, `Failure(error)`, `Stale(error, data)`, `Success(data)`        | `status` of `waiting`, `loading`, `loaded`, `failed`, with `value` and `error` beside it |
+| Wiring it in            | The parent adds the submodel to its Model, lifts the query's update into its own, and folds the completion Message | Provide the layer, or use `.beside(component)`. Nothing is folded by hand                |
+| Asking for data         | `loadIfMissing`, `revalidate`, `revalidateOrLoad` return the next Model and a Command from `update`                | `ask(input)` in the component that needs it; `invalidatedBy` ties it to another store    |
+| A late answer           | A generation number on each fetch                                                                                  | A request number on each answer, refused when it is not the current one                  |
+| Stale time              | Not in the query's config as shipped: revalidation is asked for                                                    | `staleAfter`                                                                             |
+| Keyed by arguments      | Yes (`KeyedQuery`)                                                                                                 | Yes: the input                                                                           |
+| A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
+| Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An action's after-effect calls `TheQuery.read(input)`                                    |
 
-Where Foldkit is ahead: keyed queries, and `AsyncData` tells "refreshing with old data" and
-"failed but still holding old data" apart as states of their own, where Spar leaves you to read
-`status` and `value` together. Its query API is marked experimental. Where Spar is ahead: nothing
-is lifted or folded by hand, a stale time is declared, and a refused request or a late answer is
-visible in the log.
+Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
+holding old data" apart as states of their own, where Spar leaves you to read `status` and
+`value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
+folded by hand, a stale time is declared, a dependent query needs no code, and a refused request
+or a late answer is visible in the log.
 
 
 # Getting started
@@ -1486,9 +1549,9 @@ Built since, and smaller than they sound, but not done:
 - **For agents:** an action's payload Schema is not reported, several actions cannot be sent in
   one call, and with several tabs open the tools speak for the one that reported last
   (`docs/devtools-compared.md`).
-- **Queries are not keyed by parameters.** One query store holds one value, so the agent page's
-  server record still loads in its component's Effect. Optimistic updates on a query, retries and
-  dropping unused data are not built either.
+- **The agent page's server record still loads in its component's Effect** and not through a
+  query, though queries now take an input. Refetch on focus and reconnect, pagination, optimistic
+  updates on a query, retries and dropping unused data are not built.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
 - **The showcase is `apps/sidebar`, and server rendering is shown by `apps/ssr`.** No single app
@@ -2066,9 +2129,10 @@ import { PeopleView, PersonRowView } from "./PeopleView.tsx"
 import { Server } from "./server/Server.ts"
 
 export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
+  input: Schema.Void,
   success: Schema.Array(User),
   failure: ServerUnreachable,
-  load: Effect.flatMap(Effect.service(Server), (server) => server.users),
+  load: () => Effect.flatMap(Effect.service(Server), (server) => server.users),
   staleAfter: "30 seconds",
 }) {}
 
@@ -2119,30 +2183,32 @@ const lineOf = (user: User): string => `${user.name},${user.email}`
 export const exportsCsv = Store.after(
   PeopleStore.actions.exportRequested,
   Effect.fnUntraced(function* (_payload, state: State, send) {
-    const users = yield* UsersQuery
-    const loaded = yield* users.select.value.get
+    const loaded = yield* UsersQuery.read()
 
     yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
   }),
 )
 
 const statusOf = (status: Query.Status): string =>
-  ({ idle: "Not loaded", loading: "Loading", loaded: "Loaded", failed: "Could not load" })[status]
+  ({
+    waiting: "Waiting",
+    loading: "Loading",
+    loaded: "Loaded",
+    failed: "Could not load",
+  })[status]
 
 const told = (refused: Option.Option<Store.Refusal>): string =>
   Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
 
 const PeoplePanel = View.connect(
   Effect.fnUntraced(function* () {
-    const users = yield* UsersQuery
+    const users = yield* UsersQuery.ask()
     const people = yield* PeopleStore
 
-    yield* UsersQuery.ensure
-
     return {
-      status: Reactive.map(users.select.status, statusOf),
+      status: Reactive.map(users.status, statusOf),
       rows: yield* pipe(
-        Reactive.map(users.select.value, (loaded) => loaded ?? []),
+        Reactive.map(users.value, (loaded) => loaded ?? []),
         Reactive.mapBy(
           (user: User) => String(user.id),
           PersonRowView,
@@ -2162,7 +2228,7 @@ const PeoplePanel = View.connect(
       download: people.select.download,
       refused: Reactive.map(people.refused, told),
       onExport: people.commands.exportRequested(),
-      onRefresh: users.commands.requested(),
+      onRefresh: users.refetch,
     }
   }),
 )(PeopleView)
@@ -2293,7 +2359,6 @@ const opened = Effect.gen(function* () {
   return {
     built,
     noted,
-    users: yield* Effect.provide(Effect.service(UsersQuery), built),
     store: yield* Effect.provide(Effect.service(PeopleStore), built),
   }
 })
@@ -2301,11 +2366,11 @@ const opened = Effect.gen(function* () {
 describe("people: server data in a store, used by another store's action", () => {
   it.effect("Export CSV takes only the selection and reads the emails from the users store", () =>
     Effect.gen(function* () {
-      const { built, noted, users, store } = yield* opened
+      const { built, noted, store } = yield* opened
+      const users = yield* Effect.provide(UsersQuery.ask(), built)
 
-      yield* Effect.provide(UsersQuery.ensure, built)
       yield* TestClock.adjust("40 millis")
-      expect(yield* users.select.value.get).toEqual(people)
+      expect(yield* users.value.get).toEqual(people)
 
       yield* store.commands.toggled(123)
       yield* store.commands.toggled(124)
@@ -2522,56 +2587,91 @@ Tests of a query store: one request at a time, stale time, failure, late answers
 
 ```ts
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Deferred, Effect, Layer, Option, Ref, Schedule, Schema } from "effect"
+import {
+  Context,
+  Deferred,
+  Effect,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Schema,
+  SubscriptionRef,
+} from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Query, Reactive, Store, Timeline, View } from "spar"
+import { Props, Query, Reactive, Store, Timeline, View } from "spar"
 import * as Testing from "spar/testing"
-import { TallyView } from "./units.tsx"
+import { OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
 
 type User = typeof User.Type
 
-type Asked = Deferred.Deferred<ReadonlyArray<User>, string>
+type Asked = {
+  readonly what: string
+  readonly answer: Deferred.Deferred<unknown, string>
+}
 
 class Directory extends Context.Service<
   Directory,
   {
     readonly asked: Ref.Ref<ReadonlyArray<Asked>>
-    readonly list: Effect.Effect<ReadonlyArray<User>, string>
+    readonly users: Effect.Effect<ReadonlyArray<User>, string>
+    readonly stock: Effect.Effect<number, string>
+    readonly orders: (userId: number) => Effect.Effect<ReadonlyArray<string>, string>
   }
 >()("test/Directory") {
   static readonly layer = Layer.effect(
     Directory,
     Effect.gen(function* () {
       const asked = yield* Ref.make<ReadonlyArray<Asked>>([])
+      const waitFor = Effect.fnUntraced(function* <A>(
+        what: string,
+        schema: Schema.Codec<A, unknown>,
+      ) {
+        const answer = yield* Deferred.make<unknown, string>()
+
+        yield* Ref.update(asked, (all) => [...all, { what, answer }])
+
+        const given = yield* Deferred.await(answer)
+
+        return yield* Effect.orDie(Schema.decodeUnknownEffect(schema)(given))
+      })
 
       return Directory.of({
         asked,
-        list: Effect.gen(function* () {
-          const answer = yield* Deferred.make<ReadonlyArray<User>, string>()
-
-          yield* Ref.update(asked, (all) => [...all, answer])
-
-          return yield* Deferred.await(answer)
-        }),
+        users: waitFor("users", Schema.Array(User)),
+        stock: waitFor("stock", Schema.Finite),
+        orders: (userId) => waitFor(`orders ${userId}`, Schema.Array(Schema.String)),
       })
     }),
   )
 }
 
+const directory = Effect.service(Directory)
+
 class Users extends Query.Tag<Users>()("test/Users", {
+  input: Schema.Void,
   success: Schema.Array(User),
   failure: Schema.String,
-  load: Effect.flatMap(Effect.service(Directory), (directory) => directory.list),
+  load: () => Effect.flatMap(directory, (found) => found.users),
   staleAfter: "1 minute",
 }) {}
 
-class Always extends Query.Tag<Always>()("test/Always", {
-  success: Schema.Array(User),
+class Stock extends Query.Tag<Stock>()("test/Stock", {
+  input: Schema.Void,
+  success: Schema.Finite,
   failure: Schema.String,
-  load: Effect.flatMap(Effect.service(Directory), (directory) => directory.list),
+  load: () => Effect.flatMap(directory, (found) => found.stock),
+}) {}
+
+class Orders extends Query.Tag<Orders>()("test/Orders", {
+  input: Schema.Int,
+  success: Schema.Array(Schema.String),
+  failure: Schema.String,
+  load: (userId: number) => Effect.flatMap(directory, (found) => found.orders(userId)),
+  staleAfter: "1 minute",
 }) {}
 
 const RosterState = Schema.Struct({ renamed: Schema.Int })
@@ -2601,58 +2701,201 @@ const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
     Roster.layer([Users.invalidatedBy(Roster.actions.renamed)]).pipe(
-      Layer.provideMerge(Users.live),
+      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live)),
       Layer.provideMerge(Directory.layer),
       Layer.provide(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
     ),
   )
-  const directory = yield* Effect.provide(Effect.service(Directory), built)
-  const answer = (index: number, users: ReadonlyArray<User>) =>
-    Effect.flatMap(Ref.get(directory.asked), (asked) =>
-      Effect.forEach(asked.slice(index, index + 1), (waiting) => Deferred.succeed(waiting, users)),
-    )
-  const refuse = (index: number, reason: string) =>
-    Effect.flatMap(Ref.get(directory.asked), (asked) =>
-      Effect.forEach(asked.slice(index, index + 1), (waiting) => Deferred.fail(waiting, reason)),
+  const found = yield* Effect.provide(directory, built)
+  const whats = Effect.map(Ref.get(found.asked), (asked) => asked.map((each) => each.what))
+  const settle = (what: string, exit: (waiting: Asked) => Effect.Effect<boolean>) =>
+    Effect.flatMap(Ref.get(found.asked), (asked) =>
+      Effect.andThen(
+        Effect.forEach(asked.filter((each) => each.what === what).slice(-1), exit),
+        Effect.yieldNow,
+      ),
     )
 
   return {
     built,
     noted,
+    whats,
     users: yield* Effect.provide(Effect.service(Users), built),
     roster: yield* Effect.provide(Effect.service(Roster), built),
-    calls: Effect.map(Ref.get(directory.asked), (asked) => asked.length),
-    answer,
-    refuse,
+    answer: (what: string, value: unknown) =>
+      settle(what, (waiting) => Deferred.succeed(waiting.answer, value)),
+    refuse: (what: string, reason: string) =>
+      settle(what, (waiting) => Deferred.fail(waiting.answer, reason)),
   }
 })
 
-describe("server data in a store", () => {
-  it.effect("loads on demand, once, and is loading, then loaded, as typed states", () =>
-    Effect.gen(function* () {
-      const { built, noted, users, calls, answer } = yield* opened
+const readings = <A, E>(handle: Query.Handle<A, E>) =>
+  Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
 
-      expect(yield* users.select.status.get).toBe("idle")
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.provide(Users.ensure, built)
+describe("the natural way: a value from one place feeds a query declared in another", () => {
+  it.effect(
+    "what waits for nothing starts at once, and a dependent query waits only for its input",
+    () =>
+      Effect.gen(function* () {
+        const { built, noted, whats, answer } = yield* opened
+        const declared = yield* Effect.provide(
+          Effect.gen(function* () {
+            const users = yield* Users.ask()
+            const stock = yield* Stock.ask()
+            const firstUser = Reactive.map(users.value, (loaded) =>
+              Option.fromNullishOr(loaded?.[0]?.id),
+            )
+            const orders = yield* Orders.ask(firstUser)
+
+            return { users, stock, orders }
+          }),
+          built,
+        )
+
+        yield* Effect.yieldNow
+        expect(yield* whats).toEqual(["users", "stock"])
+        expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
+
+        yield* answer("stock", 40)
+        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* whats).toEqual(["users", "stock"])
+        expect(yield* declared.orders.status.get).toBe("waiting")
+
+        yield* answer("users", [ada, grace])
+        yield* Effect.yieldNow
+        expect(yield* whats).toEqual(["users", "stock", "orders 1"])
+        expect(yield* readings(declared.orders)).toEqual(["loading", null, null, true])
+
+        yield* answer("orders 1", ["tea", "ink"])
+        expect(yield* readings(declared.orders)).toEqual(["loaded", ["tea", "ink"], null, false])
+        expect(
+          (yield* Ref.get(noted))
+            .filter((seen) => seen.kind === "command")
+            .map((seen) => seen.name),
+        ).toEqual([
+          "test/Users/requested",
+          "test/Stock/requested",
+          "test/Stock/loaded",
+          "test/Users/loaded",
+          "test/Orders/requested",
+          "test/Orders/loaded",
+        ])
+      }),
+  )
+
+  it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const selected = yield* SubscriptionRef.make(1)
+      const orders = yield* Effect.provide(
+        Orders.ask(Reactive.fromSubscriptionRef(selected)),
+        built,
+      )
+
       yield* Effect.yieldNow
-      expect([yield* users.select.status.get, yield* users.select.loading.get]).toEqual([
-        "loading",
-        true,
-      ])
-      expect(yield* calls).toBe(1)
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(selected, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 1", "orders 2"])
+      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+
+      yield* answer("orders 2", ["ink"])
+      expect(yield* orders.value.get).toEqual(["ink"])
+
+      yield* SubscriptionRef.set(selected, 1)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 1", "orders 2"])
+      expect(yield* readings(orders)).toEqual(["loaded", ["tea"], null, false])
+      expect(yield* Effect.provide(Orders.read(2), built)).toEqual(["ink"])
+      expect(yield* Effect.provide(Orders.read(99), built)).toBeNull()
+    }),
+  )
+
+  it.effect("a plain value is an input too, and two declarations of it share one request", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const first = yield* Effect.provide(Orders.ask(7), built)
+      const second = yield* Effect.provide(Orders.ask(7), built)
+
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 7"])
+      expect(yield* first.status.get).toBe("loading")
+      yield* answer("orders 7", ["pen"])
+      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+    }),
+  )
+
+  it.live("in components: the parent passes a prop, the child declares its query with it", () =>
+    Effect.gen(function* () {
+      const OrdersOf = View.taking(
+        { userId: Props.Reactive(Schema.Int) },
+        Effect.fnUntraced(function* ({ userId }) {
+          const orders = yield* Orders.ask(userId)
+
+          return {
+            status: orders.status,
+            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+          }
+        }),
+      )(OrdersView)
+      const selected = yield* SubscriptionRef.make(1)
+      const Shelf = View.connect(
+        Effect.fnUntraced(function* () {
+          return {
+            orders: yield* View.child(OrdersOf, {
+              userId: Reactive.fromSubscriptionRef(selected),
+            }),
+          }
+        }),
+      )(ShelfView)
+
+      yield* Testing.mount(Shelf)
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders status"]')?.textContent).toBe("loading"),
+      )
+
+      const found = yield* directory
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      expect(asked.map((each) => each.what)).toEqual(["orders 1"])
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, ["tea", "ink"]))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("2"),
+      )
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+})
+
+describe("server data in a store", () => {
+  it.effect("loads when asked for, once, and is loading, then loaded, as typed states", () =>
+    Effect.gen(function* () {
+      const { built, noted, users, whats, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* readings(shown)).toEqual(["loading", null, null, true])
+      expect(yield* whats).toEqual(["users"])
 
       yield* TestClock.adjust("5 seconds")
-      yield* answer(0, [ada])
-      yield* Effect.yieldNow
+      yield* answer("users", [ada])
 
-      expect(yield* users.state.get).toEqual({
-        status: "loaded",
-        value: [ada],
-        error: null,
-        loadedAt: 5000,
-        request: 1,
-      })
+      expect(yield* readings(shown)).toEqual(["loaded", [ada], null, false])
+      expect(Object.values(yield* users.select.entries.get)).toEqual([
+        { status: "loaded", value: [ada], error: null, loadedAt: 5000, request: 1, input: null },
+      ])
       expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name])).toEqual([
         ["command", "test/Users/requested"],
         ["command", "test/Users/loaded"],
@@ -2662,179 +2905,156 @@ describe("server data in a store", () => {
 
   it.effect("asking again while it loads is refused and seen, not sent twice", () =>
     Effect.gen(function* () {
-      const { built, noted, users, calls } = yield* opened
+      const { built, noted, users, whats } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
 
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.provide(Users.refetch, built)
+      yield* shown.refetch
       yield* Effect.yieldNow
 
-      expect(yield* calls).toBe(1)
-      expect(yield* users.refused.get).toEqual(
-        Option.some({ action: "requested", reason: "It is already loading", payload: null }),
+      expect(yield* whats).toEqual(["users"])
+      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
+        Option.some("It is already loading"),
       )
       expect((yield* Ref.get(noted)).map((seen) => seen.kind)).toEqual(["command", "refused"])
     }),
   )
 
-  it.effect("stays fresh for its stale time, then loads again when next needed", () =>
+  it.effect("stays fresh for its stale time, counted from when it loaded", () =>
     Effect.gen(function* () {
-      const { built, users, calls, answer } = yield* opened
+      const { built, whats, answer } = yield* opened
 
-      yield* Effect.provide(Users.ensure, built)
+      yield* TestClock.adjust("5 seconds")
+      yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
-      yield* answer(0, [ada])
-      yield* Effect.yieldNow
+      yield* answer("users", [ada])
       yield* TestClock.adjust("1 minute")
-      yield* Effect.provide(Users.ensure, built)
+      yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
-      expect(yield* calls).toBe(1)
+      expect(yield* whats).toEqual(["users"])
 
       yield* TestClock.adjust("1 second")
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.yieldNow
-      expect(yield* calls).toBe(2)
-      expect([yield* users.select.status.get, yield* users.select.value.get]).toEqual([
-        "loading",
-        [ada],
-      ])
 
-      yield* answer(1, [ada, grace])
+      const later = yield* Effect.provide(Users.ask(), built)
+
       yield* Effect.yieldNow
-      expect(yield* users.select.value.get).toEqual([ada, grace])
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(later)).toEqual(["loading", [ada], null, true])
+      yield* answer("users", [ada, grace])
+      expect(yield* later.value.get).toEqual([ada, grace])
+    }),
+  )
+
+  it.effect("with no stale time it is stale as soon as time has passed", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      yield* answer("stock", 3)
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock"])
+      yield* TestClock.adjust("1 milli")
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
     }),
   )
 
   it.effect("a failure is a typed state, and the next need tries again", () =>
     Effect.gen(function* () {
-      const { built, users, calls, refuse, answer } = yield* opened
+      const { built, whats, refuse, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
 
-      yield* Effect.provide(Users.ensure, built)
       yield* Effect.yieldNow
-      yield* refuse(0, "The directory is down")
-      yield* Effect.yieldNow
+      yield* refuse("users", "The directory is down")
+      expect(yield* readings(shown)).toEqual(["failed", null, "The directory is down", false])
 
-      expect([yield* users.select.status.get, yield* users.select.error.get]).toEqual([
-        "failed",
-        "The directory is down",
-      ])
-
-      yield* Effect.provide(Users.ensure, built)
+      yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
-      expect(yield* calls).toBe(2)
-      yield* answer(1, [grace])
-      yield* Effect.yieldNow
-      expect([
-        yield* users.select.status.get,
-        yield* users.select.value.get,
-        yield* users.select.error.get,
-      ]).toEqual(["loaded", [grace], null])
+      expect(yield* whats).toEqual(["users", "users"])
+      yield* answer("users", [grace])
+      expect(yield* readings(shown)).toEqual(["loaded", [grace], null, false])
     }),
   )
 
-  it.effect("an answer to an earlier request is refused", () =>
+  it.effect("an answer to an earlier request, or to nothing that was asked, is refused", () =>
     Effect.gen(function* () {
       const { built, users } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+      const [key] = Object.keys((yield* users.state.get).entries)
 
-      yield* Effect.provide(Users.ensure, built)
-      yield* Effect.yieldNow
-      yield* users.commands.loaded({ request: 0, value: [grace], at: 1 })
-      expect(yield* users.select.status.get).toBe("loading")
-      yield* users.commands.failed({ request: 7, error: "late" })
-      expect(yield* users.select.status.get).toBe("loading")
-      expect(yield* users.refused.get).toEqual(
-        Option.some({
-          action: "failed",
-          reason: "This answers an earlier request",
-          payload: { request: 7, error: "late" },
-        }),
+      yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
+      expect(yield* shown.status.get).toBe("loading")
+      yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
+      expect(yield* shown.status.get).toBe("loading")
+      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
+        Option.some("This answers an earlier request"),
       )
     }),
   )
 
   it.effect("a command in another store invalidates it, and it loads again at once", () =>
     Effect.gen(function* () {
-      const { built, users, roster, calls, answer } = yield* opened
+      const { built, roster, whats, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
 
-      yield* Effect.provide(Users.ensure, built)
       yield* Effect.yieldNow
-      yield* answer(0, [ada])
-      yield* Effect.yieldNow
-
+      yield* answer("users", [ada])
       yield* roster.commands.renamed()
       yield* Effect.yieldNow
       yield* Effect.yieldNow
-      expect(yield* calls).toBe(2)
-      expect(yield* users.state.get).toMatchObject({
-        status: "loading",
-        value: [ada],
-        loadedAt: null,
-      })
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
 
-      yield* answer(1, [grace])
-      yield* Effect.yieldNow
-      expect(yield* users.select.value.get).toEqual([grace])
-    }),
-  )
-
-  it.effect("with no stale time it is stale as soon as time has passed", () =>
-    Effect.gen(function* () {
-      const built = yield* Layer.build(
-        Always.live.pipe(
-          Layer.provideMerge(Directory.layer),
-          Layer.provide(SecureRandom.layerWebCrypto),
-        ),
-      )
-      const directory = yield* Effect.provide(Effect.service(Directory), built)
-
-      yield* Effect.provide(Always.ensure, built)
-      yield* Effect.yieldNow
-      yield* Effect.flatMap(Ref.get(directory.asked), (asked) =>
-        Effect.forEach(asked, (waiting) => Deferred.succeed(waiting, [ada])),
-      )
-      yield* Effect.yieldNow
-      yield* Effect.provide(Always.ensure, built)
-      yield* Effect.yieldNow
-      expect(yield* Ref.get(directory.asked)).toHaveLength(1)
-      yield* TestClock.adjust("1 milli")
-      yield* Effect.provide(Always.ensure, built)
-      yield* Effect.yieldNow
-      expect(yield* Ref.get(directory.asked)).toHaveLength(2)
+      yield* answer("users", [grace])
+      expect(yield* shown.value.get).toEqual([grace])
     }),
   )
 
   it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
     Effect.gen(function* () {
-      const Shown = Users.beside(
+      const Shown = Stock.beside(
         View.connect(
           Effect.fnUntraced(function* () {
-            const users = yield* Users
-
-            yield* Users.ensure
+            const stock = yield* Stock.ask()
 
             return {
-              label: "users",
-              count: Reactive.map(users.select.value, (value) => value?.length ?? 0),
-              onAdd: users.commands.requested(),
+              status: stock.status,
+              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
             }
           }),
-        )(TallyView),
+        )(OrdersView),
       )
 
       yield* Testing.mount(Shown)
-      yield* Testing.find("button", "Add to users")
 
-      const directory = yield* Directory
-      const asked = yield* Effect.repeat(Ref.get(directory.asked), {
+      const found = yield* directory
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
         until: (all) => all.length === 1,
         schedule: Schedule.spaced("5 millis"),
       })
 
-      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting, [ada, grace]))
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, 12))
       yield* Testing.eventually(() =>
-        expect(document.querySelector('[aria-label="users count"]')?.textContent).toBe("2"),
+        expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("12"),
       )
     }).pipe(Effect.provide(Directory.layer)),
   )
+
+  it("its states and a refusal are plain data with a Schema", () => {
+    expect(
+      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
+    ).toEqual([true, true, true, true, false])
+    expect(
+      Schema.is(Store.Refusal)({
+        action: "requested",
+        reason: "It is already loading",
+        payload: null,
+      }),
+    ).toBe(true)
+    expect(Schema.is(Store.Refusal)({ action: "requested" })).toBe(false)
+  })
 })
 ```
 

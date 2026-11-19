@@ -319,21 +319,24 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                         | What it does                                                                              |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { success, failure, load, staleAfter })` | Declares the query: Schemas for what it loads and how it fails, the Effect that loads it. |
-| `Self.live`                                                      | Its layer, for the whole app.                                                             |
-| `Self.beside(component)`                                         | The query beside one component, as `.with` does for a store.                              |
-| `Self.ensure`                                                    | Loads when idle, failed or older than `staleAfter`. Call it where the data is needed.     |
-| `Self.refetch`, `Self.invalidate`                                | Load again now; mark stale and load again.                                                |
-| `Self.invalidatedBy(action)`                                     | A reaction for another store's layer: that action invalidates this query.                 |
+| Function                                                                | What it does                                                                                         |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })` | Declares the query: Schemas for its input, what it loads and how it fails, and `load(input)`.        |
+| `Self.ask(input)`                                                       | Declares, in a component's Effect, that this input is needed. Returns a handle at once.              |
+| `Self.read(input)`                                                      | The loaded value for an input, or null. For another store's after-effect.                            |
+| `Self.live`                                                             | Its layer, for the whole app.                                                                        |
+| `Self.beside(component)`                                                | The query beside one component, as `.with` does for a store.                                         |
+| `Self.invalidate`, `Self.invalidatedBy(action)`                         | Load everything it holds again; a reaction for another store's layer that does so after that action. |
 
-The service has `select.status` (`idle`, `loading`, `loaded`, `failed`), `select.value`,
-`select.error`, `select.loading` and the store's own `commands`, `log` and `refused`. One request
-runs at a time (a second is refused) and an answer to an earlier request is refused. Another
-store's action reads the loaded data in its after-effect: `const users = yield* UsersQuery`.
-Not built yet: queries keyed by parameters, optimistic updates on a query, retries, dropping
-unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
+`ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
+means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
+`loaded` or `failed`), `value`, `error`, `loading` and `refetch`, all reactive. It asks again
+when the input changes; an input that is still fresh is a cache hit. One request runs for each
+input at a time (a second is refused) and an answer to an earlier request is refused. Because
+nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
+and a query whose input comes from another query's value waits only for that value.
+Not built yet: refetch on focus and reconnect, pagination, optimistic updates on a query,
+retries, dropping unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ## Backend
 

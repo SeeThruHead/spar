@@ -28,7 +28,6 @@ const opened = Effect.gen(function* () {
   return {
     built,
     noted,
-    users: yield* Effect.provide(Effect.service(UsersQuery), built),
     store: yield* Effect.provide(Effect.service(PeopleStore), built),
   }
 })
@@ -36,11 +35,11 @@ const opened = Effect.gen(function* () {
 describe("people: server data in a store, used by another store's action", () => {
   it.effect("Export CSV takes only the selection and reads the emails from the users store", () =>
     Effect.gen(function* () {
-      const { built, noted, users, store } = yield* opened
+      const { built, noted, store } = yield* opened
+      const users = yield* Effect.provide(UsersQuery.ask(), built)
 
-      yield* Effect.provide(UsersQuery.ensure, built)
       yield* TestClock.adjust("40 millis")
-      expect(yield* users.select.value.get).toEqual(people)
+      expect(yield* users.value.get).toEqual(people)
 
       yield* store.commands.toggled(123)
       yield* store.commands.toggled(124)

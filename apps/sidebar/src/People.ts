@@ -5,9 +5,10 @@ import { PeopleView, PersonRowView } from "./PeopleView.tsx"
 import { Server } from "./server/Server.ts"
 
 export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
+  input: Schema.Void,
   success: Schema.Array(User),
   failure: ServerUnreachable,
-  load: Effect.flatMap(Effect.service(Server), (server) => server.users),
+  load: () => Effect.flatMap(Effect.service(Server), (server) => server.users),
   staleAfter: "30 seconds",
 }) {}
 
@@ -58,30 +59,32 @@ const lineOf = (user: User): string => `${user.name},${user.email}`
 export const exportsCsv = Store.after(
   PeopleStore.actions.exportRequested,
   Effect.fnUntraced(function* (_payload, state: State, send) {
-    const users = yield* UsersQuery
-    const loaded = yield* users.select.value.get
+    const loaded = yield* UsersQuery.read()
 
     yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
   }),
 )
 
 const statusOf = (status: Query.Status): string =>
-  ({ idle: "Not loaded", loading: "Loading", loaded: "Loaded", failed: "Could not load" })[status]
+  ({
+    waiting: "Waiting",
+    loading: "Loading",
+    loaded: "Loaded",
+    failed: "Could not load",
+  })[status]
 
 const told = (refused: Option.Option<Store.Refusal>): string =>
   Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
 
 const PeoplePanel = View.connect(
   Effect.fnUntraced(function* () {
-    const users = yield* UsersQuery
+    const users = yield* UsersQuery.ask()
     const people = yield* PeopleStore
 
-    yield* UsersQuery.ensure
-
     return {
-      status: Reactive.map(users.select.status, statusOf),
+      status: Reactive.map(users.status, statusOf),
       rows: yield* pipe(
-        Reactive.map(users.select.value, (loaded) => loaded ?? []),
+        Reactive.map(users.value, (loaded) => loaded ?? []),
         Reactive.mapBy(
           (user: User) => String(user.id),
           PersonRowView,
@@ -101,7 +104,7 @@ const PeoplePanel = View.connect(
       download: people.select.download,
       refused: Reactive.map(people.refused, told),
       onExport: people.commands.exportRequested(),
-      onRefresh: users.commands.requested(),
+      onRefresh: users.refetch,
     }
   }),
 )(PeopleView)

@@ -51,7 +51,7 @@ The view never runs an Effect and the Effect never writes markup.
 | Show a list                               | `Reactive.mapBy(key, RowView, props)` in the Effect, passed as a `Props.Element`         | `.map` inside JSX                                      |
 | Show one thing or another                 | `Reactive.when` in the Effect, or `View.branch`                                          | A ternary inside JSX                                   |
 | Mount a child that needs services         | `yield* View.child(Child, props)` in the Effect, passed as a `Props.Element`             | Writing a connected component as a JSX tag             |
-| Load data from the server                 | A `Query.Tag`, and `yield* TheQuery.ensure` where it is needed                           | Fetching in a component and passing the result down    |
+| Load data from the server                 | A `Query.Tag`, and `yield* TheQuery.ask(input)` where it is needed                       | Fetching in a component and passing the result down    |
 | Use loaded data in an action              | Read the query store in the action's `Store.after` effect, then `send` the result        | Props or arguments that carry server data              |
 | Stop a command that is wrong right now    | A guard as the third argument of `Store.action`, returning the reason                    | Disabling the button and hoping nothing else sends it  |
 | Run a flow with a wait in it              | A state field, an action that starts it, `Store.after` that waits and `send`s the finish | A lock, a queue, a flag in UI state                    |

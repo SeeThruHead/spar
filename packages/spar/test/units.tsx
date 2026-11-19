@@ -24,3 +24,18 @@ export const PairView = View.make(
     </section>
   ),
 )
+
+export const OrdersView = View.make(
+  "Orders",
+  { status: Props.Reactive(Schema.String), count: Props.Reactive(Schema.Finite) },
+  ({ status, count }) => (
+    <p>
+      <output aria-label="Orders status">{status}</output>
+      <output aria-label="Orders count">{count}</output>
+    </p>
+  ),
+)
+
+export const ShelfView = View.make("Shelf", { orders: Props.Element }, ({ orders }) => (
+  <section>{orders}</section>
+))

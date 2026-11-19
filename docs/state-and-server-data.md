@@ -102,35 +102,95 @@ controls.
 
 React Query plus props is two systems: a cache that components subscribe to, and the app's own
 state, with server data carried between them through props and callbacks. In Spar there is one.
-A query is a store.
+A query is a store, and declaring that a component needs one is a line in that component.
+
+### The natural way works
+
+A parent reads a value from a store and passes it to a child as a prop. The child declares a
+query that uses the prop. That is all anybody writes:
 
 ```ts
-export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
-  success: Schema.Array(User),
+class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
+  input: Schema.Int,
+  success: Schema.Array(Order),
   failure: ServerUnreachable,
-  load: Effect.flatMap(Effect.service(Server), (server) => server.users),
+  load: (userId) => Effect.flatMap(Effect.service(Server), (server) => server.orders(userId)),
   staleAfter: "30 seconds",
 }) {}
+
+const Orders = View.taking(
+  { userId: Props.Reactive(Schema.Int) },
+  Effect.fnUntraced(function* ({ userId }) {
+    const orders = yield* OrdersQuery.ask(userId)
+
+    return { status: orders.status, count: Reactive.map(orders.value, (all) => all?.length ?? 0) }
+  }),
+)(OrdersView)
+
+const Parent = View.connect(
+  Effect.fnUntraced(function* () {
+    const people = yield* PeopleStore
+
+    return { orders: yield* View.child(Orders, { userId: people.select.selectedId }) }
+  }),
+)(ParentView)
 ```
 
-What that gives, each as an entry in the log and a span in the trace:
+There is no loader in another file, no fragment, no compile step and no list of dependencies.
+What makes that enough:
 
-| React Query                          | Spar                                                                                                        |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `status`, `data`, `error`            | `select.status` (`idle`, `loading`, `loaded`, `failed`), `select.value`, `select.error`, each with a Schema |
-| Fetch on mount                       | `yield* UsersQuery.ensure` in the component's Effect: loads when idle, failed or stale, and not otherwise   |
-| `staleTime`                          | `staleAfter`                                                                                                |
-| `refetch()`                          | `UsersQuery.refetch`, or `commands.requested()`                                                             |
-| Deduping identical requests          | One request at a time. A second while loading is refused, visibly ("It is already loading")                 |
-| A late answer overwriting            | Refused: an answer carries the number of the request it answers                                             |
-| `invalidateQueries` after a mutation | `UsersQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                               |
-| Keeps old data while loading         | Yes: `value` stays while `status` is `loading`                                                              |
-| Optimistic update                    | Through `Store.outbox` on an ordinary store. Not on a query store yet                                       |
-| Queries keyed by parameters          | Not yet: one query store holds one value. A query beside a view (`.beside`) gives one for each place        |
-| Retries, garbage collection          | Not built. Retry with a schedule inside `load`                                                              |
+- **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
+  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and nothing in a
+  component's Effect does, so every query in the tree being mounted is declared in the same
+  pass and they all start together. Nesting components does not make a waterfall.
+- **The query runs in its store, not in the component.** The store is provided at the root
+  (`OrdersQuery.live`), so the request and its result outlive the component that asked, and two
+  components that ask for the same input share one request.
+- **The input is a value that changes.** `ask` takes a plain value, a reactive value, or a
+  reactive `Option`. When it changes, the query for the new input starts; going back to an input
+  that is still fresh is a cache hit.
+- **A real dependency is an input that is not there yet.** Give `ask` a reactive `Option` made
+  from another query's value and it is `waiting` until that value arrives, then starts at once.
+  That is the only waterfall there is, and it is visible as a state.
 
-Place it like any store: `UsersQuery.live` in the app's layers, or
-`UsersQuery.beside(component)` to ship it with the view that shows it.
+```ts
+const users = yield * UsersQuery.ask()
+const stock = yield * StockQuery.ask()
+const first = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+const orders = yield * OrdersQuery.ask(first)
+```
+
+Users and stock start together. Orders starts the moment users has answered, whether or not
+stock has. The test that controls the order of the answers and checks exactly that is
+`packages/spar/test/query.test.ts`.
+
+The one line of the natural version that matters: the prop has to be passed as the reactive
+value it is (`Props.Reactive`), not read out into a plain number first. A plain number works as
+an input, but it cannot change and it does not know where it came from.
+
+### What a query gives
+
+Each of these is an entry in the log and a span in the trace.
+
+| React Query                           | Spar                                                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `useQuery` in a component             | `yield* TheQuery.ask(input)` in the component's Effect                                        |
+| `status`, `data`, `error`             | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading` |
+| Query keys                            | The input, with a Schema. The cache is keyed by its encoded value                             |
+| `staleTime`                           | `staleAfter`                                                                                  |
+| `refetch()`                           | The handle's `refetch`                                                                        |
+| Deduping identical requests           | One request for each input at a time. A second while loading is refused, visibly              |
+| A late answer overwriting a newer one | Refused: an answer carries the number of the request it answers                               |
+| `invalidateQueries` after a mutation  | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                   |
+| Keeps old data while loading          | Yes: `value` stays while `status` is `loading`                                                |
+| `enabled: !!id` for a dependent query | Pass a reactive `Option`: the query is `waiting` while it is none                             |
+| Optimistic update                     | Through `Store.outbox` on an ordinary store. Not on a query store yet                         |
+| Refetch on focus and reconnect        | Not yet                                                                                       |
+| Pagination and infinite lists         | Not yet                                                                                       |
+| Retries, dropping unused data         | Not built. Retry with a schedule inside `load`                                                |
+
+Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
+ship it with the view that shows it.
 
 ### Another store's action reads it directly
 
@@ -141,8 +201,7 @@ rows are selected, and "Export CSV" is one command with no arguments:
 export const exportsCsv = Store.after(
   PeopleStore.actions.exportRequested,
   Effect.fnUntraced(function* (_payload, state: State, send) {
-    const users = yield* UsersQuery
-    const loaded = yield* users.select.value.get
+    const loaded = yield* UsersQuery.read()
 
     yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
   }),
@@ -150,7 +209,7 @@ export const exportsCsv = Store.after(
 ```
 
 The view calls `people.commands.exportRequested()`. The store takes the selection from its own
-state and the emails from the users store. No prop carries a user, and the view never sees an
+state and the emails from the users query. No prop carries a user, and the view never sees an
 email it does not draw. The request and the result are one trace
 (`apps/sidebar/src/People.ts`, `apps/sidebar/test/people.test.ts`).
 
@@ -164,20 +223,21 @@ Foldkit's side is read from the installed package (0.170.0): `foldkit/asyncData`
 experimental `foldkit/experimental/query`, which its "API Cache Query" example is built on. Its
 plain "API Cache" example does the same by hand with `AsyncData` fields in the Model.
 
-|                         | Foldkit                                                                                                            | Spar                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Where server data lives | In the one Model, as a Query submodel holding an `AsyncData` value                                                 | In a query store                                                                                 |
-| Declaring one           | `Query.define({ name, data, error, execute })`, with `args` for a keyed one                                        | `Query.Tag<Self>()(key, { success, failure, load, staleAfter })`                                 |
-| States                  | `AsyncData`: `Idle`, `Loading`, `Refreshing(data)`, `Failure(error)`, `Stale(error, data)`, `Success(data)`        | `status` of `idle`, `loading`, `loaded`, `failed`, with `value` and `error` beside it            |
-| Wiring it in            | The parent adds the submodel to its Model, lifts the query's update into its own, and folds the completion Message | Provide the layer, or use `.beside(component)`. Nothing is folded by hand                        |
-| Loading                 | `loadIfMissing`, `revalidate`, `revalidateOrLoad` return the next Model and a Command from `update`                | `ensure`, `refetch`, `invalidate` are Effects; `invalidatedBy` ties it to another store's action |
-| A late answer           | A generation number on each fetch                                                                                  | A request number on each answer, refused when it is not the current one                          |
-| Stale time              | Not in the query's config as shipped: revalidation is asked for                                                    | `staleAfter`                                                                                     |
-| Keyed by arguments      | Yes (`KeyedQuery`)                                                                                                 | No                                                                                               |
-| Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An action's after-effect yields the other store and reads its selector                           |
+|                         | Foldkit                                                                                                            | Spar                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Where server data lives | In the one Model, as a Query submodel holding an `AsyncData` value                                                 | In a query store                                                                         |
+| Declaring one           | `Query.define({ name, data, error, execute })`, with `args` for a keyed one                                        | `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })`                  |
+| States                  | `AsyncData`: `Idle`, `Loading`, `Refreshing(data)`, `Failure(error)`, `Stale(error, data)`, `Success(data)`        | `status` of `waiting`, `loading`, `loaded`, `failed`, with `value` and `error` beside it |
+| Wiring it in            | The parent adds the submodel to its Model, lifts the query's update into its own, and folds the completion Message | Provide the layer, or use `.beside(component)`. Nothing is folded by hand                |
+| Asking for data         | `loadIfMissing`, `revalidate`, `revalidateOrLoad` return the next Model and a Command from `update`                | `ask(input)` in the component that needs it; `invalidatedBy` ties it to another store    |
+| A late answer           | A generation number on each fetch                                                                                  | A request number on each answer, refused when it is not the current one                  |
+| Stale time              | Not in the query's config as shipped: revalidation is asked for                                                    | `staleAfter`                                                                             |
+| Keyed by arguments      | Yes (`KeyedQuery`)                                                                                                 | Yes: the input                                                                           |
+| A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
+| Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An action's after-effect calls `TheQuery.read(input)`                                    |
 
-Where Foldkit is ahead: keyed queries, and `AsyncData` tells "refreshing with old data" and
-"failed but still holding old data" apart as states of their own, where Spar leaves you to read
-`status` and `value` together. Its query API is marked experimental. Where Spar is ahead: nothing
-is lifted or folded by hand, a stale time is declared, and a refused request or a late answer is
-visible in the log.
+Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
+holding old data" apart as states of their own, where Spar leaves you to read `status` and
+`value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
+folded by hand, a stale time is declared, a dependent query needs no code, and a refused request
+or a late answer is visible in the log.
