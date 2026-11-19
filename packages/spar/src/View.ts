@@ -1,4 +1,5 @@
 import { Context, Effect, Predicate, Scope, SubscriptionRef } from "effect"
+import type { Schema } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -9,6 +10,7 @@ import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { Hydrating, OnServer } from "./internal/server.ts"
 import { RowKey, UiTree } from "./internal/uiTree.ts"
 import { ViewScope } from "./internal/viewScope.ts"
+import type { Fields } from "./Props.ts"
 
 export type View<Props> = (props: Props) => Element
 
@@ -22,7 +24,7 @@ export type Mountable<Props, E = never, R = never, ViewProps = never> =
   | (View<Props> & View<ViewProps>)
   | Component<Props, E, R, ViewProps>
 
-const make = <Props, E, R, ViewProps>(
+const component = <Props, E, R, ViewProps>(
   view: View<ViewProps>,
   mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>,
 ): Component<Props, E, R, ViewProps> => ({ [TypeId]: TypeId, view, mount })
@@ -64,8 +66,25 @@ const inViewScope = <A, E, Requirements>(
     )
   })
 
+export type Made<F extends Fields> = View<Schema.Struct<F>["Type"]> & {
+  readonly displayName: string
+  readonly props: F
+}
+
+export const make = <const F extends Fields>(
+  name: string,
+  props: F,
+  draw: (props: Schema.Struct<F>["Type"]) => Element,
+): Made<F> =>
+  Object.assign((given: Schema.Struct<F>["Type"]) => draw(given), { displayName: name, props })
+
+const givenName = (view: { readonly name: string }): string =>
+  Predicate.hasProperty(view, "displayName") && Predicate.isString(view.displayName)
+    ? view.displayName
+    : view.name
+
 const spanName = (view: { readonly name: string }): string =>
-  view.name === "" ? "View (unnamed)" : view.name
+  givenName(view) === "" ? "View (unnamed)" : givenName(view)
 
 type Extra<Props, ViewProps> = [Props] extends [never]
   ? never
@@ -80,7 +99,7 @@ export const connect =
   <ViewProps = Props>(
     view: View<ViewProps> & View<Props> & OnlyWhatTheViewTakes<Props, ViewProps>,
   ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
-    make<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
+    component<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
       Effect.withSpan(inViewScope(Effect.map(props(outer), view), spanName(view)), spanName(view), {
         captureStackTrace: false,
       }),
@@ -91,7 +110,7 @@ export const mapProps =
   <E = never, R = never, ViewProps = never>(
     self: Mountable<Props, E, R, ViewProps>,
   ): Component<Outer, E, R, ViewProps> =>
-    make(viewOf(self), (outer) => child(self, f(outer)))
+    component(viewOf(self), (outer) => child(self, f(outer)))
 
 export const branch =
   <Props, E2 = never, R2 = never>(
@@ -101,7 +120,7 @@ export const branch =
   <E = never, R = never, ViewProps = never>(
     self: Mountable<Props, E, R, ViewProps>,
   ): Component<Props, E | E2, R | R2, ViewProps> =>
-    make<Props, E | E2, R | R2, ViewProps>(viewOf(self), (props) =>
+    component<Props, E | E2, R | R2, ViewProps>(viewOf(self), (props) =>
       test(props) ? child(other, props) : child(self, props),
     )
 
@@ -110,7 +129,7 @@ export const crash =
   <Props, E = never, R = never, ViewProps = never>(
     self: Mountable<Props, E, R, ViewProps>,
   ): Component<Props, E, R | R2, ViewProps> =>
-    make<Props, E, R | R2, ViewProps>(viewOf(self), (props) =>
+    component<Props, E, R | R2, ViewProps>(viewOf(self), (props) =>
       Effect.catchDefect(child(self, props), (defect) =>
         Effect.andThen(report(defect), child(fallback, { defect })),
       ),
@@ -122,7 +141,7 @@ export const recover =
     handler: Mountable<{ readonly error: Err }, never, R2>,
   ) =>
   <Props, E = never, R = never, ViewProps = never>(self: Mountable<Props, E | Err, R, ViewProps>) =>
-    make(viewOf(self), (props: Props) =>
+    component(viewOf(self), (props: Props) =>
       child(self, props).pipe(
         Effect.catchIf(
           (error: E | Err): error is Err => Predicate.isTagged(error, tag),
@@ -145,7 +164,7 @@ export const pending =
   <R = never, ViewProps = never>(
     self: Mountable<Props, never, R, ViewProps>,
   ): Component<Props, never, R, ViewProps> =>
-    make(
+    component(
       viewOf(self),
       Effect.fnUntraced(function* (props: Props) {
         const settled = yield* waitsForContent
@@ -175,7 +194,7 @@ export const pending =
 export const portal = <Props, E = never, R = never, ViewProps = never>(
   self: Mountable<Props, E, R, ViewProps>,
 ): Component<Props, E, Exclude<R, OverlayLayer> | Frame, ViewProps> =>
-  make(
+  component(
     viewOf(self),
     Effect.fnUntraced(function* (props: Props) {
       const onServer = yield* OnServer

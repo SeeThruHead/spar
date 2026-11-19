@@ -21,6 +21,16 @@ const isEffectCall = Schema.is(
   }),
 )
 
+const isViewMake = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("CallExpression"),
+    callee: Schema.Struct({
+      object: Schema.Struct({ name: Schema.Literal("View") }),
+      property: Schema.Struct({ name: Schema.Literal("make") }),
+    }),
+  }),
+)
+
 const jsxTypes: ReadonlySet<string> = new Set(["JSXElement", "JSXFragment"])
 
 const messages = {
@@ -30,8 +40,9 @@ const messages = {
     "A view cannot run an Effect. Do the work in the component's Effect (View.connect) and pass the result in as a prop.",
 } as const satisfies Record<Violation["rule"], string>
 
-const opensHole = (type: string, key: string): boolean => {
+const opensHole = (node: unknown, type: string, key: string): boolean => {
   if (type === "JSXExpressionContainer") return true
+  if (isViewMake(node)) return false
 
   return type === "CallExpression" && key === "arguments"
 }
@@ -57,7 +68,7 @@ const visit = (
   if (found.length > 0) return found
 
   return Object.entries(node).flatMap(([key, value]) =>
-    Array.ensure(value).flatMap((child) => visit(child, inHole || opensHole(node.type, key))),
+    Array.ensure(value).flatMap((child) => visit(child, inHole || opensHole(node, node.type, key))),
   )
 }
 

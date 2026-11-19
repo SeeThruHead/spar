@@ -1,6 +1,6 @@
 ---
 id: spa-5unk
-status: open
+status: in_progress
 deps: [spa-pa0r]
 links: []
 created: 2026-11-19T03:35:14Z
@@ -17,3 +17,9 @@ Schemas for reactive values, actions, elements and handles so a props Schema can
 
 A view without a props Schema does not compile or is rejected by the build check; all apps converted.
 
+
+## Notes
+
+**2026-11-19T03:40:23Z**
+
+Step 1 done: Props module (Reactive, State, Action, Element, Handle, Callback kinds; shown/allShown for the inspector), View.make(name, fields, draw), build check lets JSX be the body of View.make. Left: View.connect takes the outer props Schema; convert every view in every package to View.make; then the build check rejects a plain function view (proof by build) and a connect without a Schema (proof by types).
