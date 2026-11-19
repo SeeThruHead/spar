@@ -231,6 +231,8 @@ describe("one log of everything that happened", () => {
         log: Reactive.succeed([]),
         viewing: Reactive.succeed(null),
         travelTo: (seq) => Ref.update(sentTo, (all) => [...all, seq]),
+        hold: Effect.succeed(Effect.void),
+        forkAt: () => Effect.void,
         load: () => Effect.void,
         run: () => Effect.void,
       })

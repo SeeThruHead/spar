@@ -5,6 +5,7 @@ import {
   Formatter,
   Layer,
   Option,
+  Order,
   Predicate,
   Record,
   Schema,
@@ -26,6 +27,7 @@ import {
   OutlineView,
   PanelView,
   StoreView,
+  BranchView,
   TimelineView,
   ToolsView,
   TraceView,
@@ -58,6 +60,16 @@ export const OutboxShown = Props.kind(
   Props.named("outbox"),
 )
 
+export const Branch = Schema.Struct({
+  id: Schema.Int,
+  name: Schema.String,
+  from: Schema.NullOr(Schema.Int),
+  moments: Schema.Int,
+  current: Schema.Boolean,
+})
+
+export type Branch = typeof Branch.Type
+
 export class Registry extends Context.Service<
   Registry,
   {
@@ -68,6 +80,10 @@ export class Registry extends Context.Service<
     readonly uiState: () => UiState.Snapshot
     readonly setUi: (path: UiState.Path, name: string, value: Schema.Json) => boolean
     readonly follow: (tree: ReturnType<typeof UiState.makeTree>) => void
+    readonly branches: Reactive.Reactive<ReadonlyArray<Branch>>
+    readonly fork: Effect.Effect<void>
+    readonly switchTo: (id: number) => Effect.Effect<void>
+    readonly step: (by: -1 | 1) => Effect.Effect<void>
   }
 >()("spar/Devtools/Registry") {}
 
@@ -77,11 +93,39 @@ type Remembered = {
   readonly stores: Readonly<Record<string, number>>
 }
 
+type Named = { readonly id: number; readonly name: string; readonly from: number | null }
+
+type Parked = Named & {
+  readonly remembered: ReadonlyArray<Remembered>
+  readonly ui: UiState.Snapshot
+  readonly resume: Effect.Effect<void>
+}
+
 type Past = {
   readonly remembered: ReadonlyArray<Remembered>
   readonly viewing: number | null
   readonly live: UiState.Snapshot
+  readonly branch: Named
+  readonly others: ReadonlyArray<Parked>
+  readonly made: number
 }
+
+const main: Named = { id: 0, name: "Main", from: null }
+
+const branchesOf = (now: Past): ReadonlyArray<Branch> =>
+  Array.sort(
+    [
+      { ...now.branch, moments: now.remembered.length, current: true },
+      ...now.others.map((parked) => ({
+        id: parked.id,
+        name: parked.name,
+        from: parked.from,
+        moments: parked.remembered.length,
+        current: false,
+      })),
+    ],
+    Order.mapInput(Order.Number, (branch: Branch) => branch.id),
+  )
 
 const keepMoments = 1000
 
@@ -103,7 +147,14 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
     const first = yield* UiState.Tree
     const trees = Cell.make(first)
     const stores = Cell.make<ReadonlyArray<Store.Inspected>>([])
-    const past = Cell.make<Past>({ remembered: [], viewing: null, live: [] })
+    const past = Cell.make<Past>({
+      remembered: [],
+      viewing: null,
+      live: [],
+      branch: main,
+      others: [],
+      made: 0,
+    })
 
     const record = Effect.fnUntraced(function* (noted: Timeline.Noted) {
       const tree = yield* UiState.Tree
@@ -159,7 +210,98 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       })
     })
 
+    const held = Effect.suspend(() =>
+      Effect.map(
+        Effect.forEach(stores.read(), (store) => store.hold),
+        (restorers) => Effect.all(restorers, { discard: true }),
+      ),
+    )
+
+    const parked = (before: Past, resume: Effect.Effect<void>): Parked => ({
+      ...before.branch,
+      remembered: before.remembered,
+      ui: before.viewing === null ? trees.read().snapshot() : before.live,
+      resume,
+    })
+
+    const forkFrom = Effect.fnUntraced(function* (before: Past, kept: Remembered) {
+      const resume = yield* held
+
+      yield* Effect.forEach(
+        stores.read(),
+        (store) =>
+          store.forkAt(Option.getOrElse(Record.get(kept.stores, store.key), () => store.base)),
+        { discard: true },
+      )
+      past.write({
+        remembered: before.remembered.filter((other) => other.moment.seq <= kept.moment.seq),
+        viewing: null,
+        live: [],
+        branch: { id: before.made + 1, name: `Fork ${before.made + 1}`, from: kept.moment.seq },
+        others: [...before.others, parked(before, resume)],
+        made: before.made + 1,
+      })
+    })
+
+    const fork = Effect.suspend(() => {
+      const before = past.read()
+
+      return Option.match(
+        Option.orElse(
+          Array.findFirst(before.remembered, (kept) => kept.moment.seq === before.viewing),
+          () => Array.last(before.remembered),
+        ),
+        { onNone: () => Effect.void, onSome: (kept) => forkFrom(before, kept) },
+      )
+    })
+
+    const resumeIn = Effect.fnUntraced(function* (before: Past, target: Parked) {
+      const resume = yield* held
+      const leaving = parked(before, resume)
+
+      yield* target.resume
+      trees.read().restore(target.ui)
+      past.write({
+        ...before,
+        remembered: target.remembered,
+        viewing: null,
+        live: [],
+        branch: { id: target.id, name: target.name, from: target.from },
+        others: [...before.others.filter((other) => other.id !== target.id), leaving],
+      })
+    })
+
+    const switchTo = (id: number) =>
+      Effect.andThen(
+        travelTo(null),
+        Effect.suspend(() => {
+          const before = past.read()
+
+          return Option.match(
+            Array.findFirst(before.others, (other) => other.id === id),
+            { onNone: () => Effect.void, onSome: (target) => resumeIn(before, target) },
+          )
+        }),
+      )
+
+    const step = (by: -1 | 1) =>
+      Effect.suspend(() => {
+        const now = past.read()
+
+        return travelTo(
+          neighbour(
+            now.remembered.map((kept) => kept.moment.seq),
+            now.viewing,
+            by,
+          ),
+        )
+      })
+
     return Context.make(Registry, {
+      branches: Reactive.map(fromCell(past), branchesOf),
+      fork,
+      switchTo,
+      step,
       stores: fromCell(stores),
       moments: Reactive.map(fromCell(past), (now) => now.remembered.map((kept) => kept.moment)),
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
@@ -306,6 +448,11 @@ export const Panel = View.connect(
 const summaryOfMoment = (moment: Timeline.Moment): string =>
   `${moment.kind} ${moment.name} ${Formatter.formatJson(moment.detail)}`
 
+export const detailOfBranch = (branch: Branch): string =>
+  branch.from === null
+    ? `${branch.moments} moments`
+    : `${branch.moments} moments, forked at ${branch.from}`
+
 const neighbour = (
   seqs: ReadonlyArray<number>,
   viewing: number | null,
@@ -317,17 +464,16 @@ export const TimelinePanel = View.taking(
   { onTrace: Props.Callback(Schema.String) },
   Effect.fnUntraced(function* ({ onTrace }) {
     const registry = yield* Registry
-    const stepped = Effect.fnUntraced(function* (by: number) {
+    const stepped = Effect.fnUntraced(function* (by: -1 | 1) {
+      yield* registry.step(by)
+
       const moments = yield* registry.moments.get
       const viewing = yield* registry.viewing.get
+      const traces = moments
+        .filter((moment) => moment.seq === viewing && moment.traceId !== "")
+        .map((moment) => moment.traceId)
 
-      yield* registry.travelTo(
-        neighbour(
-          moments.map((moment) => moment.seq),
-          viewing,
-          by,
-        ),
-      )
+      yield* Effect.forEach(traces, (traceId) => run(onTrace(traceId)), { discard: true })
     })
 
     return {
@@ -349,9 +495,23 @@ export const TimelinePanel = View.taking(
           }),
         ),
       ),
+      branches: yield* pipe(
+        registry.branches,
+        Reactive.mapBy(
+          (branch: Branch) => String(branch.id),
+          BranchView,
+          (branch, id) => ({
+            name: Reactive.map(branch, (now) => now.name),
+            detail: Reactive.map(branch, detailOfBranch),
+            current: Reactive.map(branch, (now) => now.current),
+            onSwitch: registry.switchTo(Number(id)),
+          }),
+        ),
+      ),
       onBack: stepped(-1),
       onForward: stepped(1),
       onLive: registry.travelTo(null),
+      onFork: registry.fork,
     }
   }),
 )(TimelineView)

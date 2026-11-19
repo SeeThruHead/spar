@@ -89,23 +89,45 @@ export const TraceView = View.make(
   ),
 )
 
+export const BranchView = View.make(
+  "BranchView",
+  {
+    name: Props.Reactive(Schema.String),
+    detail: Props.Reactive(Schema.String),
+    current: Props.Reactive(Schema.Boolean),
+    onSwitch: Props.Action,
+  },
+  ({ name, detail, current, onSwitch }) => (
+    <li data-current={current}>
+      <button onClick={onSwitch} aria-pressed={current}>
+        {name}
+      </button>{" "}
+      <span>{detail}</span>
+    </li>
+  ),
+)
+
 export const TimelineView = View.make(
   "TimelineView",
   {
     position: Props.Reactive(Schema.String),
     moments: Props.Element,
+    branches: Props.Element,
     onBack: Props.Action,
     onForward: Props.Action,
     onLive: Props.Action,
+    onFork: Props.Action,
   },
-  ({ position, moments, onBack, onForward, onLive }) => (
+  ({ position, moments, branches, onBack, onForward, onLive, onFork }) => (
     <section aria-label="Everything that happened">
       <h2>Everything that happened</h2>
       <p>
         <output aria-label="Timeline position">{position}</output>{" "}
         <button onClick={onBack}>Earlier</button> <button onClick={onForward}>Later</button>{" "}
-        <button onClick={onLive}>Back to now</button>
+        <button onClick={onLive}>Back to now</button>{" "}
+        <button onClick={onFork}>Fork from here</button>
       </p>
+      <ul aria-label="Branches">{branches}</ul>
       <ol>{moments}</ol>
     </section>
   ),

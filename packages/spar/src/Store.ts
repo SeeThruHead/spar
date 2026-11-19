@@ -101,6 +101,8 @@ export type Inspected = {
   readonly log: Reactive<ReadonlyArray<Entry>>
   readonly viewing: Reactive<number | null>
   readonly travelTo: (seq: number | null) => Effect.Effect<void>
+  readonly hold: Effect.Effect<Effect.Effect<void>>
+  readonly forkAt: (seq: number) => Effect.Effect<void>
   readonly load: (
     entries: ReadonlyArray<Entry>,
   ) => Effect.Effect<void, Schema.SchemaError | UnknownAction>
@@ -240,6 +242,31 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
             borrowed: { log: entries, trail },
           }),
         )
+      const hold = Effect.sync(() => {
+        const held = cell.read()
+
+        return Effect.sync(() => cell.write({ ...held, viewing: null, borrowed: null }))
+      })
+      const forkAt = (seq: number): Effect.Effect<void> =>
+        Effect.sync(() => {
+          const held = cell.read()
+
+          cell.write(
+            Option.match(
+              Array.findFirst(held.trail, (step) => step.seq === seq),
+              {
+                onNone: () => held,
+                onSome: (step) => ({
+                  state: step.state,
+                  log: held.log.filter((entry) => entry.seq <= seq),
+                  trail: held.trail.filter((kept) => kept.seq <= seq),
+                  viewing: null,
+                  borrowed: null,
+                }),
+              },
+            ),
+          )
+        })
 
       const absorb = Effect.gen(function* () {
         const applied = yield* Ref.get(sequence)
@@ -409,6 +436,8 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         log,
         viewing,
         travelTo,
+        hold,
+        forkAt,
         load,
         run: (name, payload) =>
           Record.get(named, name).pipe(

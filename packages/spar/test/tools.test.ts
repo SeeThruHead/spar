@@ -173,7 +173,7 @@ const spans = (): ReadonlyArray<string> =>
   )
 
 const listed = (): ReadonlyArray<string | null | undefined> =>
-  [...screen.getByLabelText("Everything that happened").querySelectorAll("li")].map(
+  [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
     (item) => item.querySelector("code")?.textContent,
   )
 
@@ -201,7 +201,7 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.click("button", "Jump to 1")
         yield* shows("0", "hi", "At 1")
         expect(
-          [...screen.getByLabelText("Everything that happened").querySelectorAll("li")].map(
+          [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
             (item) => item.getAttribute("aria-current"),
           ),
         ).toEqual(["true", "false", "false"])
