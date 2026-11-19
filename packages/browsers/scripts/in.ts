@@ -8,11 +8,19 @@ const endpoint = `ws://127.0.0.1:${port}/`
 
 const command = Bun.argv.slice(2)
 
-const runtimes = ["podman", "docker"].flatMap((name) => {
-  const found = Bun.which(name)
+type Runtime = ReadonlyArray<string>
 
-  return found === null ? [] : [found]
-})
+const found = (name: string, extra: ReadonlyArray<string>): ReadonlyArray<Runtime> => {
+  const program = Bun.which(name)
+
+  return program === null ? [] : [[program, ...extra]]
+}
+
+const runtimes: ReadonlyArray<Runtime> = [
+  ...found("podman", []),
+  ...found("podman", ["--storage-opt", "ignore_chown_errors=true"]),
+  ...found("docker", []),
+]
 
 const wantsContainer = engine() === "webkit" && process.platform === "linux"
 
@@ -35,11 +43,14 @@ const onHost = (extra: Readonly<Record<string, string>>): Promise<number> =>
     env: { ...Bun.env, ...extra },
   }).exited
 
-const withServerFrom = async (program: string, others: ReadonlyArray<string>): Promise<number> => {
+const withServerFrom = async (
+  program: Runtime,
+  others: ReadonlyArray<Runtime>,
+): Promise<number> => {
   const container = `spar-${engine()}-${process.pid}-${others.length}`
   const server = Bun.spawn(
     [
-      program,
+      ...program,
       "run",
       "--rm",
       "--name",
@@ -59,7 +70,7 @@ const withServerFrom = async (program: string, others: ReadonlyArray<string>): P
     { stdout: "ignore", stderr: "inherit" },
   )
   const stop = async (): Promise<void> => {
-    await Bun.spawn([program, "stop", "--time", "2", container], {
+    await Bun.spawn([...program, "stop", "--time", "2", container], {
       stdout: "ignore",
       stderr: "ignore",
     }).exited
@@ -69,12 +80,12 @@ const withServerFrom = async (program: string, others: ReadonlyArray<string>): P
   if (up) return onHost({ SPAR_BROWSER_SERVER: endpoint }).finally(stop)
 
   await stop()
-  console.error(`${program} could not start the ${engine()} server from ${image}`)
+  console.error(`${program.join(" ")} could not start the ${engine()} server from ${image}`)
 
   return inContainer(others)
 }
 
-const inContainer = (programs: ReadonlyArray<string>): Promise<number> => {
+const inContainer = (programs: ReadonlyArray<Runtime>): Promise<number> => {
   const [first, ...others] = programs
   if (first === undefined) return onHost({})
 
