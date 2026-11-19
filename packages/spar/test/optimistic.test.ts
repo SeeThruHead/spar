@@ -1,0 +1,94 @@
+import { describe, expect, it } from "@effect/vitest"
+import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
+import { KeyValueStore } from "effect/persistence"
+import { Outbox, Query, Store } from "spar"
+
+class Warehouse extends Context.Service<
+  Warehouse,
+  {
+    readonly stock: Ref.Ref<number>
+    readonly asked: Ref.Ref<number>
+    readonly open: Deferred.Deferred<void>
+  }
+>()("test/Warehouse") {
+  static readonly layer = Layer.effect(
+    Warehouse,
+    Effect.all({ stock: Ref.make(3), asked: Ref.make(0), open: Deferred.make<void>() }),
+  )
+}
+
+class Stock extends Query.Tag<Stock>()("test/optimistic/Stock", {
+  input: Schema.Void,
+  success: Schema.Finite,
+  failure: Schema.Never,
+  staleAfter: "1 minute",
+  load: () =>
+    Effect.flatMap(Effect.service(Warehouse), (warehouse) =>
+      Effect.andThen(
+        Ref.update(warehouse.asked, (count) => count + 1),
+        Ref.get(warehouse.stock),
+      ),
+    ),
+}) {}
+
+const State = Schema.Struct({ changes: Schema.Int })
+
+type State = typeof State.Type
+
+class Shelf extends Store.Tag<Shelf>()("test/optimistic/Shelf", {
+  state: State,
+  initialState: { changes: 0 },
+  actions: {
+    restocked: Store.action(Schema.Struct({ to: Schema.Finite }), (state: State): State => ({
+      changes: state.changes + 1,
+    })),
+  },
+  selectors: {},
+}) {}
+
+const layer = Shelf.layer([
+  Stock.patchedBy(
+    Shelf.actions.restocked,
+    () => undefined,
+    (_stock, { to }) => to,
+  ),
+  Store.outbox(
+    Shelf.actions.restocked,
+    Effect.fnUntraced(function* ({ to }) {
+      const warehouse = yield* Warehouse
+
+      yield* Deferred.await(warehouse.open)
+      yield* Ref.set(warehouse.stock, to + 1)
+      yield* Stock.invalidate
+    }),
+  ),
+]).pipe(
+  Layer.provideMerge(Stock.live),
+  Layer.provideMerge(
+    Layer.mergeAll(Warehouse.layer, Outbox.Outbox.layer, SecureRandom.layerWebCrypto),
+  ),
+  Layer.provideMerge(KeyValueStore.layerMemory),
+)
+
+const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boolean) =>
+  Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("5 millis") })
+
+describe("a change shown at once and sent through the outbox", () => {
+  it.live("the query shows the change before the server has it, then what the server says", () =>
+    Effect.gen(function* () {
+      const shelf = yield* Shelf
+      const warehouse = yield* Warehouse
+      const stock = yield* Stock.ask()
+
+      yield* until(stock.value.get, (value) => value === 3)
+      yield* shelf.commands.restocked({ to: 9 })
+      yield* until(stock.value.get, (value) => value === 9)
+      expect([yield* Ref.get(warehouse.stock), yield* Ref.get(warehouse.asked)]).toEqual([3, 1])
+
+      yield* Deferred.succeed(warehouse.open, undefined)
+      yield* until(stock.value.get, (value) => value === 10)
+      expect(yield* Ref.get(warehouse.asked)).toBe(2)
+    }).pipe(Effect.scoped, Effect.provide(layer)),
+  )
+})

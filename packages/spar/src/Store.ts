@@ -69,6 +69,14 @@ export type Reaction<State, R = never> = {
   ) => Effect.Effect<ReadonlyArray<Entry>, never, R>
 }
 
+type Reactions<State, Needs extends ReadonlyArray<unknown>> = {
+  readonly [Index in keyof Needs]: Reaction<State, Needs[Index]>
+}
+
+const listed = <State, Needs extends ReadonlyArray<unknown>>(
+  reactions: Reactions<State, Needs> | undefined,
+): ReadonlyArray<Reaction<State, Needs[number]>> => reactions ?? []
+
 type PayloadOf<A> = A extends {
   readonly decode: (payload: Schema.Json) => Effect.Effect<infer Payload, Schema.SchemaError>
 }
@@ -566,22 +574,30 @@ export const Tag =
     return class extends service {
       static readonly definition = definition
       static readonly actions = definition.actions
-      static readonly layer = <R = never>(reactions: ReadonlyArray<Reaction<State, R>> = []) =>
-        makeLayer(service, key, definition, reactions, seeded(key, definition))
-      static readonly layerFrom = <E, RL, R = never>(
+      static readonly layer = <const Needs extends ReadonlyArray<unknown> = []>(
+        reactions?: Reactions<State, Needs>,
+      ) => makeLayer(service, key, definition, listed(reactions), seeded(key, definition))
+      static readonly layerFrom = <E, RL, const Needs extends ReadonlyArray<unknown> = []>(
         load: Effect.Effect<State, E, RL>,
-        reactions: ReadonlyArray<Reaction<State, R>> = [],
+        reactions?: Reactions<State, Needs>,
       ) =>
-        makeLayer(service, key, definition, reactions, (leftovers) =>
+        makeLayer(service, key, definition, listed(reactions), (leftovers) =>
           Effect.flatMap(load, (loaded) => inMemory(loaded)(leftovers)),
         )
-      static readonly layerDurable = <R = never>(
+      static readonly layerDurable = <const Needs extends ReadonlyArray<unknown> = []>(
         durable: Durable = {},
-        reactions: ReadonlyArray<Reaction<State, R>> = [],
-      ) => makeLayer(service, key, definition, reactions, onDevice(key, definition, durable))
-      static readonly with = <Props, E = never, R = never, ViewProps = never, RR = never>(
+        reactions?: Reactions<State, Needs>,
+      ) =>
+        makeLayer(service, key, definition, listed(reactions), onDevice(key, definition, durable))
+      static readonly with = <
+        Props,
+        E = never,
+        R = never,
+        ViewProps = never,
+        const Needs extends ReadonlyArray<unknown> = [],
+      >(
         self: Mountable<Props, E, R, ViewProps>,
-        reactions: ReadonlyArray<Reaction<State, RR>> = [],
+        reactions?: Reactions<State, Needs>,
       ) =>
         within(
           (place) =>
@@ -590,7 +606,7 @@ export const Tag =
                 service,
                 `${key} @ ${place}`,
                 definition,
-                reactions,
+                listed(reactions),
                 seeded(`${key} @ ${place}`, definition),
               ),
               SecureRandom.layerWebCrypto,

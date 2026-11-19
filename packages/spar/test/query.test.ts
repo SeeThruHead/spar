@@ -104,6 +104,10 @@ class Roster extends Store.Tag<Roster>()("test/Roster", {
   initialState: { renamed: 0 },
   actions: {
     renamed: Store.action(Schema.Void, (state: RosterState) => ({ renamed: state.renamed + 1 })),
+    restocked: Store.action(
+      Schema.Struct({ to: Schema.Finite }),
+      (state: RosterState): RosterState => state,
+    ),
   },
   selectors: {},
 }) {}
@@ -121,7 +125,14 @@ const recording = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    Roster.layer([Users.invalidatedBy(Roster.actions.renamed)]).pipe(
+    Roster.layer([
+      Users.invalidatedBy(Roster.actions.renamed),
+      Stock.patchedBy(
+        Roster.actions.restocked,
+        () => undefined,
+        (_stock, { to }) => to,
+      ),
+    ]).pipe(
       Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live)),
       Layer.provideMerge(Directory.layer),
       Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
@@ -210,6 +221,45 @@ describe("the natural way: a value from one place feeds a query declared in anot
           "test/Orders/loaded",
         ])
       }),
+  )
+
+  it.effect(
+    "another store's command can change what a query holds at once, before the server is asked",
+    () =>
+      Effect.gen(function* () {
+        const { built, whats, answer, roster } = yield* opened
+        const stock = yield* Effect.provide(Stock.ask(), built)
+
+        yield* Effect.yieldNow
+        yield* roster.commands.restocked({ to: 9 })
+        yield* Effect.yieldNow
+        expect(yield* readings(stock)).toEqual(["loading", null, null, true])
+
+        yield* answer("stock", 3)
+        yield* roster.commands.restocked({ to: 9 })
+        yield* Effect.yieldNow
+        expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
+        expect(yield* whats).toEqual(["stock"])
+      }),
+  )
+
+  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const page = yield* SubscriptionRef.make(1)
+      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+
+      yield* Effect.yieldNow
+      expect(yield* orders.latest.get).toBeNull()
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(page, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+
+      yield* answer("orders 2", ["ink"])
+      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
+    }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>

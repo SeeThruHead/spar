@@ -13,7 +13,8 @@ import {
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
 import type { Action } from "./internal/journal.ts"
-import { isReactive, map, succeed, zip } from "./internal/reactive.ts"
+import * as Cell from "./internal/cell.ts"
+import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Events from "./Events.ts"
 import * as Store from "./Store.ts"
@@ -44,6 +45,7 @@ export type Handle<A, E> = {
   readonly value: Reactive<A | null>
   readonly error: Reactive<E | null>
   readonly loading: Reactive<boolean>
+  readonly latest: Reactive<A | null>
   readonly refetch: Effect.Effect<void>
 }
 
@@ -195,6 +197,11 @@ export const Tag =
             })),
           answersAnother,
         ),
+        patched: Store.action(
+          Schema.Struct({ key: Schema.String, value: options.success }),
+          (before: State<A, E>, { key: name, value }): State<A, E> =>
+            settled(before, name, (held) => ({ ...held, value })),
+        ),
         invalidated: Store.action(Schema.Void, (before: State<A, E>): State<A, E> => ({
           entries: Record.map(before.entries, (held) => ({ ...held, loadedAt: null })),
         })),
@@ -318,11 +325,17 @@ export const Tag =
 
       sourced(value, `${key} . value`)
 
+      const firstValue = yield* value.get
+      const kept = Cell.make<A | null>(firstValue)
+
+      yield* observed(value, (now) => kept.write(now ?? kept.read()))
+
       return {
         status: map(held, statusOf),
         value,
         error: map(held, (entryNow) => entryNow?.error ?? null),
         loading: map(held, (entryNow) => entryNow?.status === "loading"),
+        latest: fromCell(kept),
         refetch: Effect.flatMap(wanted.get, (asked) =>
           Effect.forEach(
             Option.toArray(asked),
@@ -342,6 +355,18 @@ export const Tag =
             ),
           ),
       )
+    const patched = Effect.fnUntraced(function* (input: I, patch: (value: A) => A) {
+      const store = yield* Effect.service(base)
+      const now = yield* store.state.get
+      const changed = Option.flatMap(askedFor(Option.some(input)), (asked) =>
+        Option.map(Option.fromNullishOr(now.entries[asked.key]?.value), (value) => ({
+          key: asked.key,
+          value: patch(value),
+        })),
+      )
+
+      yield* Effect.forEach(Option.toArray(changed), store.commands.patched, { discard: true })
+    })
     const invalidate = Effect.gen(function* () {
       const store = yield* Effect.service(base)
       const before = yield* store.state.get
@@ -372,5 +397,11 @@ export const Tag =
       static readonly invalidate = invalidate
       static readonly invalidatedBy = <Other, Payload>(action: Action<Other, Payload>) =>
         Store.after(action, () => invalidate)
+      static readonly patchedBy = <Other, Payload>(
+        action: Action<Other, Payload>,
+        input: (payload: Payload) => I,
+        patch: (value: A, payload: Payload) => A,
+      ) =>
+        Store.after(action, (payload) => patched(input(payload), (value) => patch(value, payload)))
     }
   }
