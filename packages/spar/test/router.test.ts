@@ -18,7 +18,7 @@ import {
 } from "./routes.tsx"
 
 const home = Router.route("/")
-const thread = Router.route("/threads/:id")
+const thread = Router.route("/threads/:id", Schema.Struct({ id: Schema.String }))
 const search = Router.route(
   "/search/:kind",
   Schema.Struct({

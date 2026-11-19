@@ -148,9 +148,14 @@ const make = <Params, Encoded extends Raw>(
   return { [TypeId]: TypeId, pattern, parse, build }
 }
 
+type Paramless<Path extends string> = [ParamNames<Path>] extends [never] ? Path : never
+
 export const route: {
-  <const Path extends string>(path: Path): Route<PathParams<Path>>
-  <Params, Encoded extends Raw>(path: string, schema: Schema.Codec<Params, Encoded>): Route<Params>
+  <const Path extends string>(path: Paramless<Path>): Route<PathParams<Path>>
+  <const Path extends string, Params, Encoded extends Raw & PathParams<Path>>(
+    path: Path,
+    schema: Schema.Codec<Params, Encoded>,
+  ): Route<Params>
 } = <Params, Encoded extends Raw>(
   path: string,
   schema?: Schema.Codec<Params, Encoded>,

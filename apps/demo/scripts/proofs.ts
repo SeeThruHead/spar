@@ -26,7 +26,19 @@ const expectations: ReadonlyArray<Expectation> = [
     file: "route-with-the-wrong-page.ts",
     rule: "Giving a route a page whose props are not that route's params",
     by: "types",
-    expect: 'Route<PathParams<"/people/:name">>',
+    expect: "Route<{ readonly name: string; }>' is not assignable",
+  },
+  {
+    file: "route-params-without-a-schema.ts",
+    rule: "Declaring a route whose path has params without a Schema for them",
+    by: "types",
+    expect: "is not assignable to parameter of type 'never'",
+  },
+  {
+    file: "route-schema-missing-a-path-param.ts",
+    rule: "Giving a route a Schema that lacks a param its path names",
+    by: "types",
+    expect: 'PathParams<"/threads/:id">',
   },
   {
     file: "mount-missing-layer.ts",

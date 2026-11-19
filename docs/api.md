@@ -166,7 +166,7 @@ the submit has worked, and not when the input was invalid or the server refused 
 
 ```ts
 export const home = Router.route("/")
-export const agentRoute = Router.route("/agents/:id")
+export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
 
 page: yield *
   Router.outlet({
@@ -175,7 +175,7 @@ page: yield *
   })
 ```
 
-`Router.route(path, Schema)` decodes path and query params with a Schema. A path ending in `/*` is a
+`Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
 layout that stays mounted while inner pages change. The service has `location`, `go(route, params)`,
 `replace`, `back` and `link(route, params)`. `Router.focusOnChange(handle)` moves focus after a
 navigation. `Router.live(route, Page)` keeps the page mounted while only the query changes and
