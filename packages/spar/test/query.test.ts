@@ -13,6 +13,7 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, Store, Timeline, View } from "spar"
+import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { OrdersView, ShelfView } from "./units.tsx"
 
@@ -333,7 +334,7 @@ describe("server data in a store", () => {
 
   it.effect("stays fresh for its stale time, counted from when it loaded", () =>
     Effect.gen(function* () {
-      const { built, whats, answer } = yield* opened
+      const { built, users, whats, answer } = yield* opened
 
       yield* TestClock.adjust("5 seconds")
       yield* Effect.provide(Users.ask(), built)
@@ -351,9 +352,53 @@ describe("server data in a store", () => {
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["users", "users"])
       expect(yield* readings(later)).toEqual(["loading", [ada], null, true])
+      expect(Object.values(yield* users.select.entries.get).map((held) => held.loadedAt)).toEqual([
+        5000,
+      ])
       yield* answer("users", [ada, grace])
       expect(yield* later.value.get).toEqual([ada, grace])
     }),
+  )
+
+  it.effect("what was invalidated, or failed after it had loaded, is asked for again", () =>
+    Effect.gen(function* () {
+      const { built, users, whats, answer, refuse } = yield* opened
+
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      yield* answer("users", [ada])
+      yield* users.commands.invalidated()
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users"])
+
+      yield* refuse("users", "gone")
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users", "users"])
+    }),
+  )
+
+  it.effect(
+    "everything a query does is marked as data in the trace, with where its input came from",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const spans = yield* Layer.build(Spans.layer())
+        const buffer = Context.get(spans, Spans.SpanBuffer)
+
+        yield* Effect.provide(Effect.provide(Users.ask(), built), spans)
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+
+        const recorded = buffer.recent().filter((span) => span.name.startsWith("test/Users/"))
+
+        expect(recorded.map((span) => [span.name, span.attributes["spar.kind"]])).toEqual([
+          ["test/Users/requested", "data"],
+          ["test/Users/loaded", "data"],
+        ])
+        expect(recorded[0]?.attributes["spar.query.after"]).toBe("")
+      }),
   )
 
   it.effect("with no stale time it is stale as soon as time has passed", () =>
@@ -385,6 +430,7 @@ describe("server data in a store", () => {
       yield* Effect.provide(Users.ask(), built)
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(shown)).toEqual(["loading", null, "The directory is down", true])
       yield* answer("users", [grace])
       expect(yield* readings(shown)).toEqual(["loaded", [grace], null, false])
     }),

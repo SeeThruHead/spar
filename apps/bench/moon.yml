@@ -26,6 +26,11 @@ tasks:
     deps: [build]
     options:
       cache: false
+  navigate:
+    command: bun scripts/navigate.ts
+    deps: [build]
+    options:
+      cache: false
   leaks:
     command: bun scripts/leaks.ts
     deps: [build]

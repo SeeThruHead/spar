@@ -4,5 +4,5 @@
     "jsx": "react-jsx",
     "jsxImportSource": "react"
   },
-  "include": [".", "../shared"]
+  "include": [".", "../nav-react", "../nav-shared", "../shared"]
 }

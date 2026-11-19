@@ -14,6 +14,7 @@
     "llms": "bun scripts/llms.ts",
     "llms:check": "bun scripts/llms.ts --check",
     "bench": "moon run bench:bench",
+    "navigate": "moon run bench:navigate",
     "showcase": "bun run --filter @spar/sidebar showcase",
     "check:affected": "moon run :check --affected",
     "format": "oxfmt",

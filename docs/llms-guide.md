@@ -17,6 +17,12 @@ use over MCP or from a shell.
 If a thing can be done two ways, Spar picks one and refuses the other, at compile time or at
 build time. Do not look for the escape hatch. There is not meant to be one.
 
+## Read this first
+
+"Routes, data and no waterfalls", the part right after this guide, is the one way to load data:
+declare a query, ask for it in the component that needs it, pass values down as reactive props.
+Never fetch in a component's Effect and never wait there.
+
 ## The shape of an app
 
 ```

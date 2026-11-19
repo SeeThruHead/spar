@@ -57,6 +57,10 @@ const examples: ReadonlyArray<readonly [string, string]> = [
     "Tests of a query store: one request at a time, stale time, failure, late answers, invalidation.",
   ],
   [
+    "apps/sidebar/src/Deep.ts",
+    "A page five segments deep: each segment asks for its own data, and the author's query takes its input from the report's answer.",
+  ],
+  [
     "apps/sidebar/src/NotesView.tsx",
     "The view of that unit: a Schema for each prop, JSX and nothing else.",
   ],
@@ -88,6 +92,7 @@ const examples: ReadonlyArray<readonly [string, string]> = [
 
 const body = [
   await read("docs/llms-guide.md"),
+  await part("Routes, data and no waterfalls", "docs/routing-and-data.md"),
   await part("Principles", "docs/principles.md"),
   await part("API reference", "docs/api.md"),
   await part("State, events that interleave, and server data", "docs/state-and-server-data.md"),

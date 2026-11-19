@@ -1,4 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/spar", "src/foldkit", "src/shared", "scripts", "*.ts"]
+  "include": [
+    "src/spar",
+    "src/nav-spar",
+    "src/foldkit",
+    "src/nav-foldkit",
+    "src/shared",
+    "src/nav-shared",
+    "scripts",
+    "*.ts"
+  ]
 }

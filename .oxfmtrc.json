@@ -10,6 +10,7 @@
     "**/artifacts/**",
     "LLMS.md",
     "docs/benchmarks.md",
+    "docs/navigation.md",
     "docs/benchmarks.html",
     "**/lint/fixtures/**",
     "packages/lint/oxlintrc.json"

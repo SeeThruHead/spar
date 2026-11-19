@@ -20,6 +20,8 @@ This repo is private and nothing here is published.
 ## Read
 
 - [LLMS.md](LLMS.md): everything in one file, for agents (`bun run llms` rebuilds it)
+- [Routes, data and no waterfalls](docs/routing-and-data.md): start here. A prop from a store,
+  a query declared beside the component that uses it, and everything loading at once
 - [Getting started](docs/getting-started.md)
 - [State, events that interleave, and server data](docs/state-and-server-data.md): UI state or
   store state, stores as state machines, queries as stores, beside Foldkit and Treflex
