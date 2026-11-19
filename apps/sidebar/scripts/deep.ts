@@ -29,7 +29,7 @@ const address = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4191/"
 
 const browser = await launch()
 
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+const page = await browser.newPage({ viewport: { width: 1440, height: 1500 } })
 
 const independent = ["org", "team", "member", "reports", "report"].map(
   (kind) => `Agents.lookup ${kind}`,
@@ -64,6 +64,13 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await page.getByRole("button", { name: "Refresh trace" }).click()
   await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${root}artifacts/devtools-deep.png` })
+  await page.getByRole("button", { name: "Data", exact: true }).click()
+  await page.getByLabel("Spans").locator("li", { hasText: "input from" }).first().waitFor()
+
+  const data = await page.getByLabel("Spans").locator("li").allInnerTexts()
+
+  await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${root}artifacts/devtools-deep-data.png` })
 
   const traces = new Set(spans.map((span) => span.traceId))
 
@@ -77,6 +84,14 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
       : ["the author lookup started before the report had answered"]),
     ...(whole < 600 ? [] : [`all six lookups took ${whole.toFixed(0)} ms, as if in a row`]),
     ...(traces.size === 1 ? [] : [`the lookups were in ${traces.size} traces`]),
+    ...(data.some(
+      (line) => line.includes("sidebar/Author/requested") && line.includes("input from"),
+    )
+      ? []
+      : [`the data lens did not say what the author's query waited for: ${data.join(" | ")}`]),
+    ...(data.some((line) => line.includes("SegmentView"))
+      ? ["the data lens still showed components"]
+      : []),
   ]
 }
 

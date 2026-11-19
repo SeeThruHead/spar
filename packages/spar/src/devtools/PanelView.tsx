@@ -32,8 +32,9 @@ export const BarView = View.make(
     indent: Props.Reactive(Schema.String),
     left: Props.Reactive(Schema.String),
     width: Props.Reactive(Schema.String),
+    note: Props.Reactive(Schema.String),
   },
-  ({ name, where, took, failed, indent, left, width }) => (
+  ({ name, where, took, failed, indent, left, width, note }) => (
     <li
       data-where={where}
       data-failed={Reactive.map(failed, (bad) => (bad ? "yes" : "no"))}
@@ -43,6 +44,7 @@ export const BarView = View.make(
         <strong>{name}</strong>
         <small>{where}</small>
         <small>{took}</small>
+        <small>{note}</small>
         <small hidden={Reactive.map(failed, (bad) => !bad)} style={{ color: "#b42318" }}>
           failed
         </small>
@@ -67,20 +69,44 @@ export const BarView = View.make(
   ),
 )
 
+const LensView = View.make(
+  "LensView",
+  {
+    name: Schema.String,
+    label: Schema.String,
+    lens: Props.Reactive(Schema.String),
+    onLens: Props.Callback(Schema.String),
+  },
+  ({ name, label, lens, onLens }) => (
+    <button onClick={() => onLens(name)} aria-pressed={Reactive.map(lens, (now) => now === name)}>
+      {label}
+    </button>
+  ),
+)
+
 export const TraceView = View.make(
   "TraceView",
   {
     traceId: Props.Reactive(Schema.String),
     summary: Props.Reactive(Schema.String),
     bars: Props.Element,
+    lens: Props.Reactive(Schema.String),
     onRefresh: Props.Action,
+    onLens: Props.Callback(Schema.String),
   },
-  ({ traceId, summary, bars, onRefresh }) => (
+  ({ traceId, summary, bars, lens, onRefresh, onLens }) => (
     <section aria-label="Trace">
       <h2>Trace</h2>
       <p>
         <output aria-label="Trace shown">{summary}</output> <small>{traceId}</small>{" "}
         <button onClick={onRefresh}>Refresh trace</button>
+      </p>
+      <p aria-label="Lens">
+        <LensView name="all" label="Everything" lens={lens} onLens={onLens} />{" "}
+        <LensView name="rendering" label="Rendering" lens={lens} onLens={onLens} />{" "}
+        <LensView name="data" label="Data" lens={lens} onLens={onLens} />{" "}
+        <LensView name="stores" label="Stores" lens={lens} onLens={onLens} />{" "}
+        <LensView name="backend" label="Backend" lens={lens} onLens={onLens} />
       </p>
       <ol aria-label="Spans" style={{ paddingLeft: "0" }}>
         {bars}

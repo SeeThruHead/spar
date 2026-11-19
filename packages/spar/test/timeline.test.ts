@@ -4,6 +4,7 @@ import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, Router, Store, Timeline, UiState, View } from "spar"
 import * as Devtools from "spar/devtools"
+import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
 
@@ -71,6 +72,11 @@ const recorded = (
   endedAt,
   failed,
   attributes: {},
+})
+
+const made = (attributes: Readonly<Record<string, string>>) => ({
+  ...recorded("any", null, 1, 2, false),
+  attributes,
 })
 
 describe("one log of everything that happened", () => {
@@ -157,6 +163,7 @@ describe("one log of everything that happened", () => {
         indent: "0px",
         left: "0.00%",
         width: "100.00%",
+        note: "",
       },
       {
         key: "page inner",
@@ -167,6 +174,7 @@ describe("one log of everything that happened", () => {
         indent: "12px",
         left: "20.00%",
         width: "30.00%",
+        note: "",
       },
       {
         key: "backend open",
@@ -177,14 +185,40 @@ describe("one log of everything that happened", () => {
         indent: "24px",
         left: "80.00%",
         width: "0.00%",
+        note: "",
       },
     ])
+    expect(
+      Devtools.barsOf([
+        {
+          span: {
+            ...recorded("asked", null, 1, 2, false),
+            attributes: { "spar.query.after": "test/Users . value" },
+          },
+          where: "page",
+        },
+      ]).map((bar) => bar.note),
+    ).toEqual(["input from test/Users . value"])
     expect(
       Devtools.barsOf([{ span: recorded("only", "elsewhere", 5, 5, false), where: "page" }]).map(
         (bar) => [bar.indent, bar.left, bar.width],
       ),
     ).toEqual([["0px", "0.00%", "0.00%"]])
     expect(Devtools.barsOf([])).toEqual([])
+  })
+
+  it("a span belongs to one lens, by what made it", () => {
+    expect(Spans.lensOf(made({}), "backend")).toBe("backend")
+    expect(Spans.lensOf(made({ "spar.kind": "view" }), "page")).toBe("rendering")
+    expect(Spans.lensOf(made({ "spar.kind": "data", "spar.store": "q" }), "page")).toBe("data")
+    expect(Spans.lensOf(made({ "spar.store": "s" }), "page")).toBe("stores")
+    expect(Spans.lensOf(made({}), "page")).toBe("other")
+    expect(
+      ["all", "stores", "data"].map((lens) =>
+        Spans.inLens(lens, made({ "spar.store": "s" }), "page"),
+      ),
+    ).toEqual([true, true, false])
+    expect(["all", "data", "other"].map(Schema.is(Spans.Lens))).toEqual([true, true, false])
   })
 
   it("what is recorded has a shape that can be checked", () => {

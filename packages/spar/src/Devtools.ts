@@ -784,6 +784,7 @@ type Bar = {
   readonly indent: string
   readonly left: string
   readonly width: string
+  readonly note: string
 }
 
 const endOf = (span: Spans.Recorded): number => span.endedAt ?? span.startedAt
@@ -800,6 +801,8 @@ const depthOf = (
 
 const percent = (part: number, whole: number): string => `${((part / whole) * 100).toFixed(2)}%`
 
+const waitedFor = (source: string): string => (source === "" ? "" : `input from ${source}`)
+
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
   const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
@@ -815,6 +818,7 @@ export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
     indent: px(depthOf(span, byId, 0) * 12),
     left: percent(span.startedAt - start, whole),
     width: percent(endOf(span) - span.startedAt, whole),
+    note: waitedFor(span.attributes["spar.query.after"] ?? ""),
   }))
 }
 
@@ -855,17 +859,21 @@ export const TracePanel = View.taking(
         return Effect.map(fromBackends(id, asks.read()), (found) => backend.write(found))
       })
     const start = yield* starter()
+    const lens = yield* UiState.make("lens", Schema.String, "all")
     const watched = yield* Reactive.zip(traceId, registry.moments)
-    const shown = yield* Reactive.zip(watched, fromCell(backend))
-    const bars = Reactive.map(shown, ([[id], fetched]) =>
-      barsOf([
-        ...Option.toArray(page).flatMap((buffer) =>
-          buffer.ofTrace(id).map((span): Sided => ({ span, where: "page" })),
-        ),
-        ...fetched
-          .filter((span) => span.traceId === id)
-          .map((span): Sided => ({ span, where: "backend" })),
-      ]),
+    const fetched = yield* Reactive.zip(watched, fromCell(backend))
+    const shown = yield* Reactive.zip(fetched, lens)
+    const bars = Reactive.map(shown, ([[[id], found], through]) =>
+      barsOf(
+        [
+          ...Option.toArray(page).flatMap((buffer) =>
+            buffer.ofTrace(id).map((span): Sided => ({ span, where: "page" })),
+          ),
+          ...found
+            .filter((span) => span.traceId === id)
+            .map((span): Sided => ({ span, where: "backend" })),
+        ].filter((each) => Spans.inLens(through, each.span, each.where)),
+      ),
     )
 
     yield* observed(traceId, (id) => start(asked(id)))
@@ -888,10 +896,13 @@ export const TracePanel = View.taking(
             indent: Reactive.map(bar, (now) => now.indent),
             left: Reactive.map(bar, (now) => now.left),
             width: Reactive.map(bar, (now) => now.width),
+            note: Reactive.map(bar, (now) => now.note),
           }),
         ),
       ),
       onRefresh: Effect.flatMap(traceId.get, asked),
+      lens,
+      onLens: (name: string) => UiState.set(lens, name),
     }
   }),
 )(TraceView)

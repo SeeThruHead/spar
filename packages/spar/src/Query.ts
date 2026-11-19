@@ -1,5 +1,5 @@
 import { Clock, Duration, Effect, Formatter, Option, Record, Schema, Stream } from "effect"
-import { sourceOf } from "./internal/inspect.ts"
+import { sourceOf, sourced } from "./internal/inspect.ts"
 import type { Action } from "./internal/journal.ts"
 import { isReactive, map, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -158,7 +158,7 @@ export const Tag =
     const loads = Store.after(base.actions.requested, (asked, now: State<A, E>, send) =>
       Effect.forEach(
         Option.toArray(Option.fromNullishOr(now.entries[asked.key])),
-        ({ request }) => answered(asked, request, send),
+        ({ request }) => Effect.annotateSpans(answered(asked, request, send), "spar.kind", "data"),
         { discard: true },
       ),
     )
@@ -200,7 +200,11 @@ export const Tag =
         Option.toArray(asked).filter(
           (wanted) => !isFresh(held.entries[wanted.key], now, staleAfter),
         ),
-        (wanted) => store.commands.requested({ ...wanted, after }),
+        (wanted) =>
+          Effect.annotateSpans(store.commands.requested({ ...wanted, after }), {
+            "spar.kind": "data",
+            "spar.query.after": after ?? "",
+          }),
         { discard: true },
       )
     })
@@ -223,9 +227,13 @@ export const Tag =
         Option.getOrUndefined(Option.map(asked, (target) => now.entries[target.key])),
       )
 
+      const value = map(held, (entryNow) => entryNow?.value ?? null)
+
+      sourced(value, `${key} . value`)
+
       return {
         status: map(held, statusOf),
-        value: map(held, (entryNow) => entryNow?.value ?? null),
+        value,
         error: map(held, (entryNow) => entryNow?.error ?? null),
         loading: map(held, (entryNow) => entryNow?.status === "loading"),
         refetch: Effect.flatMap(wanted.get, (asked) =>

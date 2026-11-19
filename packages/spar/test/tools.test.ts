@@ -351,6 +351,17 @@ describe("devtools an app did not ask for", () => {
         ])
         yield* Testing.click("button", "Refresh trace")
         yield* Testing.eventually(() => expect(asked.read()).toHaveLength(6))
+        yield* Testing.click("button", "Backend")
+        yield* Testing.eventually(() =>
+          expect(spans().every((line) => line.startsWith("backend "))).toBe(true),
+        )
+        expect(screen.getByRole("button", { name: "Backend" }).getAttribute("aria-pressed")).toBe(
+          "true",
+        )
+        yield* Testing.click("button", "Everything")
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("Trace shown").textContent).toBe("4 spans"),
+        )
       }).pipe(Effect.provideService(FetchHttpClient.Fetch, backend)),
     ),
   )

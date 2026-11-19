@@ -129,7 +129,7 @@ const connected =
           spanName(view),
         ),
         spanName(view),
-        { captureStackTrace: false },
+        { captureStackTrace: false, attributes: { "spar.kind": "view" } },
       ),
     )
 

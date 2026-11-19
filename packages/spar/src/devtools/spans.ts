@@ -14,6 +14,22 @@ export const Recorded = Schema.Struct({
 
 export type Recorded = typeof Recorded.Type
 
+export const Lens = Schema.Literals(["all", "rendering", "data", "stores", "backend"])
+
+export type Lens = typeof Lens.Type
+
+export const lensOf = (span: Recorded, where: "page" | "backend"): Lens | "other" => {
+  if (where === "backend") return "backend"
+  if (span.attributes["spar.kind"] === "view") return "rendering"
+  if (span.attributes["spar.kind"] === "data") return "data"
+  if (span.attributes["spar.store"] !== undefined) return "stores"
+
+  return "other"
+}
+
+export const inLens = (lens: string, span: Recorded, where: "page" | "backend"): boolean =>
+  lens === "all" || lensOf(span, where) === lens
+
 const millis = (nanos: bigint): number => Number(nanos / 1000n) / 1000
 
 const endOf = (status: Tracer.SpanStatus): Pick<Recorded, "endedAt" | "failed"> =>

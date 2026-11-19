@@ -266,8 +266,8 @@ const GetComponent = Tool.make("get_component", {
 
 const GetTrace = Tool.make("get_trace", {
   description:
-    "The spans the page recorded for one trace id, as get_timeline gives it: name, parent, start and end in milliseconds, and whether it failed.",
-  parameters: Schema.Struct({ traceId: Schema.String }),
+    "The spans the page recorded for one trace id, as get_timeline gives it: name, parent, start and end in milliseconds, whether it failed, and its attributes. Give `lens` to keep one kind: rendering (components mounting), data (queries and the calls they make, with what each waited for in spar.query.after), stores (store commands and refusals).",
+  parameters: Schema.Struct({ traceId: Schema.String, lens: Schema.optional(Spans.Lens) }),
   success: Schema.Array(Spans.Recorded),
 })
 
@@ -398,8 +398,12 @@ const ToolHandlers = Tools.toLayer(
             () => `There is no component at ${place}. list_components gives the ones there are.`,
           ),
         ),
-      get_trace: ({ traceId }) =>
-        Effect.map(pages.page, (page) => page.spans.filter((span) => span.traceId === traceId)),
+      get_trace: ({ traceId, lens }) =>
+        Effect.map(pages.page, (page) =>
+          page.spans.filter(
+            (span) => span.traceId === traceId && Spans.inLens(lens ?? "all", span, "page"),
+          ),
+        ),
       list_branches: () => Effect.map(pages.page, (page) => page.branches),
       fork: () =>
         Effect.andThen(
