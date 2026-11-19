@@ -371,6 +371,11 @@ How the other ways fit:
 
 (`apps/sidebar/src/server/Server.ts`, `apps/sidebar/src/main.ts`)
 
+A WebSocket goes through `Backend.layerSocket(url)`, which gives Effect's `Socket` service: what
+it sends and receives is in the log as calls, a batch of frames at a time. `Backend.heard(url,
+socket)` does the same for a socket made another way. The build refuses `new WebSocket` and
+`Socket.makeWebSocket` in app code.
+
 ## Timeline
 
 `Timeline.note(kind, name, detail)` reports something that happened to whoever is recording; with

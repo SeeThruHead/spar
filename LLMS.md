@@ -1039,6 +1039,11 @@ How the other ways fit:
 
 (`apps/sidebar/src/server/Server.ts`, `apps/sidebar/src/main.ts`)
 
+A WebSocket goes through `Backend.layerSocket(url)`, which gives Effect's `Socket` service: what
+it sends and receives is in the log as calls, a batch of frames at a time. `Backend.heard(url,
+socket)` does the same for a socket made another way. The build refuses `new WebSocket` and
+`Socket.makeWebSocket` in app code.
+
 ### Timeline
 
 `Timeline.note(kind, name, detail)` reports something that happened to whoever is recording; with
@@ -1980,9 +1985,9 @@ Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
 #### SPAR_BACKEND_AROUND_SPAR
 
-fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer and other client libraries go around Backend, so the call is not a span or an entry in the log.
+fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer, a socket dialled with Socket.makeWebSocket and other client libraries go around Backend, so the call is not a span or an entry in the log.
 
-Fix: Call a backend through Backend: Backend.rpc for an Effect RPC group, or the HttpClient that Backend.layer provides for HttpApi and JSON clients.
+Fix: Call a backend through Backend: Backend.rpc for an Effect RPC group, the HttpClient that Backend.layer provides for HttpApi and JSON clients, or Backend.layerSocket for a WebSocket.
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
@@ -2215,14 +2220,20 @@ has to find it.
 
 Built since, and smaller than they sound, but not done:
 
-- **Toasts and generated ids in `@spar/ui` keep their state in a `Ref`.** The package is outside
-  the build rule, so a toast appearing is not an entry in the log. They should move to a store.
-- **A socket made with `effect/socket` is not seen by `Backend`.** The build refuses
-  `new WebSocket` in app code, but a stream of socket messages is not logged as calls. Turn each
-  message into a store command and it is in the log from there.
+- **Generated ids in `@spar/ui` come from a counter, not a store.** A tooltip or a listbox asks
+  for an id when it mounts. Decided to leave it: an id is not state anyone would rewind to, and an
+  action for every id would bury the log. Toasts did move to a store.
 - **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
-  returns to what was saved. A store that was made beside a view stays listed in the devtools
-  after its view unmounts.
+  returns to what was saved. Decided not to build keeping forks on the device as a leftover: a
+  parked branch holds each store's state in memory as a way to resume it, and to save it the
+  branches would have to become plain data that every kind of store can be loaded from, durable
+  ones and ones with an outbox included. A store's log can be exported and loaded again, which is
+  the way to keep one today.
+- **The showcase is not drawn on the server.** `apps/ssr` shows server rendering, with a routed
+  page and queries. Decided not to do it for `apps/sidebar` as a leftover: its board is a store
+  kept on the device, so the server cannot know what the browser will show, and taking over a
+  server-drawn page whose data then changes under it needs a rule Spar does not have yet (which
+  wins, and when the swap is shown).
 - **Queries:** the cache only grows, since unused entries are never dropped. There is no
   pagination or infinite-list helper (a page is an input). An optimistic change stays shown if its
   send fails for good, until something invalidates the query.
@@ -2234,8 +2245,6 @@ Built since, and smaller than they sound, but not done:
   drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
-- **The showcase is `apps/sidebar`, and server rendering is shown by `apps/ssr`.** No single app
-  uses every feature.
 
 The joined trace has been looked up in Tempo: run with `OTLP_ENDPOINT` set, one form submit in the
 proof app came back from Tempo as one trace with spans from the page and from the backend under one
