@@ -181,16 +181,27 @@ export const ShellView = View.make(
   {
     main: Props.Handle,
     sidebar: Props.Element,
+    deep: Router.Link,
     page: Props.Element,
     scratch: Props.Element,
     counter: Props.Element,
     people: Props.Element,
     toasts: Props.Element,
   },
-  ({ main, sidebar, page, scratch, counter, people, toasts }) => (
+  ({ main, sidebar, deep, page, scratch, counter, people, toasts }) => (
     <div class="shell">
       {sidebar}
       <main ref={main} tabIndex={-1}>
+        <p>
+          <a
+            href={deep.href}
+            onClick={deep.onClick}
+            onPointerenter={deep.onIntent}
+            onFocus={deep.onIntent}
+          >
+            Open a page five segments deep
+          </a>
+        </p>
         {page}
         {scratch}
         {counter}

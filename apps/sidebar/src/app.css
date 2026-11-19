@@ -243,3 +243,11 @@ body {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+
+.segment {
+  margin-block: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--spar-line);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}

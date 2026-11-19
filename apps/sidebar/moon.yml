@@ -56,6 +56,21 @@ tasks:
       ]
     options:
       cache: false
+  deep:
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/deep.ts
+    inputs:
+      [
+        "src/**/*",
+        "server/**/*",
+        "scripts/deep.ts",
+        "scripts/backend.ts",
+        "index.html",
+        "vite.config.ts",
+        "@group(upstream)",
+        "$SPAR_BROWSER",
+      ]
+    options:
+      cache: false
   devtools:
     command: bun ../../packages/browsers/scripts/in.ts bun scripts/devtools.ts
     inputs:

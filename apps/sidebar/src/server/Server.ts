@@ -1,8 +1,8 @@
 import { Context, Effect, Layer, Ref } from "effect"
 import type { HttpClient } from "effect/http"
 import { Backend } from "spar"
-import { Agents, NoRecord, ServerUnreachable, people } from "../api.ts"
-import type { Started, User } from "../api.ts"
+import { Agents, NoRecord, ServerUnreachable, found, people } from "../api.ts"
+import type { Found, Started, User } from "../api.ts"
 
 export { NoRecord, ServerUnreachable }
 
@@ -13,6 +13,7 @@ export class Server extends Context.Service<
     readonly started: Effect.Effect<ReadonlyArray<string>>
     readonly describe: (name: string) => Effect.Effect<Started, NoRecord | ServerUnreachable>
     readonly users: Effect.Effect<ReadonlyArray<User>, ServerUnreachable>
+    readonly lookup: (kind: string, id: string) => Effect.Effect<Found, ServerUnreachable>
   }
 >()("sidebar/Server") {
   static readonly layer = Layer.effect(
@@ -49,6 +50,7 @@ export class Server extends Context.Service<
         started: Effect.map(Ref.get(seen), (all) => all.map((known) => known.key)),
         describe,
         users: Effect.as(Effect.sleep("40 millis"), people),
+        lookup: (kind, id) => Effect.as(Effect.sleep("150 millis"), found(kind, id)),
       })
     }),
   )
@@ -72,6 +74,10 @@ export class Server extends Context.Service<
           users: Effect.catchTag(agents.Users(), "RpcClientError", () =>
             Effect.fail(new ServerUnreachable()),
           ),
+          lookup: (kind, id) =>
+            Effect.catchTag(agents.Lookup({ kind, id }), "RpcClientError", () =>
+              Effect.fail(new ServerUnreachable()),
+            ),
         })
       }),
     )

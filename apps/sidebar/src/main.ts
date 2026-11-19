@@ -7,6 +7,7 @@ import { KeyValueStore } from "effect/persistence"
 import { App, Backend, Outbox, Router, Tabs } from "spar"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "./BoardStore.ts"
+import { deepQueries } from "./Deep.ts"
 import { Server } from "./server/Server.ts"
 import { Shell } from "./Shell.ts"
 
@@ -27,7 +28,7 @@ const server = Option.match(
   },
 )
 
-const layer = BoardStoreLive.pipe(
+const layer = Layer.merge(BoardStoreLive, deepQueries).pipe(
   Layer.provideMerge(
     Layer.mergeAll(server, Outbox.Outbox.layer, Router.Router.layerBrowser, Toast.Toasts.layer),
   ),

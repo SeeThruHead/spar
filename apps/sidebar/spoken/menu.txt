@@ -55,6 +55,9 @@
           - /url: /agents/agent-3
         - button "Actions for Backup check": Actions
 - main:
+  - paragraph:
+    - link "Open a page five segments deep":
+      - /url: /org/acme/team/core/member/ada/reports/q3
   - heading "Agents" [level=1]
   - paragraph: Pick an agent from the list to see what it is doing.
   - region "Scratchpad":

@@ -38,6 +38,18 @@ export const people: ReadonlyArray<User> = [
   { id: 124, name: "Edsger Dijkstra", email: "edsger@example.com" },
 ]
 
+export const Found = Schema.Struct({
+  label: Schema.String,
+  authorId: Schema.NullOr(Schema.String),
+})
+
+export type Found = typeof Found.Type
+
+export const found = (kind: string, id: string): Found => ({
+  label: `${kind} ${id}`,
+  authorId: kind === "report" ? `author-of-${id}` : null,
+})
+
 export class Agents extends RpcGroup.make(
   Rpc.make("Describe", {
     payload: { name: Schema.String },
@@ -50,4 +62,5 @@ export class Agents extends RpcGroup.make(
   }),
   Rpc.make("Started", { success: Schema.Array(Schema.String) }),
   Rpc.make("Users", { success: Schema.Array(User) }),
+  Rpc.make("Lookup", { payload: { kind: Schema.String, id: Schema.String }, success: Found }),
 ) {}

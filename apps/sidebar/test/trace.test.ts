@@ -9,6 +9,7 @@ import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "../src/BoardStore.ts"
+import { deepQueries } from "../src/Deep.ts"
 import { Server } from "../src/server/Server.ts"
 import { Shell } from "../src/Shell.ts"
 
@@ -68,7 +69,7 @@ const backend = Effect.gen(function* () {
 })
 
 const app = (origin: string) =>
-  BoardStoreLive.pipe(
+  Layer.merge(BoardStoreLive, deepQueries).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.provide(Server.layerRemote(`${origin}/rpc`), FetchHttpClient.layer),
