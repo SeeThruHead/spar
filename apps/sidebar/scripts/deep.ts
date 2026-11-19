@@ -54,8 +54,8 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const log = page.getByLabel("Everything that happened")
 
   await log
-    .locator("ol li", { hasText: "route /org/" })
-    .last()
+    .locator("ol li", { hasText: spans[0]?.traceId ?? "no lookups" })
+    .first()
     .getByRole("button", { name: /^Trace / })
     .click()
   await page.getByLabel("Spans").locator("li", { hasText: "Agents.lookup author" }).waitFor({
