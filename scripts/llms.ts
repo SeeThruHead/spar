@@ -100,6 +100,7 @@ const body = [
   await part("Recipes", "docs/recipes.md"),
   await part("Coming from React", "docs/from-react.md"),
   await part("Coming from Foldkit", "docs/from-foldkit.md"),
+  await part("Spar beside an Elm-architecture framework", "docs/beside-elm-architecture.md"),
   await part("What is not done", "docs/gaps.md"),
   `# Worked examples from the showcase\n\nEvery file below is in the repo as shown and is built, linted and tested by \`bun run check\`.\n\n${(
     await Promise.all(examples.map(([path, about]) => source(path, about)))

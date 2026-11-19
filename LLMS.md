@@ -301,6 +301,18 @@ const OrgSegment = View.taking(
 )(SegmentView)
 ```
 
+A route inside another is declared under it, so its path is written once. The parent must end
+with `/*`, and the Schema must carry every param of the whole path; both are compile errors
+otherwise:
+
+```ts
+const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
+const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
+```
+
+There is no separate route tree to keep in step: the nesting is the outlets, and the paths follow
+from `under`.
+
 A page five segments deep written this way starts all five segments' requests together. The
 showcase has one (`apps/sidebar/src/Deep.ts`), and its browser check reads the backend's own
 spans and fails if the five do not start together or if the sixth does not wait for the one it
@@ -319,6 +331,29 @@ Spar rehearses the target: it mounts the app at that address without drawing any
 reaches every `ask` on the way, and throws the result away. The queries are real and their answers
 stay in their stores, so the click finds the data there. Leave `onIntent` off a link whose page
 should not be preloaded. `router.preload(route, params)` does the same from code.
+
+### Loading a page's code when it is first shown
+
+```ts
+Router.live(
+  orgRoute,
+  View.split(LoadingView, () => import("./DeepPage.ts").then((module) => module.OrgSegment)),
+)
+```
+
+`View.split` shows the placeholder, a view that takes the same props, until the code has
+arrived. Routes, param Schemas and query classes stay in the main bundle because the query layers
+are provided at the root; the components and their views are what is split off. Preloading a link
+fetches the code too, since the rehearsal mounts the page. On the server and while taking over a
+server-drawn page the real component is used, not the placeholder. The showcase's deep page is
+loaded this way (`apps/sidebar/src/Shell.ts`).
+
+### Pending and failure, per segment
+
+Each segment shows its own query's `status`, so one slow segment does not blank the others. For
+a component whose own Effect can wait or fail, `View.pending(placeholder)` and
+`View.recover(failure, view)` wrap that component alone. A query takes `retry`, a schedule,
+and stays `loading` until the schedule gives up.
 
 ### What makes a waterfall, and how Spar stops it
 
@@ -345,26 +380,56 @@ panel, lenses show one kind at a time:
 
 | Lens      | What it keeps                                                                          |
 | --------- | -------------------------------------------------------------------------------------- |
-| Rendering | Components mounting                                                                    |
+| Rendering | Components mounting, and each event a component handled (`on click`, with its view)    |
 | Data      | Queries: each request, its call, its answer, and what a dependent one's input was from |
 | Stores    | Store commands and refusals                                                            |
 | Backend   | Spans the backend recorded                                                             |
 
-An agent gets the same with `get_trace` and a `lens`.
+A request that waited for another query's value draws that wait as a line before its bar, from
+when the other was asked for to when this one started. Data that was already there (after a
+preload, or going back) is a short `served` span that links to the trace that loaded it.
+
+An agent gets the same with `get_trace` and a `lens`, or `get_navigation` for the newest
+route change. From a shell:
+
+```sh
+bun run --cwd packages/devtools-mcp cli trace --lens data
+```
+
+prints that navigation as an indented waterfall: each span, when it started, how long it took and
+what it waited for. `--back 1` is the navigation before; `--id` takes a trace id.
 
 ### On the server
 
-`Server.render` mounts the page, waits until every query has settled, dependent ones included, and
-draws. The queries' stores travel with the page like any store's, so in the browser the first
-`ask` finds its data fresh and makes no request. Give a query a `staleAfter` or the browser will
-ask again straight away. There are no server components and no second kind of component: the
-server boundary is the RPC contract both sides share.
+`Server.render` draws the page, waits until every query has settled, and draws again until a
+pass finds nothing still loading. That covers queries inside a routed page or a list, which only
+start once the page is drawn, and dependent ones. The queries' stores travel with the page like
+any store's, so in the browser the first `ask` finds its data fresh and makes no request. Give a
+query a `staleAfter` or the browser will ask again straight away.
 
-### Not built yet
+The server boundary is one Effect RPC group and one service with two layers. On the server the
+layer reads the database; in the browser it calls the group over `Backend.rpc`. The query's
+`load` is the same code on both sides. `apps/ssr` shows it with a routed product page: its
+browser test fails unless the page arrives with what its two queries loaded, the browser asks for
+none of it again, a link to another product makes exactly two calls in one trace that reaches the
+database's spans, and going back loads no new document.
 
-A route tree as one value, pending and error views declared per segment, code splitting per
-route, scroll restoration per history entry; refetch on focus and reconnect, pagination,
-optimistic updates on a query, retries; dependency edges drawn as lines in the waterfall.
+From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
+and picked up in the browser, and a typed server boundary. It does not take: routes from files,
+server functions made by a compiler, or streaming a page in pieces. The document's head is sent
+first and the page follows whole once its data is in. There are no server components and no
+second kind of component.
+
+### Not built
+
+- Sending a page in pieces as each query answers, or holding a slow query back so it does not
+  delay the first draw.
+- Dropping cached entries nobody is using: a query's cache only grows.
+- A dedicated pagination or infinite-list helper. A page is an input, so each page is its own
+  cache entry, and `handle.latest` keeps the last loaded value on screen while the next page
+  loads. An infinite list is a list of page components that each ask for their page; no example
+  of that is built.
+- A span for the code of a split page arriving.
 
 
 # Principles
@@ -616,6 +681,7 @@ repo where the API is used and type-checked.
 | `View.child(component, props)`         | Mounts a child from a parent's Effect and gives back its element.                                                          |
 | `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                         |
 | `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                     |
+| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props.                           |
 | `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                           |
 | `View.mapProps(f)`                     | Changes the props a component takes.                                                                                       |
 | `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                           |
@@ -833,7 +899,7 @@ page: yield *
 ```
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
-layout that stays mounted while inner pages change. The service has `location`, `go(route, params)`,
+layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
 `replace`, `back` and `link(route, params)`. `Router.focusOnChange(handle)` moves focus after a
 navigation. `Router.live(route, Page)` keeps the page mounted while only the query changes and
 gives it `params` as a reactive value, where `Router.on` mounts a fresh page for every change. In
@@ -922,24 +988,28 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                                | What it does                                                                                         |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })` | Declares the query: Schemas for its input, what it loads and how it fails, and `load(input)`.        |
-| `Self.ask(input)`                                                       | Declares, in a component's Effect, that this input is needed. Returns a handle at once.              |
-| `Self.read(input)`                                                      | The loaded value for an input, or null. For another store's after-effect.                            |
-| `Self.live`                                                             | Its layer, for the whole app.                                                                        |
-| `Self.beside(component)`                                                | The query beside one component, as `.with` does for a store.                                         |
-| `Self.invalidate`, `Self.invalidatedBy(action)`                         | Load everything it holds again; a reaction for another store's layer that does so after that action. |
+| Function                                                                       | What it does                                                                                                                                                                         |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh, and a schedule to try again on before it counts as failed. |
+| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                              |
+| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                            |
+| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                        |
+| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                         |
+| `Self.invalidate`, `Self.invalidatedBy(action)`                                | Load everything it holds again; a reaction for another store's layer that does so after that action.                                                                                 |
+| `Self.patchedBy(action, input, patch)`                                         | A reaction for another store's layer: after that action, change the loaded value for `input(payload)` at once. With `Store.outbox` on the same action, an optimistic update.         |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
 means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
-`loaded` or `failed`), `value`, `error`, `loading` and `refetch`, all reactive. It asks again
+`loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
+input, for paging without a blank) and `refetch`, all reactive. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is refused) and an answer to an earlier request is refused. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
 and a query whose input comes from another query's value waits only for that value.
-Not built yet: refetch on focus and reconnect, pagination, optimistic updates on a query,
-retries, dropping unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
+While a component is using it, a query asks again for what has gone stale when the tab is shown
+again or the connection comes back. Data already there is served with a short span that links to
+the trace that loaded it. Not built: dropping unused data, and a pagination helper (a page is an
+input). (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ### Backend
 
@@ -1024,18 +1094,19 @@ it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4
 connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and can ask what the app is doing right
 now:
 
-| Tool                                     | What it gives                                                                                |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                            |
-| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                      |
-| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema) |
-| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                      |
-| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures     |
-| `get_trace`                              | The spans the page recorded for a trace                                                      |
-| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                    |
-| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one    |
-| `count_moments`                          | How many times each thing happened, most frequent first                                      |
-| `diff_states`                            | What changed in a store between two of its actions, by path                                  |
+| Tool                                     | What it gives                                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                              |
+| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                        |
+| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema)   |
+| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                        |
+| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures       |
+| `get_trace`                              | The spans the page recorded for a trace                                                        |
+| `get_navigation`                         | The newest route change, its trace id and its spans; `back` counts back, `lens` keeps one kind |
+| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                      |
+| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one      |
+| `count_moments`                          | How many times each thing happened, most frequent first                                        |
+| `diff_states`                            | What changed in a store between two of its actions, by path                                    |
 
 The same tools answer from a shell: `bun run --filter @spar/devtools-mcp cli tools` lists them and
 `bun run --filter @spar/devtools-mcp cli call <tool> '<json>'` asks one (add `--url` when the
@@ -1247,22 +1318,24 @@ an input, but it cannot change and it does not know where it came from.
 
 Each of these is an entry in the log and a span in the trace.
 
-| React Query                           | Spar                                                                                          |
-| ------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `useQuery` in a component             | `yield* TheQuery.ask(input)` in the component's Effect                                        |
-| `status`, `data`, `error`             | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading` |
-| Query keys                            | The input, with a Schema. The cache is keyed by its encoded value                             |
-| `staleTime`                           | `staleAfter`                                                                                  |
-| `refetch()`                           | The handle's `refetch`                                                                        |
-| Deduping identical requests           | One request for each input at a time. A second while loading is refused, visibly              |
-| A late answer overwriting a newer one | Refused: an answer carries the number of the request it answers                               |
-| `invalidateQueries` after a mutation  | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                   |
-| Keeps old data while loading          | Yes: `value` stays while `status` is `loading`                                                |
-| `enabled: !!id` for a dependent query | Pass a reactive `Option`: the query is `waiting` while it is none                             |
-| Optimistic update                     | Through `Store.outbox` on an ordinary store. Not on a query store yet                         |
-| Refetch on focus and reconnect        | Not yet                                                                                       |
-| Pagination and infinite lists         | Not yet                                                                                       |
-| Retries, dropping unused data         | Not built. Retry with a schedule inside `load`                                                |
+| React Query                                | Spar                                                                                                                                                |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                              |
+| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                       |
+| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                   |
+| `staleTime`                                | `staleAfter`                                                                                                                                        |
+| `refetch()`                                | The handle's `refetch`                                                                                                                              |
+| Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                    |
+| A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                     |
+| `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                         |
+| Keeps old data while loading               | Yes: `value` stays while `status` is `loading`                                                                                                      |
+| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                   |
+| Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate` |
+| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                  |
+| Keeping the last page while the next loads | The handle's `latest`                                                                                                                               |
+| Pagination and infinite lists              | No helper: a page is an input, so each page is its own entry                                                                                        |
+| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                   |
+| Dropping unused data                       | Not built                                                                                                                                           |
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.
@@ -1694,6 +1767,78 @@ What you get: rows that update without re-running a view, local state without ce
 and services checked at the mount.
 
 
+# Spar beside an Elm-architecture framework
+
+Foldkit is moving under the Effect organization and its frontend is being rebuilt as Elm-inspired
+primitives inside Effect. This page records, as plainly as possible, what differs between that
+architecture and Spar's. Foldkit's side is read from the installed package (0.170.0) and from the
+two apps in this repo that are written in it (`apps/bench/src/foldkit` and
+`apps/bench/src/nav-foldkit`). Nothing is known here about the rebuilt version: as of 19 Nov
+2026 there is no public code or RFC for it, in Foldkit's repo or under the Effect organization.
+
+### What Spar does that the Elm architecture does not, by its structure
+
+In the Elm architecture there is one Model, one `update`, and a view that is a function of the
+Model. These follow from that shape, not from how well it is built:
+
+- **State and server data beside the component that uses them.** A Spar component asks for its
+  data in its own Effect (`TheQuery.ask(input)`), and a store can ship with a view
+  (`Store.with`, `Query.beside`). In the Elm architecture a child's data is a field in the
+  Model, a Message for its answer and a branch in `update`, wired in by each parent. In the
+  five-segment navigation written in Foldkit, the click's branch of `update` lists the five
+  lookups, and the branch that handles an answer starts the sixth
+  (`apps/bench/src/nav-foldkit/main.ts`).
+- **The natural prop-then-query style.** A parent passes a value down, the child makes a query
+  from it, and the child's query waits for that value by itself, because a reactive value knows
+  where it came from. In the Elm architecture "this depends on that" is code in `update`.
+- **The dependency graph as data.** Because the dependency is known, it is recorded
+  (`spar.query.after`), drawn in the waterfall and given to agents. In the Elm architecture it
+  can be read only from the order Commands were returned in.
+- **A view runs once.** Reactive values update single nodes. A view that is a function of the
+  Model is run again and compared.
+- **Component-local state that is not app state.** `UiState` holds what was typed or which menu
+  is open without it being a field of the app's Model. It is still recorded and replayed.
+
+Not structural, but built in Spar and absent from Foldkit 0.170.0's devtools protocol: a trace
+viewer with lenses and no collector, forking from a past moment, and a waterfall across the page
+and the backend (`docs/devtools-compared.md`).
+
+### What Foldkit does better
+
+- **One value holds everything.** The whole app's state is one Model with one Schema. Spar has
+  several stores and UI state, joined by a log; no single value is the app.
+- **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
+  does not check that every action has considered every state of a store.
+- **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
+  as cases of their own. In Spar you read `status` and `value` together.
+- **Speed on several list operations.** In this repo's benchmark Foldkit is faster than Spar at
+  updating every 10th row, selecting a row, swapping two rows, removing a row and clearing, and
+  starts sooner (`docs/benchmarks.md`). Spar is faster at creating rows and at changing one row
+  among 10,000 when timed until the DOM changed, uses less memory and ships less JavaScript.
+- **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
+  stores as services and components by role.
+- **It will not be tied to the DOM.** The stated plan is primitives that work across rendering
+  environments. Spar draws to the DOM and to an HTML string, nothing else.
+
+### What Spar builds that Effect already ships or is likely to
+
+Spar's internals are Effect services, layers, Schemas, RPC and spans. These parts are Spar's own,
+and Effect 4.1.4 already has a module in the same territory, so they are where Spar would sit on
+Effect's own pieces if its authoring model were kept:
+
+| Spar's own                                   | In Effect today                                        |
+| -------------------------------------------- | ------------------------------------------------------ |
+| `Reactive` and the cell under it             | `effect/reactivity`: `Atom`, `AtomRef`, `AtomRegistry` |
+| `Query`: status, cache, invalidation         | `AsyncResult`, `AtomRpc`, `Reactivity` (invalidation)  |
+| The state sent with a server-drawn page      | `effect/reactivity` `Hydration`                        |
+| A store's log of actions, kept on the device | `effect/eventlog`                                      |
+| The outbox                                   | Nothing found that matches                             |
+| The renderer, the router, the devtools       | Nothing today; the announced frontend primitives       |
+
+Spar uses none of the modules in the right-hand column. Whether its model fits on them has not
+been tried.
+
+
 # What is not done
 
 Two things need a person or a device. The rest of the list is small and is written down so nobody
@@ -1730,12 +1875,15 @@ Built since, and smaller than they sound, but not done:
 - **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
   returns to what was saved. A store that was made beside a view stays listed in the devtools
   after its view unmounts.
-- **For agents:** an action's payload Schema is not reported, several actions cannot be sent in
-  one call, and with several tabs open the tools speak for the one that reported last
-  (`docs/devtools-compared.md`).
-- **The agent page's server record still loads in its component's Effect** and not through a
-  query, though queries now take an input. Refetch on focus and reconnect, pagination, optimistic
-  updates on a query, retries and dropping unused data are not built.
+- **Queries:** the cache only grows, since unused entries are never dropped. There is no
+  pagination or infinite-list helper (a page is an input). An optimistic change stays shown if its
+  send fails for good, until something invalidates the query.
+- **Server rendering sends the page whole.** The head goes first, then the page once every query
+  has answered. There is no sending in pieces and no way to hold a slow query back.
+- **An event's span names its view only with the devtools on.** The renderer does not know
+  which view drew a node; the inspector does.
+- **A query's default stale time is 0,** so a preload that finishes before the click, or a page
+  drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
 - **The showcase is `apps/sidebar`, and server rendering is shown by `apps/ssr`.** No single app
@@ -2882,6 +3030,14 @@ class Orders extends Query.Tag<Orders>()("test/Orders", {
   staleAfter: "1 minute",
 }) {}
 
+class Patient extends Query.Tag<Patient>()("test/Patient", {
+  input: Schema.Void,
+  success: Schema.Finite,
+  failure: Schema.String,
+  load: () => Effect.flatMap(directory, (found) => found.stock),
+  retry: Schedule.recurs(1),
+}) {}
+
 const RosterState = Schema.Struct({ renamed: Schema.Int })
 
 type RosterState = typeof RosterState.Type
@@ -2891,6 +3047,10 @@ class Roster extends Store.Tag<Roster>()("test/Roster", {
   initialState: { renamed: 0 },
   actions: {
     renamed: Store.action(Schema.Void, (state: RosterState) => ({ renamed: state.renamed + 1 })),
+    restocked: Store.action(
+      Schema.Struct({ to: Schema.Finite }),
+      (state: RosterState): RosterState => state,
+    ),
   },
   selectors: {},
 }) {}
@@ -2908,10 +3068,17 @@ const recording = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    Roster.layer([Users.invalidatedBy(Roster.actions.renamed)]).pipe(
+    Roster.layer([
+      Users.invalidatedBy(Roster.actions.renamed),
+      Stock.patchedBy(
+        Roster.actions.restocked,
+        () => undefined,
+        (_stock, { to }) => to,
+      ),
+    ]).pipe(
       Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live)),
       Layer.provideMerge(Directory.layer),
-      Layer.provide(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
+      Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
     ),
   )
   const found = yield* Effect.provide(directory, built)
@@ -2939,6 +3106,14 @@ const opened = Effect.gen(function* () {
 
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
   Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
+
+const hidden = (state: string) =>
+  Effect.sync(() => {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true })
+    document.dispatchEvent(new Event("visibilitychange"))
+  })
+
+const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new Event(type)))
 
 describe("the natural way: a value from one place feeds a query declared in another", () => {
   it.effect(
@@ -2989,6 +3164,45 @@ describe("the natural way: a value from one place feeds a query declared in anot
           "test/Orders/loaded",
         ])
       }),
+  )
+
+  it.effect(
+    "another store's command can change what a query holds at once, before the server is asked",
+    () =>
+      Effect.gen(function* () {
+        const { built, whats, answer, roster } = yield* opened
+        const stock = yield* Effect.provide(Stock.ask(), built)
+
+        yield* Effect.yieldNow
+        yield* roster.commands.restocked({ to: 9 })
+        yield* Effect.yieldNow
+        expect(yield* readings(stock)).toEqual(["loading", null, null, true])
+
+        yield* answer("stock", 3)
+        yield* roster.commands.restocked({ to: 9 })
+        yield* Effect.yieldNow
+        expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
+        expect(yield* whats).toEqual(["stock"])
+      }),
+  )
+
+  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const page = yield* SubscriptionRef.make(1)
+      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+
+      yield* Effect.yieldNow
+      expect(yield* orders.latest.get).toBeNull()
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(page, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+
+      yield* answer("orders 2", ["ink"])
+      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
+    }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
@@ -3102,10 +3316,20 @@ describe("server data in a store", () => {
 
       expect(yield* readings(shown)).toEqual(["loaded", [ada], null, false])
       expect(Object.values(yield* users.select.entries.get)).toEqual([
-        { status: "loaded", value: [ada], error: null, loadedAt: 5000, request: 1, input: null },
+        {
+          status: "loaded",
+          value: [ada],
+          error: null,
+          loadedAt: 5000,
+          request: 1,
+          input: null,
+          traceId: "",
+          spanId: "",
+        },
       ])
       expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name])).toEqual([
         ["command", "test/Users/requested"],
+        ["data", "test/Users/served"],
         ["command", "test/Users/loaded"],
       ])
     }),
@@ -3194,6 +3418,88 @@ describe("server data in a store", () => {
         ])
         expect(recorded[0]?.attributes["spar.query.after"]).toBe("")
       }),
+  )
+
+  it.effect(
+    "data already there is served with a short span that points at the trace that loaded it",
+    () =>
+      Effect.gen(function* () {
+        const { built, noted, answer } = yield* opened
+        const spans = yield* Layer.build(Spans.layer())
+        const buffer = Context.get(spans, Spans.SpanBuffer)
+        const asking = (during: string) =>
+          Effect.provide(Effect.withSpan(Effect.provide(Users.ask(), built), during), spans)
+
+        yield* asking("pointing at the link")
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+        yield* asking("the click")
+
+        const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+        const [preload] = named("pointing at the link")
+        const [click] = named("the click")
+        const [served] = named("test/Users/served")
+
+        expect(preload?.traceId).not.toBe(click?.traceId)
+        expect(served?.traceId).toBe(click?.traceId)
+        expect(served?.attributes).toMatchObject({
+          "spar.kind": "data",
+          "spar.query.served_from": preload?.traceId,
+        })
+        expect((yield* Ref.get(noted)).findLast((seen) => seen.kind === "data")?.detail).toEqual({
+          key: "null",
+          from: preload?.traceId,
+        })
+      }),
+  )
+
+  it.live(
+    "coming back to the tab or back online asks again for what has gone stale, and only that",
+    () =>
+      Effect.gen(function* () {
+        const { built, whats, answer } = yield* opened
+        const asked = (count: number) =>
+          Effect.repeat(whats, {
+            until: (all) => all.length === count,
+            schedule: Schedule.spaced("5 millis"),
+          })
+
+        yield* Effect.provide(Stock.ask(), built)
+        yield* Effect.provide(Users.ask(), built)
+        yield* asked(2)
+        yield* answer("stock", 3)
+        yield* answer("users", [ada])
+        yield* Effect.sleep("10 millis")
+
+        yield* hidden("hidden")
+        yield* Effect.sleep("20 millis")
+        expect(yield* whats).toEqual(["stock", "users"])
+
+        yield* hidden("visible")
+        expect(yield* asked(3)).toEqual(["stock", "users", "stock"])
+        yield* answer("stock", 4)
+        yield* Effect.sleep("10 millis")
+
+        yield* connection("offline")
+        yield* connection("online")
+        expect(yield* asked(4)).toEqual(["stock", "users", "stock", "stock"])
+      }),
+  )
+
+  it.effect("a query given a schedule tries again by itself before it calls it a failure", () =>
+    Effect.gen(function* () {
+      const { built, whats, refuse, answer } = yield* opened
+      const patient = yield* Layer.build(Layer.provide(Patient.live, Layer.succeedContext(built)))
+      const shown = yield* Effect.provide(Patient.ask(), patient)
+
+      yield* Effect.yieldNow
+      yield* refuse("stock", "busy")
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+      expect(yield* shown.status.get).toBe("loading")
+      yield* answer("stock", 9)
+      expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
+    }),
   )
 
   it.effect("with no stale time it is stale as soon as time has passed", () =>
@@ -3316,17 +3622,21 @@ describe("server data in a store", () => {
 A page five segments deep: each segment asks for its own data, and the author's query takes its input from the report's answer.
 
 ```ts
-import { Effect, Layer, Option, Schema } from "effect"
-import { Props, Query, Reactive, Router, View } from "spar"
+import { Effect, Layer, Schema } from "effect"
+import { Query, Router } from "spar"
 import { RecordQuery } from "./AgentPage.ts"
 import { Found, ServerUnreachable } from "./api.ts"
-import { DeepMissingView, ReportView, SegmentView } from "./DeepView.tsx"
 import { Server } from "./server/Server.ts"
 
 const lookup = (kind: string) => (id: string) =>
   Effect.flatMap(Effect.service(Server), (server) => server.lookup(kind, id))
 
-const query = { input: Schema.String, success: Found, failure: ServerUnreachable } as const
+const query = {
+  input: Schema.String,
+  success: Found,
+  failure: ServerUnreachable,
+  staleAfter: "30 seconds",
+} as const
 
 export class OrgQuery extends Query.Tag<OrgQuery>()("sidebar/Org", {
   ...query,
@@ -3358,113 +3668,23 @@ export class AuthorQuery extends Query.Tag<AuthorQuery>()("sidebar/Author", {
   load: lookup("author"),
 }) {}
 
-const Org = Schema.Struct({ org: Schema.String })
+export const Org = Schema.Struct({ org: Schema.String })
 
-const Team = Schema.Struct({ ...Org.fields, team: Schema.String })
+export const Team = Schema.Struct({ ...Org.fields, team: Schema.String })
 
-const Member = Schema.Struct({ ...Team.fields, member: Schema.String })
+export const Member = Schema.Struct({ ...Team.fields, member: Schema.String })
 
-const Report = Schema.Struct({ ...Member.fields, report: Schema.String })
+export const Report = Schema.Struct({ ...Member.fields, report: Schema.String })
 
 export const orgRoute = Router.route("/org/:org/*", Org)
 
-export const teamRoute = Router.route("/org/:org/team/:team/*", Team)
+export const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
 
-export const memberRoute = Router.route("/org/:org/team/:team/member/:member/*", Member)
+export const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
 
-export const reportsRoute = Router.route("/org/:org/team/:team/member/:member/reports/*", Member)
+export const reportsRoute = Router.under(memberRoute, "/reports/*", Member)
 
-export const reportRoute = Router.route(
-  "/org/:org/team/:team/member/:member/reports/:report",
-  Report,
-)
-
-const labelOf = (found: Found | null): string => found?.label ?? ""
-
-const shown = (handle: Query.Handle<Found, ServerUnreachable>) => ({
-  label: Reactive.map(handle.value, labelOf),
-  status: handle.status,
-})
-
-const ReportPage = View.taking(
-  { params: Props.Reactive(Report) },
-  Effect.fnUntraced(function* ({ params }) {
-    const report = yield* ReportQuery.ask(Reactive.map(params, (now) => now.report))
-    const author = yield* AuthorQuery.ask(
-      Reactive.map(report.value, (found) => Option.fromNullishOr(found?.authorId)),
-    )
-
-    return {
-      ...shown(report),
-      author: Reactive.map(author.value, labelOf),
-      authorStatus: author.status,
-    }
-  }),
-)(ReportView)
-
-const Reports = View.taking(
-  { params: Props.Reactive(Member) },
-  Effect.fnUntraced(function* ({ params }) {
-    const reports = yield* ReportsQuery.ask(Reactive.map(params, (now) => now.member))
-
-    return {
-      kind: "Reports",
-      ...shown(reports),
-      inner: yield* Router.outlet({
-        routes: [Router.live(reportRoute, ReportPage)],
-        otherwise: DeepMissingView,
-      }),
-    }
-  }),
-)(SegmentView)
-
-const MemberSegment = View.taking(
-  { params: Props.Reactive(Member) },
-  Effect.fnUntraced(function* ({ params }) {
-    const member = yield* MemberQuery.ask(Reactive.map(params, (now) => now.member))
-
-    return {
-      kind: "Member",
-      ...shown(member),
-      inner: yield* Router.outlet({
-        routes: [Router.live(reportsRoute, Reports)],
-        otherwise: DeepMissingView,
-      }),
-    }
-  }),
-)(SegmentView)
-
-const TeamSegment = View.taking(
-  { params: Props.Reactive(Team) },
-  Effect.fnUntraced(function* ({ params }) {
-    const team = yield* TeamQuery.ask(Reactive.map(params, (now) => now.team))
-
-    return {
-      kind: "Team",
-      ...shown(team),
-      inner: yield* Router.outlet({
-        routes: [Router.live(memberRoute, MemberSegment)],
-        otherwise: DeepMissingView,
-      }),
-    }
-  }),
-)(SegmentView)
-
-export const OrgSegment = View.taking(
-  { params: Props.Reactive(Org) },
-  Effect.fnUntraced(function* ({ params }) {
-    const org = yield* OrgQuery.ask(Reactive.map(params, (now) => now.org))
-
-    return {
-      kind: "Organisation",
-      ...shown(org),
-      inner: yield* Router.outlet({
-        routes: [Router.live(teamRoute, TeamSegment)],
-        otherwise: DeepMissingView,
-      }),
-    }
-  }),
-)(SegmentView)
+export const reportRoute = Router.under(reportsRoute, "/:report", Report)
 
 export const deepQueries = Layer.mergeAll(
   RecordQuery.live,
@@ -3537,7 +3757,7 @@ export const NotesView = View.make(
 A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit mounted as a child.
 
 ```ts
-import { Effect, Option, Schema, pipe } from "effect"
+import { Effect, Option, Schedule, Schema, pipe } from "effect"
 import { Query, Reactive, Router, View } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
@@ -3566,6 +3786,7 @@ export class RecordQuery extends Query.Tag<RecordQuery>()("sidebar/Record", {
   success: Started,
   failure: Schema.Union([NoRecord, ServerUnreachable]),
   load: (name: string) => Effect.flatMap(Effect.service(Server), (server) => server.describe(name)),
+  retry: Schedule.upTo(Schedule.spaced("150 millis"), { times: 4 }),
 }) {}
 
 const recordText = (
@@ -3650,7 +3871,8 @@ import { Effect } from "effect"
 import { Handle, Router, View } from "spar"
 import { Toast } from "@spar/ui"
 import { AgentPage } from "./AgentPage.ts"
-import { OrgSegment, deepExample, orgRoute, reportRoute } from "./Deep.ts"
+import { deepExample, orgRoute, reportRoute } from "./Deep.ts"
+import { DeepLoadingView } from "./DeepLoadingView.tsx"
 import { Notes } from "./Notes.ts"
 import { People } from "./People.ts"
 import { ResetCounter } from "./ResetCounter.ts"
@@ -3676,7 +3898,12 @@ export const Shell = View.connect(
         routes: [
           Router.on(home, EmptyPageView),
           Router.on(agentRoute, AgentPage),
-          Router.live(orgRoute, OrgSegment),
+          Router.live(
+            orgRoute,
+            View.split(DeepLoadingView, () =>
+              import("./DeepPage.ts").then((module) => module.OrgSegment),
+            ),
+          ),
         ],
         otherwise: MissingPageView,
       }),

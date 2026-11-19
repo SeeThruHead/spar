@@ -28,27 +28,28 @@ has no request for. "Less" means Foldkit does something Spar does not yet.
 Each row is one request in Foldkit's protocol and the Spar tool that does the job. Spar's tools
 are served over MCP and answer from a shell through the CLI.
 
-| Foldkit request                      | Spar tool                                                                   |      |
-| ------------------------------------ | --------------------------------------------------------------------------- | ---- |
-| `GetModel`                           | `get_state` for a store, `get_ui_state` for all UI state                    | Same |
-| `GetModelAt`                         | `travel_to` (one store) or `rewind` (the whole app), then `get_state`       | Same |
-| `GetInit`                            | `travel_to` with the seq before a store's first action                      | Same |
-| `ListMessages`, `GetMessage`         | `get_log` for a store, `get_timeline` for everything                        | Same |
-| `CountMessagesByTag`                 | `count_moments`                                                             | Same |
-| `DiffModels`                         | `diff_states`: the paths that differ between two of a store's actions       | Same |
-| `DispatchMessage`                    | `run_action`; `set_ui_state` for UI state                                   | Same |
-| `DispatchMessages` (several at once) | `run_actions`                                                               | Same |
-| `GetMessageSchema`                   | `get_actions`: each action's name and the JSON Schema of its payload        | Same |
-| `ListKeyframes`, `ReplayToKeyframe`  | `get_timeline` and `rewind`; every moment can be returned to, not only some | Same |
-| `Resume`                             | `rewind` with null                                                          | Same |
-| `GetRuntimeState`                    | `get_timeline` gives the moment being shown; `list_branches` the branch     | Same |
-| `ListRuntimes` (several open tabs)   | `list_pages` and `use_page`                                                 | Same |
-| No request for it                    | `step`: one moment earlier or later, with every span of that moment's trace | More |
-| No request for it                    | `fork`, `list_branches`, `switch_branch`                                    | More |
-| No request for it                    | `get_trace`: the spans of a trace                                           | More |
-| No request for it                    | `list_components`, `get_component`: the mounted components and their data   | More |
-| No request for it                    | `load_log`: replay another log in a store                                   | More |
-| No request for it                    | A CLI for all of the above                                                  | More |
+| Foldkit request                      | Spar tool                                                                    |      |
+| ------------------------------------ | ---------------------------------------------------------------------------- | ---- |
+| `GetModel`                           | `get_state` for a store, `get_ui_state` for all UI state                     | Same |
+| `GetModelAt`                         | `travel_to` (one store) or `rewind` (the whole app), then `get_state`        | Same |
+| `GetInit`                            | `travel_to` with the seq before a store's first action                       | Same |
+| `ListMessages`, `GetMessage`         | `get_log` for a store, `get_timeline` for everything                         | Same |
+| `CountMessagesByTag`                 | `count_moments`                                                              | Same |
+| `DiffModels`                         | `diff_states`: the paths that differ between two of a store's actions        | Same |
+| `DispatchMessage`                    | `run_action`; `set_ui_state` for UI state                                    | Same |
+| `DispatchMessages` (several at once) | `run_actions`                                                                | Same |
+| `GetMessageSchema`                   | `get_actions`: each action's name and the JSON Schema of its payload         | Same |
+| `ListKeyframes`, `ReplayToKeyframe`  | `get_timeline` and `rewind`; every moment can be returned to, not only some  | Same |
+| `Resume`                             | `rewind` with null                                                           | Same |
+| `GetRuntimeState`                    | `get_timeline` gives the moment being shown; `list_branches` the branch      | Same |
+| `ListRuntimes` (several open tabs)   | `list_pages` and `use_page`                                                  | Same |
+| No request for it                    | `step`: one moment earlier or later, with every span of that moment's trace  | More |
+| No request for it                    | `fork`, `list_branches`, `switch_branch`                                     | More |
+| No request for it                    | `get_trace`: the spans of a trace                                            | More |
+| No request for it                    | `get_navigation`: the newest route change with its trace, by lens            | More |
+| No request for it                    | `list_components`, `get_component`: the mounted components and their data    | More |
+| No request for it                    | `load_log`: replay another log in a store                                    | More |
+| No request for it                    | A CLI for all of the above, and `trace` to print a navigation as a waterfall | More |
 
 ## Where Spar is behind
 

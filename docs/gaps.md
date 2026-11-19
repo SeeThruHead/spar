@@ -34,12 +34,15 @@ Built since, and smaller than they sound, but not done:
 - **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
   returns to what was saved. A store that was made beside a view stays listed in the devtools
   after its view unmounts.
-- **For agents:** an action's payload Schema is not reported, several actions cannot be sent in
-  one call, and with several tabs open the tools speak for the one that reported last
-  (`docs/devtools-compared.md`).
-- **The agent page's server record still loads in its component's Effect** and not through a
-  query, though queries now take an input. Refetch on focus and reconnect, pagination, optimistic
-  updates on a query, retries and dropping unused data are not built.
+- **Queries:** the cache only grows, since unused entries are never dropped. There is no
+  pagination or infinite-list helper (a page is an input). An optimistic change stays shown if its
+  send fails for good, until something invalidates the query.
+- **Server rendering sends the page whole.** The head goes first, then the page once every query
+  has answered. There is no sending in pieces and no way to hold a slow query back.
+- **An event's span names its view only with the devtools on.** The renderer does not know
+  which view drew a node; the inspector does.
+- **A query's default stale time is 0,** so a preload that finishes before the click, or a page
+  drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
 - **The showcase is `apps/sidebar`, and server rendering is shown by `apps/ssr`.** No single app

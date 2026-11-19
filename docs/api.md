@@ -13,6 +13,7 @@ repo where the API is used and type-checked.
 | `View.child(component, props)`         | Mounts a child from a parent's Effect and gives back its element.                                                          |
 | `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                         |
 | `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                     |
+| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props.                           |
 | `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                           |
 | `View.mapProps(f)`                     | Changes the props a component takes.                                                                                       |
 | `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                           |
@@ -230,7 +231,7 @@ page: yield *
 ```
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
-layout that stays mounted while inner pages change. The service has `location`, `go(route, params)`,
+layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
 `replace`, `back` and `link(route, params)`. `Router.focusOnChange(handle)` moves focus after a
 navigation. `Router.live(route, Page)` keeps the page mounted while only the query changes and
 gives it `params` as a reactive value, where `Router.on` mounts a fresh page for every change. In
@@ -319,24 +320,28 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                                | What it does                                                                                         |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })` | Declares the query: Schemas for its input, what it loads and how it fails, and `load(input)`.        |
-| `Self.ask(input)`                                                       | Declares, in a component's Effect, that this input is needed. Returns a handle at once.              |
-| `Self.read(input)`                                                      | The loaded value for an input, or null. For another store's after-effect.                            |
-| `Self.live`                                                             | Its layer, for the whole app.                                                                        |
-| `Self.beside(component)`                                                | The query beside one component, as `.with` does for a store.                                         |
-| `Self.invalidate`, `Self.invalidatedBy(action)`                         | Load everything it holds again; a reaction for another store's layer that does so after that action. |
+| Function                                                                       | What it does                                                                                                                                                                         |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh, and a schedule to try again on before it counts as failed. |
+| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                              |
+| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                            |
+| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                        |
+| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                         |
+| `Self.invalidate`, `Self.invalidatedBy(action)`                                | Load everything it holds again; a reaction for another store's layer that does so after that action.                                                                                 |
+| `Self.patchedBy(action, input, patch)`                                         | A reaction for another store's layer: after that action, change the loaded value for `input(payload)` at once. With `Store.outbox` on the same action, an optimistic update.         |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
 means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
-`loaded` or `failed`), `value`, `error`, `loading` and `refetch`, all reactive. It asks again
+`loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
+input, for paging without a blank) and `refetch`, all reactive. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is refused) and an answer to an earlier request is refused. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
 and a query whose input comes from another query's value waits only for that value.
-Not built yet: refetch on focus and reconnect, pagination, optimistic updates on a query,
-retries, dropping unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
+While a component is using it, a query asks again for what has gone stale when the tab is shown
+again or the connection comes back. Data already there is served with a short span that links to
+the trace that loaded it. Not built: dropping unused data, and a pagination helper (a page is an
+input). (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ## Backend
 
@@ -421,18 +426,19 @@ it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4
 connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and can ask what the app is doing right
 now:
 
-| Tool                                     | What it gives                                                                                |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                            |
-| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                      |
-| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema) |
-| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                      |
-| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures     |
-| `get_trace`                              | The spans the page recorded for a trace                                                      |
-| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                    |
-| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one    |
-| `count_moments`                          | How many times each thing happened, most frequent first                                      |
-| `diff_states`                            | What changed in a store between two of its actions, by path                                  |
+| Tool                                     | What it gives                                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                              |
+| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                        |
+| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema)   |
+| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                        |
+| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures       |
+| `get_trace`                              | The spans the page recorded for a trace                                                        |
+| `get_navigation`                         | The newest route change, its trace id and its spans; `back` counts back, `lens` keeps one kind |
+| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                      |
+| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one      |
+| `count_moments`                          | How many times each thing happened, most frequent first                                        |
+| `diff_states`                            | What changed in a store between two of its actions, by path                                    |
 
 The same tools answer from a shell: `bun run --filter @spar/devtools-mcp cli tools` lists them and
 `bun run --filter @spar/devtools-mcp cli call <tool> '<json>'` asks one (add `--url` when the

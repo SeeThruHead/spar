@@ -110,6 +110,18 @@ const OrgSegment = View.taking(
 )(SegmentView)
 ```
 
+A route inside another is declared under it, so its path is written once. The parent must end
+with `/*`, and the Schema must carry every param of the whole path; both are compile errors
+otherwise:
+
+```ts
+const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
+const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
+```
+
+There is no separate route tree to keep in step: the nesting is the outlets, and the paths follow
+from `under`.
+
 A page five segments deep written this way starts all five segments' requests together. The
 showcase has one (`apps/sidebar/src/Deep.ts`), and its browser check reads the backend's own
 spans and fails if the five do not start together or if the sixth does not wait for the one it
@@ -128,6 +140,29 @@ Spar rehearses the target: it mounts the app at that address without drawing any
 reaches every `ask` on the way, and throws the result away. The queries are real and their answers
 stay in their stores, so the click finds the data there. Leave `onIntent` off a link whose page
 should not be preloaded. `router.preload(route, params)` does the same from code.
+
+## Loading a page's code when it is first shown
+
+```ts
+Router.live(
+  orgRoute,
+  View.split(LoadingView, () => import("./DeepPage.ts").then((module) => module.OrgSegment)),
+)
+```
+
+`View.split` shows the placeholder, a view that takes the same props, until the code has
+arrived. Routes, param Schemas and query classes stay in the main bundle because the query layers
+are provided at the root; the components and their views are what is split off. Preloading a link
+fetches the code too, since the rehearsal mounts the page. On the server and while taking over a
+server-drawn page the real component is used, not the placeholder. The showcase's deep page is
+loaded this way (`apps/sidebar/src/Shell.ts`).
+
+## Pending and failure, per segment
+
+Each segment shows its own query's `status`, so one slow segment does not blank the others. For
+a component whose own Effect can wait or fail, `View.pending(placeholder)` and
+`View.recover(failure, view)` wrap that component alone. A query takes `retry`, a schedule,
+and stays `loading` until the schedule gives up.
 
 ## What makes a waterfall, and how Spar stops it
 
@@ -154,23 +189,53 @@ panel, lenses show one kind at a time:
 
 | Lens      | What it keeps                                                                          |
 | --------- | -------------------------------------------------------------------------------------- |
-| Rendering | Components mounting                                                                    |
+| Rendering | Components mounting, and each event a component handled (`on click`, with its view)    |
 | Data      | Queries: each request, its call, its answer, and what a dependent one's input was from |
 | Stores    | Store commands and refusals                                                            |
 | Backend   | Spans the backend recorded                                                             |
 
-An agent gets the same with `get_trace` and a `lens`.
+A request that waited for another query's value draws that wait as a line before its bar, from
+when the other was asked for to when this one started. Data that was already there (after a
+preload, or going back) is a short `served` span that links to the trace that loaded it.
+
+An agent gets the same with `get_trace` and a `lens`, or `get_navigation` for the newest
+route change. From a shell:
+
+```sh
+bun run --cwd packages/devtools-mcp cli trace --lens data
+```
+
+prints that navigation as an indented waterfall: each span, when it started, how long it took and
+what it waited for. `--back 1` is the navigation before; `--id` takes a trace id.
 
 ## On the server
 
-`Server.render` mounts the page, waits until every query has settled, dependent ones included, and
-draws. The queries' stores travel with the page like any store's, so in the browser the first
-`ask` finds its data fresh and makes no request. Give a query a `staleAfter` or the browser will
-ask again straight away. There are no server components and no second kind of component: the
-server boundary is the RPC contract both sides share.
+`Server.render` draws the page, waits until every query has settled, and draws again until a
+pass finds nothing still loading. That covers queries inside a routed page or a list, which only
+start once the page is drawn, and dependent ones. The queries' stores travel with the page like
+any store's, so in the browser the first `ask` finds its data fresh and makes no request. Give a
+query a `staleAfter` or the browser will ask again straight away.
 
-## Not built yet
+The server boundary is one Effect RPC group and one service with two layers. On the server the
+layer reads the database; in the browser it calls the group over `Backend.rpc`. The query's
+`load` is the same code on both sides. `apps/ssr` shows it with a routed product page: its
+browser test fails unless the page arrives with what its two queries loaded, the browser asks for
+none of it again, a link to another product makes exactly two calls in one trace that reaches the
+database's spans, and going back loads no new document.
 
-A route tree as one value, pending and error views declared per segment, code splitting per
-route, scroll restoration per history entry; refetch on focus and reconnect, pagination,
-optimistic updates on a query, retries; dependency edges drawn as lines in the waterfall.
+From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
+and picked up in the browser, and a typed server boundary. It does not take: routes from files,
+server functions made by a compiler, or streaming a page in pieces. The document's head is sent
+first and the page follows whole once its data is in. There are no server components and no
+second kind of component.
+
+## Not built
+
+- Sending a page in pieces as each query answers, or holding a slow query back so it does not
+  delay the first draw.
+- Dropping cached entries nobody is using: a query's cache only grows.
+- A dedicated pagination or infinite-list helper. A page is an input, so each page is its own
+  cache entry, and `handle.latest` keeps the last loaded value on screen while the next page
+  loads. An infinite list is a list of page components that each ask for their page; no example
+  of that is built.
+- A span for the code of a split page arriving.

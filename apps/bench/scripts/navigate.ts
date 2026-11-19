@@ -146,7 +146,7 @@ const report = [
     ]),
   ),
   "",
-  "How each is written. Spar: each segment's component asks for its own data with `Query.ask`, and the author's query takes its input from the report's value; nothing else is declared (`apps/bench/src/nav-spar/Nav.ts`). React: each route has a loader that calls `queryClient.ensureQueryData`, the leaf's loader awaits the report and then the author, and each component reads with `useSuspenseQuery` (`apps/bench/src/nav-react/main.tsx`). Foldkit: there is no router in this version; the click's branch of `update` returns the five Commands, and the branch that handles the report's answer returns the sixth (`apps/bench/src/nav-foldkit/main.ts`).",
+  "How each is written. Spar: each segment's component asks for its own data with `Query.ask`, and the author's query takes its input from the report's value; nothing else is declared (`apps/bench/src/nav-spar/Nav.ts`). React: each route has a loader that calls `queryClient.ensureQueryData`, the leaf's loader awaits the report and then the author, and each component reads with `useSuspenseQuery` (`apps/bench/src/nav-react/main.tsx`). Foldkit: this app does not use Foldkit's router (`foldkit/route`); the click's branch of `update` returns the five Commands, and the branch that handles the report's answer returns the sixth (`apps/bench/src/nav-foldkit/main.ts`).",
   "",
 ].join("\n")
 
