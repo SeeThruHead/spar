@@ -3,12 +3,14 @@ import {
   Context,
   Deferred,
   Effect,
+  Exit,
   Layer,
   MutableRef,
   Option,
   Ref,
   Schedule,
   Schema,
+  Scope,
   SubscriptionRef,
   Tracer,
 } from "effect"
@@ -383,6 +385,46 @@ describe("the natural way: a value from one place feeds a query declared in anot
     ),
   )
 
+  it.live("a list whose next page is one it already has says there is no more", () =>
+    Effect.gen(function* () {
+      const Feed = View.connect(
+        Effect.fnUntraced(function* () {
+          const feed = yield* Orders.pages({ first: 1, next: () => Option.some(1) })
+
+          return {
+            items: Reactive.map(feed.pages, (all) => all.flat().join(",")),
+            state: Reactive.map(feed.loading, String),
+            more: Reactive.map(feed.more, String),
+            onMore: feed.loadMore,
+          }
+        }),
+      )(FeedView)
+      const found = yield* directory
+
+      yield* Testing.mount(Feed)
+      yield* shows("", "true", "false")
+
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, ["a"]))
+      yield* shows("a", "false", "false")
+      yield* Testing.click("button", "More")
+      yield* Effect.sleep("20 millis")
+      yield* shows("a", "false", "false")
+      expect((yield* Ref.get(found.asked)).map((each) => each.what)).toEqual(["orders 1"])
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
       const OrdersOf = View.taking(
@@ -701,8 +743,22 @@ describe("server data in a store", () => {
 
       yield* once(1)
       yield* once(2)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["2"])
       yield* once(3)
       expect(Object.keys((yield* few.state.get).entries)).toEqual(["3"])
+
+      const early = yield* Scope.make()
+
+      yield* Effect.provideService(Effect.provide(Few.ask(7), built), Scope.Scope, early)
+      yield* Effect.yieldNow
+      yield* answer("orders 7", ["x"])
+      yield* once(8)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["7"])
+      yield* once(6)
+      yield* TestClock.adjust("1 second")
+      yield* Scope.close(early, Exit.void)
+      yield* Effect.yieldNow
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["7"])
 
       yield* Effect.provide(Few.ask(9), built)
       yield* Effect.yieldNow

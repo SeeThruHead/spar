@@ -34,6 +34,10 @@ describe("where a view was made, read from a stack", () => {
     expect(Diagnostics.locationIn("    at make (/repo/src/View.ts:1:2)", 0)).toBe(
       "/repo/src/View.ts:1:2",
     )
+    expect(Diagnostics.locationIn("    at make (/repo/src/View.ts:1:2)   ", 0)).toBe(
+      "/repo/src/View.ts:1:2",
+    )
+    expect(Diagnostics.locationIn("/repo/src/View.ts:1:2 is named here, not a frame", 0)).toBe("")
     expect(Diagnostics.locationIn(chromium, 9)).toBe("")
     expect(Diagnostics.locationIn(undefined, 0)).toBe("")
   })

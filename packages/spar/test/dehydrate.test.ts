@@ -228,6 +228,8 @@ describe("a page sent in pieces", () => {
       expect(pieces).toContain('"value":["tea","ink","pen"]')
       expect(pieces).toContain('"value":3')
       expect(pieces).not.toContain("test/Shelf")
+      expect(pieces).not.toContain('{"stores":{}}')
+      expect(pieces).not.toContain('"test/Price":{"entries":{}}')
     }),
   )
 
