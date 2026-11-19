@@ -5,6 +5,7 @@ import type { Path, Tree } from "./uiTree.ts"
 export type Mounted = {
   readonly parent: Mounted | undefined
   readonly label: string
+  readonly at: string
   readonly scope: Scope.Scope
   readonly tree: Tree
 }

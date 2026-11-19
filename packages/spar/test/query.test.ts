@@ -425,6 +425,37 @@ describe("the natural way: a value from one place feeds a query declared in anot
     ),
   )
 
+  it.live("the report of a needless wait names the component and where its view was made", () =>
+    Effect.gen(function* () {
+      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+      const Chained = View.connect(
+        Effect.fnUntraced(function* () {
+          const users = yield* Users.ask()
+          const stock = yield* Stock.ask(
+            Reactive.map(users.value, (loaded) =>
+              loaded === null ? Option.none<void>() : Option.some<void>(undefined),
+            ),
+          )
+
+          return { status: stock.status, count: Reactive.map(stock.value, (held) => held ?? 0) }
+        }),
+      )(OrdersView)
+
+      yield* Testing.mount(Chained).pipe(Effect.provide(recording(noted)))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders status"]')?.textContent).toBe("waiting"),
+      )
+
+      const [waited] = (yield* Ref.get(noted)).filter((seen) => seen.kind === "waited")
+
+      expect(JSON.stringify(waited?.detail)).toMatch(
+        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Orders","at":"[^"]+:\d+:\d+"/,
+      )
+    }).pipe(
+      Effect.provide(Layer.merge(Users.live, Stock.live).pipe(Layer.provideMerge(Directory.layer))),
+    ),
+  )
+
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
       const OrdersOf = View.taking(
@@ -798,6 +829,46 @@ describe("server data in a store", () => {
       yield* answer("orders 9", ["x"])
       yield* once(4)
       expect(Object.keys((yield* few.state.get).entries)).toEqual(["9"])
+    }),
+  )
+
+  it.effect("a query that takes no input but waits for another query's value is reported", () =>
+    Effect.gen(function* () {
+      const { built, noted } = yield* opened
+      const gate = yield* SubscriptionRef.make(Option.some<void>(undefined))
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const users = yield* Users.ask()
+
+          yield* Stock.ask(
+            Reactive.map(users.value, (loaded) =>
+              loaded === null ? Option.none<void>() : Option.some<void>(undefined),
+            ),
+          )
+          yield* Stock.ask(Reactive.fromSubscriptionRef(gate))
+          yield* Orders.ask(
+            Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id)),
+          )
+        }),
+        built,
+      )
+
+      expect(
+        (yield* Ref.get(noted))
+          .filter((seen) => seen.kind === "waited")
+          .map((seen) => [seen.name, seen.detail]),
+      ).toEqual([
+        [
+          "test/Stock",
+          {
+            code: "SPAR_NEEDLESS_WAIT",
+            after: "made from test/Users . value",
+            in: "",
+            at: "",
+          },
+        ],
+      ])
     }),
   )
 

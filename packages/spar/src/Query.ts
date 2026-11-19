@@ -17,6 +17,7 @@ import {
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
+import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Action } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
@@ -377,11 +378,39 @@ export const Tag =
           links: linksTo(hit),
         },
       )
+    const takesNothing = Object.is(options.input, Schema.Void)
+    const needless = (after: string | null) => {
+      if (after === null || !takesNothing || !after.endsWith(" . value")) return Effect.void
+
+      return Effect.flatMap(Effect.serviceOption(ViewScope), (around) => {
+        const where = Option.match(around, {
+          onNone: () => ({ in: [], at: "" }),
+          onSome: (mounted) => ({ in: pathOf(mounted), at: mounted.at }),
+        })
+
+        return Effect.andThen(
+          Timeline.note("waited", key, () => ({
+            code: "SPAR_NEEDLESS_WAIT",
+            after,
+            in: where.in.join(" > "),
+            at: where.at,
+          })),
+          Effect.logWarning(
+            Diagnostics.text("SPAR_NEEDLESS_WAIT", {
+              said: `${key} takes no input, yet it waits for ${after}.`,
+              ...where,
+            }),
+          ),
+        )
+      })
+    }
     const ask = Effect.fnUntraced(function* (input: Input<I>) {
       const store = yield* Effect.service(base)
       const wanted = map(optionalOf(input), askedFor)
       const after = Option.getOrNull(sourceOf(input))
       const context = yield* Effect.context<Self>()
+
+      yield* needless(after)
 
       const first = yield* wanted.get
       const users = usersOf(store)

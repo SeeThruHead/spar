@@ -58,6 +58,7 @@ const labelled = (name: string, key: string | undefined): string =>
 const inViewScope = <A, E, Requirements>(
   effect: Effect.Effect<A, E, Requirements>,
   name: string,
+  at: string,
 ): Effect.Effect<A, E, Outside<Requirements> | Scope.Scope> =>
   Effect.flatMap(Effect.context<Scope.Scope>(), (context) => {
     const scope = Context.get(context, Scope.Scope)
@@ -66,6 +67,7 @@ const inViewScope = <A, E, Requirements>(
       Effect.provideService(ViewScope, {
         parent: Context.getOrUndefined(context, ViewScope),
         label: labelled(name, Context.get(context, RowKey)),
+        at,
         scope,
         tree: Context.get(context, UiTree),
       }),
@@ -162,6 +164,7 @@ const connected =
         inViewScope(
           Effect.flatMap(noticed(view, props(outer)), (made) => shownIn(view, made, services)),
           spanName(view),
+          view.at,
         ),
         spanName(view),
         { captureStackTrace: false, attributes: { "spar.kind": "view" } },

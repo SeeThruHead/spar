@@ -52,6 +52,11 @@ export const all = {
     what: "A part of the page crashed.",
     fix: "Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.",
   },
+  SPAR_NEEDLESS_WAIT: {
+    kind: "run",
+    what: "A query that takes no input waits for another query's value before it starts.",
+    fix: "Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",

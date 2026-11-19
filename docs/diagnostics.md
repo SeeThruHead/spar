@@ -96,6 +96,14 @@ Fix: Read the defect that follows. If the part is wrapped in View.crash the rest
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_NEEDLESS_WAIT
+
+A query that takes no input waits for another query's value before it starts.
+
+Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_DUPLICATE_KEY
 
 A keyed list has rows that share a key.
