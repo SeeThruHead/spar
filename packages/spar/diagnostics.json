@@ -77,6 +77,13 @@
     "reportedBy": "The running app: an error's message, or an entry in the log."
   },
   {
+    "code": "SPAR_OLDER_ANSWER",
+    "kind": "run",
+    "what": "What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.",
+    "fix": "If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.",
+    "reportedBy": "The running app: an error's message, or an entry in the log."
+  },
+  {
     "code": "SPAR_DUPLICATE_KEY",
     "kind": "run",
     "what": "A keyed list has rows that share a key.",

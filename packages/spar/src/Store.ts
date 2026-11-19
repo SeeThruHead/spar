@@ -2,9 +2,11 @@ import {
   Array,
   Context,
   Effect,
+  Fiber,
   Formatter,
   Layer,
   Option,
+  Predicate,
   Record,
   Ref,
   Schema,
@@ -65,6 +67,7 @@ export type Reaction<State, R = never> = {
   readonly action: Action<State, unknown>
   readonly detached?: boolean
   readonly queued?: boolean
+  readonly latest?: boolean
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
   readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
   readonly start: (channel: string) => Effect.Effect<void, never, R | Scope.Scope>
@@ -219,6 +222,27 @@ export const selector = <A, State>(
   schema: Schema.Codec<A, unknown>,
   select: (state: State) => NoInfer<A>,
 ): Selector<State, A> => ({ schema, select })
+
+type Answered = { readonly seq: number; readonly parts: ReadonlyArray<string> }
+
+const partsChanged = (before: unknown, after: unknown): ReadonlyArray<string> => {
+  if (!Predicate.isObject(before) || !Predicate.isObject(after)) {
+    return Object.is(before, after) ? [] : ["the state"]
+  }
+
+  return Object.keys(after).filter(
+    (name) => !Object.is(Reflect.get(before, name), Reflect.get(after, name)),
+  )
+}
+
+const newerOf = (last: Answered | undefined, mine: Answered): Answered =>
+  last === undefined || mine.seq >= last.seq ? mine : last
+
+const overwrites = (last: Answered | undefined, mine: Answered): boolean => {
+  if (last === undefined || last.seq <= mine.seq) return false
+
+  return mine.parts.some((part) => last.parts.includes(part))
+}
 
 const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => {
   if (reaction.detached === true) return false
@@ -459,11 +483,50 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         )
       }
 
+      const answers = Cell.make<ReadonlyMap<object, Answered>>(new Map())
+      const sendFrom =
+        (reaction: Reaction<State, R>, entry: Entry): Send<State> =>
+        (target, payload) =>
+          Effect.suspend(() => {
+            const before = shown(cell.read())
+
+            return Effect.andThen(
+              send(target, payload),
+              Effect.suspend(() => {
+                const mine = { seq: entry.seq, parts: partsChanged(before, shown(cell.read())) }
+                const last = answers.read().get(reaction)
+
+                answers.write(new Map([...answers.read(), [reaction, newerOf(last, mine)]]))
+
+                return overwrites(last, mine)
+                  ? noticed(
+                      "SPAR_OLDER_ANSWER",
+                      `${key}/${entry.action}`,
+                      `What an earlier ${key}/${entry.action} started answered after a later one's, and both changed ${mine.parts.join(", ")}.`,
+                    )
+                  : Effect.void
+              }),
+            )
+          })
+      const runs = Cell.make<ReadonlyMap<object, Fiber.Fiber<void>>>(new Map())
+      const stoppedEarlier = (reaction: Reaction<State, R>) =>
+        Effect.suspend(() =>
+          Effect.forEach(
+            Option.toArray(Option.fromUndefinedOr(runs.read().get(reaction))),
+            Fiber.interrupt,
+            {
+              discard: true,
+            },
+          ),
+        )
+      const kept = (reaction: Reaction<State, R>, fiber: Fiber.Fiber<void>) =>
+        Effect.sync(() => runs.write(new Map([...runs.read(), [reaction, fiber]])))
+
       const started = (
         reaction: Reaction<State, R>,
         done: { readonly entry: Entry; readonly next: State },
       ) => {
-        const running = reaction.run(done.entry, done.next, send)
+        const running = reaction.run(done.entry, done.next, sendFrom(reaction, done.entry))
         if (reaction.detached === true) {
           return Effect.updateContext(
             Effect.forkIn(running, scope),
@@ -472,12 +535,18 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         }
         if (reaction.queued === true) return Effect.forkIn(running, scope)
 
-        return Effect.forkIn(
+        const tracked = Effect.forkIn(
           Effect.ensuring(
             running,
             Effect.sync(() => counted(busy, sameAs(done.entry), -1)),
           ),
           scope,
+        )
+        if (reaction.latest !== true) return tracked
+
+        return Effect.andThen(
+          stoppedEarlier(reaction),
+          Effect.flatMap(tracked, (fiber) => kept(reaction, fiber)),
         )
       }
 
@@ -711,6 +780,11 @@ export const after = <State, Payload, R>(
   start: () => Effect.void,
   leftovers: () => Effect.succeed([]),
 })
+
+export const afterLatest = <State, Payload, R>(
+  trigger: Action<State, Payload>,
+  effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
+): Reaction<State, R> => ({ ...after(trigger, effect), latest: true })
 
 export const afterDetached = <State, Payload, R>(
   trigger: Action<State, Payload>,

@@ -112,6 +112,14 @@ Fix: If the second send is a mistake, such as a second press of Pay, give the ac
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_OLDER_ANSWER
+
+What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.
+
+Fix: If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_DUPLICATE_KEY
 
 A keyed list has rows that share a key.

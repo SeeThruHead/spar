@@ -62,6 +62,11 @@ export const all = {
     what: "The same command, with the same payload, was sent again while the work the first one started was still running.",
     fix: "If the second send is a mistake, such as a second press of Pay, give the action a guard that refuses it while the first is in progress (Store.action's third argument), or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.",
   },
+  SPAR_OLDER_ANSWER: {
+    kind: "run",
+    what: "What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.",
+    fix: "If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",
