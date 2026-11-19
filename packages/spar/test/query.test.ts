@@ -4,11 +4,13 @@ import {
   Deferred,
   Effect,
   Layer,
+  MutableRef,
   Option,
   Ref,
   Schedule,
   Schema,
   SubscriptionRef,
+  Tracer,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
@@ -508,6 +510,96 @@ describe("server data in a store", () => {
           from: preload?.traceId,
         })
       }),
+  )
+
+  it.effect(
+    "the served span links to the span that loaded the data, and to nothing when no span did",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const inner = yield* Effect.tracer
+        const made = MutableRef.make<ReadonlyArray<Tracer.Span>>([])
+        const watching = Tracer.make({
+          span: (options) => {
+            const span = inner.span(options)
+
+            MutableRef.update(made, (all) => [...all, span])
+
+            return span
+          },
+        })
+        const during = <A, E, R>(name: string, effect: Effect.Effect<A, E, R>) =>
+          Effect.withTracer(Effect.withSpan(Effect.provide(effect, built), name), watching)
+        const linksOf = (name: string) =>
+          MutableRef.get(made)
+            .findLast((span) => span.name === name)
+            ?.links.map((link) => [link.span.traceId, link.span.spanId, link.span.sampled])
+
+        yield* during("first", Users.ask())
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+        yield* during("second", Users.ask())
+
+        const first = MutableRef.get(made).find((span) => span.name === "first")
+
+        expect(linksOf("test/Users/served")).toEqual([[first?.traceId, first?.spanId, true]])
+
+        yield* Effect.provide(Orders.ask(5), built)
+        yield* Effect.yieldNow
+        yield* answer("orders 5", ["tea"])
+        yield* during("third", Orders.ask(5))
+        expect(linksOf("test/Orders/served")).toEqual([])
+      }),
+  )
+
+  it.effect("an input that is set again to what it already was is not looked at again", () =>
+    Effect.gen(function* () {
+      const { built, noted, answer } = yield* opened
+      const selected = yield* SubscriptionRef.make(1)
+      const served = Effect.map(
+        Ref.get(noted),
+        (all) => all.filter((seen) => seen.name === "test/Orders/served").length,
+      )
+
+      yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
+      yield* Effect.yieldNow
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(selected, 1)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* served).toBe(0)
+    }),
+  )
+
+  it.effect("what is asked for again by hand or by invalidation forgets which span loaded it", () =>
+    Effect.gen(function* () {
+      const { built, users, answer } = yield* opened
+      const loadedBy = Effect.map(users.state.get, (now) =>
+        Object.values(now.entries).map((entry) => [entry.traceId === "", entry.spanId === ""]),
+      )
+      const spans = yield* Layer.build(Spans.layer())
+      const handle = yield* Effect.provide(
+        Effect.withSpan(Effect.provide(Users.ask(), built), "the first ask"),
+        spans,
+      )
+
+      yield* Effect.yieldNow
+      yield* answer("users", [ada])
+      expect(yield* loadedBy).toEqual([[false, false]])
+
+      yield* handle.refetch
+      yield* Effect.yieldNow
+      expect(yield* loadedBy).toEqual([[true, true]])
+      yield* answer("users", [ada])
+
+      yield* Effect.provide(
+        Effect.withSpan(Effect.provide(Users.ask(), built), "asked again"),
+        spans,
+      )
+      yield* Effect.provide(Users.invalidate, built)
+      yield* Effect.yieldNow
+      expect(yield* loadedBy).toEqual([[true, true]])
+    }),
   )
 
   it.live(
