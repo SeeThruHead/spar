@@ -145,6 +145,14 @@ const opened = Effect.gen(function* () {
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
   Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
 
+const hidden = (state: string) =>
+  Effect.sync(() => {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true })
+    document.dispatchEvent(new Event("visibilitychange"))
+  })
+
+const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new Event(type)))
+
 describe("the natural way: a value from one place feeds a query declared in another", () => {
   it.effect(
     "what waits for nothing starts at once, and a dependent query waits only for its input",
@@ -441,6 +449,39 @@ describe("server data in a store", () => {
           key: "null",
           from: preload?.traceId,
         })
+      }),
+  )
+
+  it.live(
+    "coming back to the tab or back online asks again for what has gone stale, and only that",
+    () =>
+      Effect.gen(function* () {
+        const { built, whats, answer } = yield* opened
+        const asked = (count: number) =>
+          Effect.repeat(whats, {
+            until: (all) => all.length === count,
+            schedule: Schedule.spaced("5 millis"),
+          })
+
+        yield* Effect.provide(Stock.ask(), built)
+        yield* Effect.provide(Users.ask(), built)
+        yield* asked(2)
+        yield* answer("stock", 3)
+        yield* answer("users", [ada])
+        yield* Effect.sleep("10 millis")
+
+        yield* hidden("hidden")
+        yield* Effect.sleep("20 millis")
+        expect(yield* whats).toEqual(["stock", "users"])
+
+        yield* hidden("visible")
+        expect(yield* asked(3)).toEqual(["stock", "users", "stock"])
+        yield* answer("stock", 4)
+        yield* Effect.sleep("10 millis")
+
+        yield* connection("offline")
+        yield* connection("online")
+        expect(yield* asked(4)).toEqual(["stock", "users", "stock", "stock"])
       }),
   )
 

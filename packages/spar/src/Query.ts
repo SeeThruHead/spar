@@ -3,6 +3,7 @@ import { sourceOf, sourced } from "./internal/inspect.ts"
 import type { Action } from "./internal/journal.ts"
 import { isReactive, map, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
+import * as Events from "./Events.ts"
 import * as Store from "./Store.ts"
 import * as Timeline from "./Timeline.ts"
 import type { Mountable } from "./View.ts"
@@ -76,6 +77,12 @@ const keyOf = (asked: Option.Option<Asked>): string | null =>
 
 const sameKey = (one: Option.Option<Asked>, other: Option.Option<Asked>): boolean =>
   keyOf(one) === keyOf(other)
+
+const returning = (present: Reactive<boolean>): Stream.Stream<boolean> =>
+  Stream.filter(
+    Stream.drop(Stream.changes(Stream.concat(Stream.fromEffect(present.get), present.changes)), 1),
+    (now) => now,
+  )
 
 const optional = <I>(given: I | Option.Option<I>): Option.Option<I> =>
   Option.isOption(given) ? given : Option.some(given)
@@ -265,6 +272,16 @@ export const Tag =
             1,
           ),
           (next) => Effect.provide(ensured(next, after), context),
+        ),
+        { startImmediately: true },
+      )
+
+      const visible = yield* Events.visible
+      const online = yield* Events.online
+
+      yield* Effect.forkScoped(
+        Stream.runForEach(Stream.merge(returning(visible), returning(online)), () =>
+          Effect.flatMap(wanted.get, (asked) => Effect.provide(ensured(asked, after), context)),
         ),
         { startImmediately: true },
       )
