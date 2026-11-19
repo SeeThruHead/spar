@@ -10,10 +10,12 @@ import {
   Schema,
   pipe,
 } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { run } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, observed } from "./internal/reactive.ts"
 import {
+  BarView,
   ChangeView,
   DeadView,
   EntryView,
@@ -26,10 +28,14 @@ import {
   StoreView,
   TimelineView,
   ToolsView,
+  TraceView,
   VeilView,
 } from "./devtools/PanelView.tsx"
 import * as Events from "./Events.ts"
+import * as Spans from "./devtools/spans.ts"
+import { backendPath } from "./devtools/paths.ts"
 import * as Dom from "./internal/dom.ts"
+import { starter } from "./internal/listen.ts"
 import { inspecting, mark, sourceOf } from "./internal/inspect.ts"
 import type { Seen } from "./internal/inspect.ts"
 import * as Outbox from "./Outbox.ts"
@@ -305,8 +311,9 @@ const neighbour = (
 ): number | null =>
   seqs.at(Math.max((viewing === null ? seqs.length : seqs.indexOf(viewing)) + by, 0)) ?? null
 
-export const TimelinePanel = View.connect(
-  Effect.fnUntraced(function* () {
+export const TimelinePanel = View.taking(
+  { onTrace: Props.Callback(Schema.String) },
+  Effect.fnUntraced(function* ({ onTrace }) {
     const registry = yield* Registry
     const stepped = Effect.fnUntraced(function* (by: number) {
       const moments = yield* registry.moments.get
@@ -336,6 +343,7 @@ export const TimelinePanel = View.connect(
             trace: Reactive.map(moment, (now) => now.traceId),
             current: Reactive.map(registry.viewing, (viewing) => String(viewing) === seq),
             onJump: registry.travelTo(Number(seq)),
+            onTrace: Effect.flatMap(moment.get, (now) => run(onTrace(now.traceId))),
           }),
         ),
       ),
@@ -568,12 +576,134 @@ export const Inspector = View.connect(
   }),
 )(InspectorView)
 
+type Sided = { readonly span: Spans.Recorded; readonly where: "page" | "backend" }
+
+type Bar = {
+  readonly key: string
+  readonly name: string
+  readonly where: string
+  readonly took: string
+  readonly failed: boolean
+  readonly indent: string
+  readonly left: string
+  readonly width: string
+}
+
+const endOf = (span: Spans.Recorded): number => span.endedAt ?? span.startedAt
+
+const depthOf = (
+  span: Spans.Recorded,
+  byId: ReadonlyMap<string, Spans.Recorded>,
+  seen: number,
+): number =>
+  Option.match(Option.fromUndefinedOr(byId.get(span.parentSpanId ?? "")), {
+    onNone: () => seen,
+    onSome: (parent) => depthOf(parent, byId, seen + 1),
+  })
+
+const percent = (part: number, whole: number): string => `${((part / whole) * 100).toFixed(2)}%`
+
+const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
+  const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
+  const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
+  const start = Math.min(...ordered.map((each) => each.span.startedAt))
+  const whole = Math.max(Math.max(...ordered.map((each) => endOf(each.span))) - start, 1)
+
+  return ordered.map(({ span, where }) => ({
+    key: `${where} ${span.spanId}`,
+    name: span.name,
+    where,
+    took: `${(endOf(span) - span.startedAt).toFixed(1)} ms`,
+    failed: span.failed,
+    indent: px(depthOf(span, byId, 0) * 12),
+    left: percent(span.startedAt - start, whole),
+    width: percent(endOf(span) - span.startedAt, whole),
+  }))
+}
+
+const backendCount = (): number =>
+  Option.getOrElse(
+    Schema.decodeUnknownOption(Schema.Int)(Reflect.get(globalThis, "sparBackends")),
+    () => 0,
+  )
+
+const fromBackend = (index: number, traceId: string) =>
+  HttpClient.get(`${location.origin}${backendPath(index)}/spans/${traceId}`).pipe(
+    Effect.flatMap((answer) => answer.json),
+    Effect.map((found) => Option.getOrElse(decodeSpans(found), () => [])),
+    Effect.orElseSucceed((): ReadonlyArray<Spans.Recorded> => []),
+  )
+
+const fromBackends = (traceId: string) =>
+  Effect.map(
+    Effect.forEach(Array.range(0, backendCount() - 1).slice(0, backendCount()), (index) =>
+      fromBackend(index, traceId),
+    ),
+    (found) => found.flat(),
+  ).pipe(Effect.provide(FetchHttpClient.layer))
+
+const decodeSpans = Schema.decodeUnknownOption(Schema.Array(Spans.Recorded))
+
+export const TracePanel = View.taking(
+  { traceId: Props.Reactive(Schema.String) },
+  Effect.fnUntraced(function* ({ traceId }) {
+    const registry = yield* Registry
+    const page = yield* Effect.serviceOption(Spans.SpanBuffer)
+    const backend = Cell.make<ReadonlyArray<Spans.Recorded>>([])
+    const asked = (id: string) => Effect.map(fromBackends(id), (found) => backend.write(found))
+    const start = yield* starter()
+    const watched = yield* Reactive.zip(traceId, registry.moments)
+    const shown = yield* Reactive.zip(watched, fromCell(backend))
+    const bars = Reactive.map(shown, ([[id], fetched]) =>
+      barsOf([
+        ...Option.toArray(page).flatMap((buffer) =>
+          buffer.ofTrace(id).map((span): Sided => ({ span, where: "page" })),
+        ),
+        ...fetched
+          .filter((span) => span.traceId === id)
+          .map((span): Sided => ({ span, where: "backend" })),
+      ]),
+    )
+
+    yield* observed(traceId, (id) => start(asked(id)))
+
+    return {
+      traceId,
+      summary: Reactive.map(bars, (all) =>
+        all.length === 0 ? "No trace picked yet" : `${all.length} spans`,
+      ),
+      bars: yield* pipe(
+        bars,
+        Reactive.mapBy(
+          (bar: Bar) => bar.key,
+          BarView,
+          (bar) => ({
+            name: Reactive.map(bar, (now) => now.name),
+            where: Reactive.map(bar, (now) => now.where),
+            took: Reactive.map(bar, (now) => now.took),
+            failed: Reactive.map(bar, (now) => now.failed),
+            indent: Reactive.map(bar, (now) => now.indent),
+            left: Reactive.map(bar, (now) => now.left),
+            width: Reactive.map(bar, (now) => now.width),
+          }),
+        ),
+      ),
+      onRefresh: Effect.flatMap(traceId.get, asked),
+    }
+  }),
+)(TraceView)
+
 export const Tools = View.connect(
   Effect.fnUntraced(function* () {
+    const tracing = yield* UiState.make("tracing", Schema.String, "")
+
     return {
       open: yield* UiState.make("open", Schema.Boolean, false),
       inspector: yield* View.child(Inspector, {}),
-      timeline: yield* View.child(TimelinePanel, {}),
+      timeline: yield* View.child(TimelinePanel, {
+        onTrace: (traceId) => UiState.set(tracing, traceId),
+      }),
+      trace: yield* View.child(TracePanel, { traceId: tracing }),
       stores: yield* View.child(Panel, {}),
     }
   }),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Context, Effect, Layer, Schema } from "effect"
 import { HttpRouter } from "effect/http"
+import * as SpanRoutes from "spar/devtools/span-routes"
 import * as Spans from "spar/devtools/spans"
 
 const traced = Effect.gen(function* () {
@@ -53,7 +54,7 @@ describe("a backend keeps its own spans for the devtools", () => {
       const context = yield* Layer.build(Spans.layer())
       const seen = yield* Effect.provide(Effect.withSpan(traced, "outer"), context)
       const web = yield* Effect.acquireRelease(
-        Effect.sync(() => HttpRouter.toWebHandler(Spans.route)),
+        Effect.sync(() => HttpRouter.toWebHandler(SpanRoutes.route)),
         (served) => Effect.promise(() => served.dispose()),
       )
       const answer = yield* Effect.promise(() =>
@@ -69,7 +70,7 @@ describe("a backend keeps its own spans for the devtools", () => {
       expect(yield* Effect.promise(() => none.json())).toEqual([])
 
       const recent = yield* Effect.acquireRelease(
-        Effect.sync(() => HttpRouter.toWebHandler(Spans.recentRoute)),
+        Effect.sync(() => HttpRouter.toWebHandler(SpanRoutes.recentRoute)),
         (served) => Effect.promise(() => served.dispose()),
       )
       const all = yield* Effect.promise(() =>

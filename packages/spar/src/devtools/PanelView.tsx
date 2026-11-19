@@ -12,12 +12,80 @@ export const MomentView = View.make(
     trace: Props.Reactive(Schema.String),
     current: Props.Reactive(Schema.Boolean),
     onJump: Props.Action,
+    onTrace: Props.Action,
   },
-  ({ seq, summary, trace, current, onJump }) => (
+  ({ seq, summary, trace, current, onJump, onTrace }) => (
     <li aria-current={current}>
-      <button onClick={onJump}>Jump to {seq}</button>
+      <button onClick={onJump}>Jump to {seq}</button> <button onClick={onTrace}>Trace {seq}</button>
       <code>{summary}</code> <small aria-label={`Trace of ${seq}`}>{trace}</small>
     </li>
+  ),
+)
+
+export const BarView = View.make(
+  "BarView",
+  {
+    name: Props.Reactive(Schema.String),
+    where: Props.Reactive(Schema.String),
+    took: Props.Reactive(Schema.String),
+    failed: Props.Reactive(Schema.Boolean),
+    indent: Props.Reactive(Schema.String),
+    left: Props.Reactive(Schema.String),
+    width: Props.Reactive(Schema.String),
+  },
+  ({ name, where, took, failed, indent, left, width }) => (
+    <li
+      data-where={where}
+      data-failed={Reactive.map(failed, (bad) => (bad ? "yes" : "no"))}
+      style={{ listStyle: "none", padding: "2px 0" }}
+    >
+      <div style={{ display: "flex", gap: "8px", alignItems: "baseline", paddingLeft: indent }}>
+        <strong>{name}</strong>
+        <small>{where}</small>
+        <small>{took}</small>
+        <small hidden={Reactive.map(failed, (bad) => !bad)} style={{ color: "#b42318" }}>
+          failed
+        </small>
+      </div>
+      <div
+        style={{ position: "relative", height: "6px", background: "#eef1f5", borderRadius: "3px" }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: "0",
+            bottom: "0",
+            left,
+            width,
+            minWidth: "2px",
+            borderRadius: "3px",
+            background: Reactive.map(where, (side) => (side === "backend" ? "#0f766e" : "#1d4ed8")),
+          }}
+        />
+      </div>
+    </li>
+  ),
+)
+
+export const TraceView = View.make(
+  "TraceView",
+  {
+    traceId: Props.Reactive(Schema.String),
+    summary: Props.Reactive(Schema.String),
+    bars: Props.Element,
+    onRefresh: Props.Action,
+  },
+  ({ traceId, summary, bars, onRefresh }) => (
+    <section aria-label="Trace">
+      <h2>Trace</h2>
+      <p>
+        <output aria-label="Trace shown">{summary}</output> <small>{traceId}</small>{" "}
+        <button onClick={onRefresh}>Refresh trace</button>
+      </p>
+      <ol aria-label="Spans" style={{ paddingLeft: "0" }}>
+        {bars}
+      </ol>
+    </section>
   ),
 )
 
@@ -268,9 +336,10 @@ export const ToolsView = View.make(
     open: Props.State(Schema.Boolean),
     inspector: Props.Element,
     timeline: Props.Element,
+    trace: Props.Element,
     stores: Props.Element,
   },
-  ({ open, inspector, timeline, stores }) => (
+  ({ open, inspector, timeline, trace, stores }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
       <style>{look}</style>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
@@ -279,6 +348,7 @@ export const ToolsView = View.make(
       <div hidden={Reactive.map(open, (shown) => !shown)} style={sheet}>
         {inspector}
         {timeline}
+        {trace}
         {stores}
       </div>
     </aside>

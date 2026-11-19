@@ -4,6 +4,8 @@ import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { App, Router, Store, UiState, View } from "spar"
 import { install, uninstall } from "spar/devtools/client"
+import { FetchHttpClient } from "effect/http"
+import * as Cell from "../src/internal/cell.ts"
 import { sparDevtools } from "spar/devtools/vite"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
@@ -100,6 +102,76 @@ const facts = (table: string): ReadonlyArray<string> =>
       .join(" "),
   )
 
+const asked = Cell.make<ReadonlyArray<string>>([])
+
+const answered = (address: string): Response => {
+  const traceId = address.slice(address.lastIndexOf("/") + 1)
+  const first = address.includes("/backend/0/")
+
+  asked.write([
+    ...asked.read(),
+    address.slice(address.indexOf("/@spar"), address.lastIndexOf("/") + 1),
+  ])
+
+  return first
+    ? Response.json([
+        {
+          name: "Tally.add",
+          traceId,
+          spanId: "backend-1",
+          parentSpanId: null,
+          startedAt: 1,
+          endedAt: 3,
+          failed: true,
+          attributes: {},
+        },
+        {
+          name: "Tally.still",
+          traceId,
+          spanId: "backend-2",
+          parentSpanId: "backend-1",
+          startedAt: 2,
+          endedAt: null,
+          failed: false,
+          attributes: {},
+        },
+        {
+          name: "elsewhere",
+          traceId: "another",
+          spanId: "x",
+          parentSpanId: null,
+          startedAt: 1,
+          endedAt: 2,
+          failed: false,
+          attributes: {},
+        },
+      ])
+    : address.includes("/backend/1/")
+      ? Response.json({ not: "spans" })
+      : new Response("not json", { status: 500 })
+}
+
+const addressOf = (input: URL | RequestInfo): string => {
+  if (typeof input === "string") return input
+
+  return input instanceof URL ? input.href : input.url
+}
+
+const backend: typeof globalThis.fetch = Object.assign(
+  (input: URL | RequestInfo) => Promise.resolve(answered(addressOf(input))),
+  { preconnect: () => undefined },
+)
+
+const spans = (): ReadonlyArray<string> =>
+  [...screen.getByLabelText("Spans").querySelectorAll("li")].map((item) =>
+    [
+      item.getAttribute("data-where"),
+      item.querySelector("strong")?.textContent,
+      item.getAttribute("data-failed"),
+      item.querySelector("div")?.style.paddingLeft,
+    ].join(" "),
+  )
+
 const listed = (): ReadonlyArray<string | null | undefined> =>
   [...screen.getByLabelText("Everything that happened").querySelectorAll("li")].map(
     (item) => item.querySelector("code")?.textContent,
@@ -121,6 +193,10 @@ describe("devtools an app did not ask for", () => {
           'ui DeskView . draft "later"',
         ])
         expect(screen.getByLabelText("Trace of 2").textContent).toHaveLength(32)
+        yield* Testing.click("button", "Trace 2")
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("Trace shown").textContent).toBe("2 spans"),
+        )
 
         yield* Testing.click("button", "Jump to 1")
         yield* shows("0", "hi", "At 1")
@@ -241,6 +317,44 @@ describe("devtools an app did not ask for", () => {
     ),
   )
 
+  it.live("an action can be opened as one waterfall of the page and the backend", () =>
+    withTools(
+      Effect.gen(function* () {
+        yield* Effect.acquireRelease(
+          Effect.sync(() => Reflect.set(globalThis, "sparBackends", 3)),
+          () => Effect.sync(() => Reflect.deleteProperty(globalThis, "sparBackends")),
+        )
+        yield* mounted
+        yield* Testing.click("button", "Devtools")
+        expect(screen.getByLabelText("Trace shown").textContent).toBe("No trace picked yet")
+        yield* Testing.click("button", "Add")
+        yield* Testing.click("button", "Trace 1")
+        yield* Testing.eventually(() =>
+          expect(spans().map((span) => span.slice(0, 3))).toContain("bac"),
+        )
+
+        const drawn = spans()
+
+        expect(drawn.filter((span) => span.startsWith("page"))).toEqual([
+          "page on click no 0px",
+          "page test/Tally/added no 12px",
+        ])
+        expect(drawn.filter((span) => span.startsWith("backend"))).toEqual([
+          "backend Tally.add yes 0px",
+          "backend Tally.still no 12px",
+        ])
+        expect(screen.getByLabelText("Trace shown").textContent).toBe("4 spans")
+        expect(asked.read()).toEqual([
+          "/@spar/backend/0/spans/",
+          "/@spar/backend/1/spans/",
+          "/@spar/backend/2/spans/",
+        ])
+        yield* Testing.click("button", "Refresh trace")
+        yield* Testing.eventually(() => expect(asked.read()).toHaveLength(6))
+      }).pipe(Effect.provideService(FetchHttpClient.Fetch, backend)),
+    ),
+  )
+
   it.live("without the install an app has no tools at all", () =>
     Effect.gen(function* () {
       yield* mounted
@@ -262,13 +376,23 @@ describe("devtools an app did not ask for", () => {
   )
 
   it("the Vite plugin only acts on the dev server, and adds the tools before the app", () => {
-    expect(sparDevtools.apply).toBe("serve")
-    expect(sparDevtools.transformIndexHtml()).toEqual([
+    expect(sparDevtools().apply).toBe("serve")
+    expect(
+      sparDevtools({ backends: ["http://api.test", "http://two.test"] }).transformIndexHtml(),
+    ).toEqual([
+      { tag: "script", children: "globalThis.sparBackends = 2", injectTo: "head-prepend" },
       {
         tag: "script",
         attrs: { type: "module", src: "/@id/spar/devtools/entry" },
         injectTo: "head-prepend",
       },
     ])
+
+    const proxy = sparDevtools({ backends: ["http://api.test"] }).config().server.proxy
+
+    expect(Object.keys(proxy)).toEqual(["/@spar/backend/0"])
+    expect(proxy["/@spar/backend/0"]?.target).toBe("http://api.test")
+    expect(proxy["/@spar/backend/0"]?.rewrite("/@spar/backend/0/spans/abc")).toBe("/spans/abc")
+    expect(sparDevtools().config().server.proxy).toEqual({})
   })
 })

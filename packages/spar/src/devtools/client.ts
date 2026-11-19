@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import * as Devtools from "../Devtools.ts"
 import * as Dom from "../internal/dom.ts"
 import { Frame } from "../internal/frame.ts"
@@ -9,6 +9,7 @@ import { renderInto } from "../internal/render.ts"
 import * as Timeline from "../Timeline.ts"
 import * as UiState from "../UiState.ts"
 import * as View from "../View.ts"
+import * as Spans from "./spans.ts"
 
 const shown = Effect.fnUntraced(function* (
   registry: typeof Devtools.Registry.Service,
@@ -51,7 +52,10 @@ const attach: Hook["attach"] = Effect.gen(function* () {
   )
 })
 
-const hook: Hook = { wrap: (app) => Effect.provide(app, Devtools.layer), attach }
+const hook: Hook = {
+  wrap: (app) => Effect.provide(app, Layer.merge(Devtools.layer, Spans.layer())),
+  attach,
+}
 
 export const install = (): void => {
   inspecting.write(Option.some(new Inspecting()))

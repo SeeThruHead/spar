@@ -18,6 +18,7 @@
     "./devtools/entry": "./src/devtools/entry.ts",
     "./devtools/vite": "./src/devtools/vite.ts",
     "./devtools/spans": "./src/devtools/spans.ts",
+    "./devtools/span-routes": "./src/devtools/spanRoutes.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {

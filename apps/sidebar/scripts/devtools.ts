@@ -1,7 +1,37 @@
+import { Schema } from "effect"
 import { launch } from "@spar/browsers"
+import { Recorded } from "spar/devtools/spans"
 import { createServer } from "vite"
 
 const root = new URL("..", import.meta.url).pathname
+
+const backendOrigin = "http://127.0.0.1:4183"
+
+const backend = Bun.spawn(["bun", "scripts/backend.ts"], {
+  cwd: root,
+  env: { ...Bun.env, PORT: "4183" },
+  stdout: "ignore",
+  stderr: "inherit",
+})
+
+Reflect.set(process.env, "SIDEBAR_BACKEND", backendOrigin)
+
+const accepted = async (left: number): Promise<void> => {
+  const done = await fetch(`${backendOrigin}/spans`)
+    .then((answer) => answer.json())
+    .then(
+      (spans: unknown) =>
+        Schema.decodeUnknownSync(Schema.Array(Recorded))(spans).some(
+          (span) => span.name === "Agents.start" && !span.failed,
+        ),
+      () => false,
+    )
+  if (done || left === 0) return
+
+  await Bun.sleep(100)
+
+  return accepted(left - 1)
+}
 
 const server = await createServer({ root, logLevel: "error", server: { port: 4189 } })
 
@@ -59,7 +89,44 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   await page.screenshot({ path: `${root}artifacts/devtools-changes.png` })
 
+  await page.getByRole("searchbox").first().fill("")
+  await page.getByRole("button", { name: "Start an agent" }).click()
+  await page.getByRole("textbox", { name: "What should it work on?" }).fill("Seen in a trace")
+  await page.getByRole("button", { name: "Start agent" }).click()
+  await accepted(50)
+
+  const started = log.locator("li", { hasText: "command sidebar/BoardStore/started" })
+
+  await started.getByRole("button", { name: /^Trace / }).click()
+
+  const waterfall = page.getByLabel("Spans")
+
+  await waterfall.locator('li[data-where="backend"]').first().waitFor({ timeout: 8000 })
+  await page.getByRole("button", { name: "Refresh trace" }).click()
+  await waterfall
+    .locator('li[data-where="backend"][data-failed="no"]')
+    .first()
+    .waitFor({ timeout: 8000 })
+  await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
+
+  const sides = await waterfall
+    .locator("li")
+    .evaluateAll((items) =>
+      items.map(
+        (item) =>
+          `${item.getAttribute("data-where")} ${item.querySelector("strong")?.textContent} ${item.getAttribute("data-failed")}`,
+      ),
+    )
+
+  await page.screenshot({ path: `${root}artifacts/devtools-trace.png` })
+
   return [
+    ...(sides.some((side) => side.startsWith("page on "))
+      ? []
+      : [`the waterfall had no page event: ${sides.join(" | ")}`]),
+    ...(sides.includes("backend Agents.start yes") && sides.includes("backend Agents.start no")
+      ? []
+      : [`the waterfall did not show both backend attempts: ${sides.join(" | ")}`]),
     ...(first.startsWith("ui ") && first.includes("filter")
       ? []
       : [`the log began with: ${first}`]),
@@ -79,6 +146,7 @@ const problems = await steps().catch((cause: unknown) => [String(cause)])
 
 await browser.close()
 await server.close()
+backend.kill()
 
 if (problems.length > 0) {
   console.error(`Devtools in the dev server:\n${problems.join("\n")}`)
@@ -86,6 +154,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component and show what changed in it",
+  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, and draw one trace across the page and the backend",
 )
 process.exit(0)

@@ -45,18 +45,18 @@ describe("naming the services a component uses, for the inspector", () => {
   })
 
   it("the dev plugin only rewrites the app's own files that make components", () => {
-    expect(sparDevtools.enforce).toBe("pre")
-    expect(sparDevtools.transform(source, "/app/src/Thread.ts")?.code).toContain(
+    expect(sparDevtools().enforce).toBe("pre")
+    expect(sparDevtools().transform(source, "/app/src/Thread.ts")?.code).toContain(
       `View.described(["MailApi"])`,
     )
-    expect(sparDevtools.transform(source, "/app/src/Thread.ts")?.map).toBeNull()
-    expect(sparDevtools.transform(source, "/app/src/Thread.tsx?v=2")?.code).toContain(
+    expect(sparDevtools().transform(source, "/app/src/Thread.ts")?.map).toBeNull()
+    expect(sparDevtools().transform(source, "/app/src/Thread.tsx?v=2")?.code).toContain(
       "View.described",
     )
-    expect(sparDevtools.transform(source, "/app/node_modules/pkg/Thread.ts")).toBeNull()
-    expect(sparDevtools.transform(source, "/app/src/styles.css")).toBeNull()
-    expect(sparDevtools.transform("export const a = 1", "/app/src/a.ts")).toBeNull()
-    expect(sparDevtools.transform("View.taking({}, props)(V)", "/app/src/b.ts")?.code).toBe(
+    expect(sparDevtools().transform(source, "/app/node_modules/pkg/Thread.ts")).toBeNull()
+    expect(sparDevtools().transform(source, "/app/src/styles.css")).toBeNull()
+    expect(sparDevtools().transform("export const a = 1", "/app/src/a.ts")).toBeNull()
+    expect(sparDevtools().transform("View.taking({}, props)(V)", "/app/src/b.ts")?.code).toBe(
       "View.described([]).taking({}, props)(V)",
     )
   })

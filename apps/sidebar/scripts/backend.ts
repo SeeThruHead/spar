@@ -4,6 +4,7 @@ import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/http"
 import type { HttpServerRequest } from "effect/http"
 import { Otlp } from "effect/observability"
 import { RpcSerialization, RpcServer } from "effect/rpc"
+import * as SpanRoutes from "spar/devtools/span-routes"
 import * as Spans from "spar/devtools/spans"
 import { Agents } from "../src/api.ts"
 import { AgentsLive } from "../server/handlers.ts"
@@ -78,8 +79,8 @@ const exported =
 
 const app = Layer.mergeAll(
   Rpcs,
-  Spans.route,
-  Spans.recentRoute,
+  SpanRoutes.route,
+  SpanRoutes.recentRoute,
   HttpRouter.add("POST", "/otlp/*", telemetry),
   HttpRouter.add("GET", "/*", page),
 )
