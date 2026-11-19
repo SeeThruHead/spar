@@ -26,7 +26,9 @@ export type Reactive<A> = {
   readonly [Direct]: Now<A> | undefined
 }
 
-export type Backed<A> = Reactive<A> & { readonly [Backing]: Cell.Cell<A> }
+export type Backed<A, Held extends Cell.Cell<A> = Cell.Cell<A>> = Reactive<A> & {
+  readonly [Backing]: Held
+}
 
 export const make = <A>(get: Effect.Effect<A>, changes: Stream.Stream<A>): Reactive<A> => ({
   [TypeId]: TypeId,
@@ -56,11 +58,11 @@ export const succeed = <A>(value: A): Reactive<A> => ({
   [Direct]: { read: () => value, watch: () => Function.constVoid },
 })
 
-class FromCell<A> implements Backed<A>, Now<A> {
+class FromCell<A, Held extends Cell.Cell<A>> implements Backed<A, Held>, Now<A> {
   readonly [TypeId] = TypeId
-  readonly [Backing]: Cell.Cell<A>
+  readonly [Backing]: Held
 
-  constructor(cell: Cell.Cell<A>) {
+  constructor(cell: Held) {
     this[Backing] = cell
   }
 
@@ -106,6 +108,9 @@ class FromCell<A> implements Backed<A>, Now<A> {
 }
 
 export const fromCell = <A>(cell: Cell.Cell<A>): Backed<A> => new FromCell(cell)
+
+export const backedBy = <A, Held extends Cell.Cell<A>>(cell: Held): Backed<A, Held> =>
+  new FromCell<A, Held>(cell)
 
 class Mapped<A, B> implements Reactive<B> {
   readonly [TypeId] = TypeId

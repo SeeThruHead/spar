@@ -24,6 +24,7 @@ import { events, on as onTarget } from "./internal/listen.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Props from "./Props.ts"
+import * as Timeline from "./Timeline.ts"
 import { child } from "./View.ts"
 import type { Mountable } from "./View.ts"
 
@@ -188,17 +189,22 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
   const start = yield* driver.read
   const location = yield* SubscriptionRef.make(start)
   const arrivedBy = yield* SubscriptionRef.make<Arrival>("link")
+  const arrive = (now: Location, by: Arrival) =>
+    Effect.andThen(
+      SubscriptionRef.set(location, now),
+      Timeline.note("route", `${now.pathname}${now.search}`, () => by),
+    )
   const followBy = (by: Arrival) =>
     Effect.andThen(
       SubscriptionRef.set(arrivedBy, by),
-      Effect.flatMap(driver.read, (now) => SubscriptionRef.set(location, now)),
+      Effect.flatMap(driver.read, (now) => arrive(now, by)),
     )
   const follow = followBy("link")
 
   yield* Effect.forkScoped(
     Stream.runForEach(driver.moved, (now) =>
       SubscriptionRef.set(arrivedBy, "history").pipe(
-        Effect.andThen(SubscriptionRef.set(location, now)),
+        Effect.andThen(arrive(now, "history")),
         Effect.andThen(Effect.forkScoped(driver.arrive)),
       ),
     ),

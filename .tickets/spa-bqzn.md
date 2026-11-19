@@ -1,7 +1,7 @@
 ---
 id: spa-bqzn
 status: open
-deps: [spa-vgha, spa-75e4]
+deps: [spa-vgha, spa-75e4, spa-5mu8]
 links: []
 created: 2026-11-19T03:26:28Z
 type: task

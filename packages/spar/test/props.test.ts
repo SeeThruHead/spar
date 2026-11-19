@@ -3,6 +3,9 @@ import { Effect, Option, Schema, SubscriptionRef } from "effect"
 import { Devtools, Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
+import * as Cell from "../src/internal/cell.ts"
+import { backedBy, fromCell } from "../src/internal/reactive.ts"
+import type { Kept } from "../src/internal/uiTree.ts"
 import { BadgeView, CardView } from "./made.tsx"
 
 const Card = (picked: SubscriptionRef.SubscriptionRef<string>) =>
@@ -21,6 +24,14 @@ const Card = (picked: SubscriptionRef.SubscriptionRef<string>) =>
       }
     }),
   )(CardView)
+
+const kept = () => {
+  const tree = UiState.makeTree()
+
+  return backedBy<string, Kept<string>>(
+    tree.hold(tree.enter(tree, () => ["Here"]).place, "text", Schema.String, "a"),
+  )
+}
 
 const formField = { value: Reactive.succeed("typed"), change: () => [], touch: [] }
 
@@ -87,6 +98,9 @@ describe("a view made from a Schema of its props", () => {
     expect(fits(Props.Reactive(Schema.String), Reactive.succeed("a"))).toBe(true)
     expect(fits(Props.Reactive(Schema.String), "a")).toBe(false)
     expect(fits(Props.State(Schema.String), Reactive.succeed("a"))).toBe(false)
+    expect(fits(Props.State(Schema.String), "a")).toBe(false)
+    expect(fits(Props.State(Schema.String), fromCell(Cell.make("a")))).toBe(false)
+    expect(fits(Props.State(Schema.String), kept())).toBe(true)
     expect(fits(Props.Action, Effect.void)).toBe(true)
     expect(fits(Props.Action, [])).toBe(true)
     expect(fits(Props.Action, UiState.set)).toBe(false)

@@ -43,6 +43,7 @@ import type {
   Step,
 } from "./internal/journal.ts"
 import { Outbox } from "./Outbox.ts"
+import * as Timeline from "./Timeline.ts"
 
 export { Entries, LogText, UnknownAction, Unreadable, replay }
 export type { Action, Definition, Durable, Entry, Selector }
@@ -90,6 +91,7 @@ const shown = <State>(held: Held<State>): State =>
 
 export type Inspected = {
   readonly key: string
+  readonly base: number
   readonly state: Reactive<unknown>
   readonly log: Reactive<ReadonlyArray<Entry>>
   readonly viewing: Reactive<number | null>
@@ -197,10 +199,17 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const journal = yield* open(leftovers)
       const sequence = yield* Ref.make(lastSeqOf(leftovers, journal.lastSeq))
       const inspector = yield* Inspector
+      const base = Option.match(Array.head(journal.entries), {
+        onNone: () => journal.lastSeq,
+        onSome: (first) => first.seq - 1,
+      })
       const restored =
         inspector.keepStates === 0
           ? []
-          : yield* Effect.orDie(stepsFrom(definition, journal.base, journal.entries))
+          : [
+              { seq: base, state: journal.base },
+              ...(yield* Effect.orDie(stepsFrom(definition, journal.base, journal.entries))),
+            ]
       const opened: Held<State> = {
         state: journal.state,
         log: journal.entries,
@@ -287,6 +296,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           trail: lastOf([...before.trail, { seq, state: next }], inspector.keepStates),
         })
         yield* journal.tell
+        yield* Timeline.note("command", channelOf(key, name), () => payload)
 
         return { entry, next }
       })
@@ -378,6 +388,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
 
       yield* inspector.register({
         key,
+        base,
         state,
         log,
         viewing,

@@ -21,7 +21,7 @@ import { HandleTypeId, isHandle } from "./handle.ts"
 import type { Handle } from "./handle.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Drawn, Element, Intrinsic, Mounted, Rows } from "./element.ts"
-import { starter, starterIn } from "./listen.ts"
+import { starter, starterIn, traced } from "./listen.ts"
 import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
@@ -122,12 +122,12 @@ const attach = (node: Dom.Host, handle: Handle): Later =>
   )
 
 const listener =
-  (start: (action: Action) => void, handler: unknown) =>
+  (start: (action: Action) => void, type: string, handler: unknown) =>
   (event: Event): void =>
-    start(toAction(handler, event))
+    start(traced(type, toAction(handler, event)))
 
 const listen = (node: Dom.Host, type: string, handler: unknown, place: Place): void =>
-  Cell.own(place.owner, Dom.listen(node, type, listener(place.start, handler)))
+  Cell.own(place.owner, Dom.listen(node, type, listener(place.start, type, handler)))
 
 const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
   if (tag === "foreignObject") return "html"

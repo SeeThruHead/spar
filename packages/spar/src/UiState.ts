@@ -1,16 +1,17 @@
-import { Effect, Function, Queue, Scope, Stream } from "effect"
+import { Effect, Function, Option, Queue, Scope, Stream } from "effect"
 import type { Schema } from "effect"
 import { write } from "./internal/action.ts"
 import type { UiWrite } from "./internal/action.ts"
-import { Backing, fromCell } from "./internal/reactive.ts"
+import { Backing, backedBy } from "./internal/reactive.ts"
 import type { Backed } from "./internal/reactive.ts"
+import * as Timeline from "./Timeline.ts"
 import * as Internal from "./internal/uiTree.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
 
 export { Entry, Snapshot } from "./internal/uiTree.ts"
 export type { Change, Path } from "./internal/uiTree.ts"
 
-export type UiState<A> = Backed<A>
+export type UiState<A> = Backed<A, Internal.Kept<A>>
 
 export type Write = UiWrite
 
@@ -25,7 +26,9 @@ export const make = <A, Encoded>(
 ): Effect.Effect<UiState<A>, never, ViewScope> =>
   ViewScope.use((mounted) => {
     const { place, fresh } = mounted.tree.enter(mounted, () => pathOf(mounted))
-    const held = Effect.sync(() => fromCell(mounted.tree.hold(place, name, schema, initial)))
+    const held = Effect.sync(() =>
+      backedBy<A, Internal.Kept<A>>(mounted.tree.hold(place, name, schema, initial)),
+    )
     if (!fresh) return held
 
     return Effect.andThen(
@@ -37,18 +40,29 @@ export const make = <A, Encoded>(
     )
   })
 
+const written = <A>(self: UiState<A>, next: () => A): Write => {
+  const kept = self[Backing]
+
+  return write(
+    Effect.andThen(
+      Effect.sync(() => kept.write(next())),
+      Timeline.note("ui", `${kept.path.join(" / ")} . ${kept.name}`, () =>
+        Option.getOrNull(kept.encoded()),
+      ),
+    ),
+  )
+}
+
 export const set: {
   <A>(value: A): (self: UiState<A>) => Write
   <A>(self: UiState<A>, value: A): Write
-} = Function.dual(2, <A>(self: UiState<A>, value: A): Write =>
-  write(Effect.sync(() => self[Backing].write(value))),
-)
+} = Function.dual(2, <A>(self: UiState<A>, value: A): Write => written(self, () => value))
 
 export const update: {
   <A>(f: (value: A) => A): (self: UiState<A>) => Write
   <A>(self: UiState<A>, f: (value: A) => A): Write
 } = Function.dual(2, <A>(self: UiState<A>, f: (value: A) => A): Write =>
-  write(Effect.sync(() => self[Backing].write(f(self[Backing].read())))),
+  written(self, () => f(self[Backing].read())),
 )
 
 export const snapshot: Effect.Effect<Internal.Snapshot> = Effect.map(Effect.service(Tree), (tree) =>

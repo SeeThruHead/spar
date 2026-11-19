@@ -46,13 +46,19 @@ export const starter = Effect.fnUntraced(function* () {
   return yield* starterIn(outliving)
 })
 
+export const traced = (type: string, action: Action): Action => {
+  if (Array.isArray(action) && action.length === 0) return action
+
+  return Effect.withSpan(run(action), `on ${type}`, { captureStackTrace: false })
+}
+
 export const listen = Effect.fnUntraced(function* (
   target: EventTarget,
   type: string,
   handler: unknown,
 ) {
   const start = yield* starter()
-  const listener = (event: Event): void => start(toAction(handler, event))
+  const listener = (event: Event): void => start(traced(type, toAction(handler, event)))
 
   yield* Effect.acquireRelease(
     Effect.sync(() => target.addEventListener(type, listener)),

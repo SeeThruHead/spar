@@ -24,7 +24,7 @@ const entryKey = (path: Path, name: string): string => `${placeKey(path)}\u0001$
 const numbered = (path: Path, nth: number): Path =>
   nth === 1 ? path : [...path.slice(0, -1), `${path.at(-1)}#${nth}`]
 
-class Kept<A> implements Cell.Cell<A> {
+export class Kept<A> implements Cell.Cell<A> {
   readonly path: Path
   readonly name: string
   readonly schema: Schema.Codec<A, unknown>
@@ -131,12 +131,7 @@ export class Tree {
     return this.kept.has(entryKey(path, candidate)) ? this.unused(path, name, nth + 1) : candidate
   }
 
-  hold<A>(
-    place: Place,
-    wanted: string,
-    schema: Schema.Codec<A, unknown>,
-    initial: A,
-  ): Cell.Cell<A> {
+  hold<A>(place: Place, wanted: string, schema: Schema.Codec<A, unknown>, initial: A): Kept<A> {
     const name = this.unused(place.path, wanted, 1)
     const key = entryKey(place.path, name)
     const kept = new Kept(place.path, name, schema, initial, (changed) => this.tell("set", changed))

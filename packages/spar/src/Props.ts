@@ -7,6 +7,7 @@ import { isHandle } from "./internal/handle.ts"
 import type { Handle as AnyHandle } from "./internal/handle.ts"
 import { Backing, Direct, isReactive } from "./internal/reactive.ts"
 import type { Backed, Reactive as AnyReactive } from "./internal/reactive.ts"
+import { Kept } from "./internal/uiTree.ts"
 
 export type Field = Schema.Codec<unknown, unknown>
 
@@ -46,11 +47,14 @@ const current =
 export const Reactive = <A>(inner: Schema.Codec<A, unknown>): Schema.declare<AnyReactive<A>> =>
   kind((value): value is AnyReactive<A> => isReactive(value), current(inner))
 
-export const State = <A>(inner: Schema.Codec<A, unknown>): Schema.declare<Backed<A>> =>
-  kind(
-    (value): value is Backed<A> => isReactive(value) && Predicate.hasProperty(value, Backing),
-    current(inner),
-  )
+const isState = (value: unknown): boolean => {
+  if (!isReactive(value)) return false
+
+  return Predicate.hasProperty(value, Backing) && value[Backing] instanceof Kept
+}
+
+export const State = <A>(inner: Schema.Codec<A, unknown>): Schema.declare<Backed<A, Kept<A>>> =>
+  kind((value): value is Backed<A, Kept<A>> => isState(value), current(inner))
 
 const isAction = (value: unknown): value is AnyAction => {
   if (Effect.isEffect(value)) return true

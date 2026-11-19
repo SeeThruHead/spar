@@ -1,4 +1,15 @@
-import { Context, Effect, Formatter, Layer, Option, Predicate, Schema, pipe } from "effect"
+import {
+  Array,
+  Context,
+  Effect,
+  Formatter,
+  Layer,
+  Option,
+  Predicate,
+  Record,
+  Schema,
+  pipe,
+} from "effect"
 import { run } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
@@ -6,6 +17,7 @@ import { DeadView, EntryView, OutboxView, PanelView, StoreView } from "./devtool
 import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
+import * as Timeline from "./Timeline.ts"
 import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
 import * as View from "./View.ts"
@@ -24,18 +36,109 @@ export const OutboxShown = Props.kind(
 
 export class Registry extends Context.Service<
   Registry,
-  { readonly stores: Reactive.Reactive<ReadonlyArray<Store.Inspected>> }
+  {
+    readonly stores: Reactive.Reactive<ReadonlyArray<Store.Inspected>>
+    readonly moments: Reactive.Reactive<ReadonlyArray<Timeline.Moment>>
+    readonly viewing: Reactive.Reactive<number | null>
+    readonly travelTo: (seq: number | null) => Effect.Effect<void>
+  }
 >()("spar/Devtools/Registry") {}
 
-export const layer: Layer.Layer<Registry> = Layer.effectContext(
-  Effect.sync(() => {
-    const stores = Cell.make<ReadonlyArray<Store.Inspected>>([])
+type Remembered = {
+  readonly moment: Timeline.Moment
+  readonly ui: UiState.Snapshot
+  readonly stores: Readonly<Record<string, number>>
+}
 
-    return Context.make(Registry, { stores: fromCell(stores) }).pipe(
+type Past = {
+  readonly remembered: ReadonlyArray<Remembered>
+  readonly viewing: number | null
+  readonly live: UiState.Snapshot
+}
+
+const keepMoments = 1000
+
+const reachedBy = (store: Store.Inspected) =>
+  Effect.map(
+    store.log.get,
+    (log) =>
+      [
+        store.key,
+        Option.getOrElse(
+          Option.map(Array.last(log), (entry) => entry.seq),
+          () => store.base,
+        ),
+      ] as const,
+  )
+
+export const layer: Layer.Layer<Registry> = Layer.effectContext(
+  Effect.gen(function* () {
+    const tree = yield* UiState.Tree
+    const stores = Cell.make<ReadonlyArray<Store.Inspected>>([])
+    const past = Cell.make<Past>({ remembered: [], viewing: null, live: [] })
+
+    const record = Effect.fnUntraced(function* (noted: Timeline.Noted) {
+      const reached = yield* Effect.forEach(stores.read(), reachedBy)
+      const before = past.read()
+      const seq =
+        Option.getOrElse(
+          Option.map(Array.last(before.remembered), (last) => last.moment.seq),
+          () => 0,
+        ) + 1
+
+      past.write({
+        ...before,
+        remembered: [
+          ...before.remembered,
+          { moment: { ...noted, seq }, ui: tree.snapshot(), stores: Object.fromEntries(reached) },
+        ].slice(-keepMoments),
+      })
+    })
+
+    const show = (stored: Option.Option<Readonly<Record<string, number>>>, ui: UiState.Snapshot) =>
+      Effect.andThen(
+        Effect.forEach(
+          stores.read(),
+          (store) =>
+            store.travelTo(
+              Option.getOrNull(
+                Option.map(stored, (reached) =>
+                  Option.getOrElse(Record.get(reached, store.key), () => store.base),
+                ),
+              ),
+            ),
+          { discard: true },
+        ),
+        Effect.sync(() => tree.restore(ui)),
+      )
+
+    const travelTo = Effect.fnUntraced(function* (seq: number | null) {
+      const before = past.read()
+      const live = before.viewing === null ? tree.snapshot() : before.live
+      const found = Array.findFirst(before.remembered, (kept) => kept.moment.seq === seq)
+
+      yield* Option.match(found, {
+        onNone: () => show(Option.none(), live),
+        onSome: (kept) => show(Option.some(kept.stores), kept.ui),
+      })
+      past.write({
+        ...before,
+        live,
+        viewing: Option.getOrNull(Option.map(found, (kept) => kept.moment.seq)),
+      })
+    })
+
+    return Context.make(Registry, {
+      stores: fromCell(stores),
+      moments: Reactive.map(fromCell(past), (now) => now.remembered.map((kept) => kept.moment)),
+      viewing: Reactive.map(fromCell(past), (now) => now.viewing),
+      travelTo,
+    }).pipe(
       Context.add(Store.Inspector, {
         keepStates: 1000,
         register: (store) => Effect.sync(() => stores.write([...stores.read(), store])),
       }),
+      Context.add(Timeline.Recorder, Option.some(record)),
     )
   }),
 )
