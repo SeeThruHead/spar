@@ -1,0 +1,74 @@
+- navigation "Agents":
+  - paragraph:
+    - status "Waiting on you": "1"
+    - text: waiting on you
+    - status "Connection": Online
+    - text: ","
+    - status "Not yet sent": a count
+    - text: not yet sent
+  - text: Filter agents
+  - searchbox "Filter agents"
+  - button "Start an agent"
+  - button "New project"
+  - region "Pinned":
+    - heading "Pinned 1 agent, 0 waiting on you" [level=2]:
+      - button "Pinned 1 agent, 0 waiting on you" [expanded]
+    - list:
+      - listitem:
+        - link "Inbox triage working":
+          - /url: /agents/agent-5
+        - button "Actions for Inbox triage": Actions
+  - region "Chats":
+    - heading "Chats 2 agents, 0 waiting on you" [level=2]:
+      - button "Chats 2 agents, 0 waiting on you" [expanded]
+    - list:
+      - listitem:
+        - link "Tidy the release notes working":
+          - /url: /agents/agent-6
+        - button "Actions for Tidy the release notes": Actions
+      - listitem:
+        - link "Trip planning idle travel":
+          - /url: /agents/agent-4
+        - button "Actions for Trip planning": Actions
+  - region "Hangar":
+    - heading "Hangar 2 agents, 1 waiting on you" [level=2]:
+      - button "Hangar 2 agents, 1 waiting on you" [expanded]
+    - button "Move Hangar up": ↑
+    - button "Move Hangar down": ↓
+    - list:
+      - listitem:
+        - link "Release notes blocked docs":
+          - /url: /agents/agent-1
+        - button "Actions for Release notes": Actions
+      - listitem:
+        - link "Flaky test hunt working":
+          - /url: /agents/agent-2
+        - button "Actions for Flaky test hunt": Actions
+  - region "Homelab":
+    - heading "Homelab 1 agent, 0 waiting on you" [level=2]:
+      - button "Homelab 1 agent, 0 waiting on you" [expanded]
+    - button "Move Homelab up": ↑
+    - button "Move Homelab down": ↓
+    - list:
+      - listitem:
+        - link "Backup check done ops":
+          - /url: /agents/agent-3
+        - button "Actions for Backup check": Actions
+- main:
+  - paragraph:
+    - link "All agents":
+      - /url: /
+  - heading "Trip planning" [level=1]
+  - term: Status
+  - definition: idle
+  - term: Project
+  - definition: No project
+  - term: Tags
+  - definition: travel
+  - paragraph: The server has no record of Trip planning yet.
+  - button "Pin to the top"
+- status "Notifications":
+  - list:
+    - listitem:
+      - text: Started Tidy the release notes
+      - button "Dismiss"

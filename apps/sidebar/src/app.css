@@ -57,14 +57,21 @@ body {
   margin-block: 0.75rem;
 }
 
-.group h2 {
+.group-head {
   margin: 0.5rem 0 0;
   font-size: 1rem;
+}
+
+.group h2 {
+  flex: 1;
+  margin: 0;
+  font-size: inherit;
 }
 
 .group-toggle {
   font: inherit;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   inline-size: 100%;
@@ -138,7 +145,7 @@ body {
 }
 
 .agent[draggable="true"],
-.group h2[draggable="true"] {
+.group-head[draggable="true"] {
   cursor: grab;
 }
 
@@ -151,14 +158,10 @@ body {
   outline-offset: 2px;
 }
 
-.group h2 {
+.group-head {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-}
-
-.group h2 .group-toggle {
-  flex: 1;
 }
 
 .group-moves {

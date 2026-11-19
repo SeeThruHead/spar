@@ -66,6 +66,8 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const fromThePage = trace.filter((span) => !own.has(span.parentSpanId ?? ""))
   const refused = [...posted].filter((status) => status >= 300)
 
+  console.log(`The trace of the started agent: ${started[0]?.traceId ?? "none"}`)
+
   return [
     ...(started.length >= 2 ? [] : [`the backend saw ${started.length} start attempts`]),
     ...(started.every((span) => span.traceId === started[0]?.traceId)

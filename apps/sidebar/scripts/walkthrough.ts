@@ -58,6 +58,23 @@ const audit = async (page: Page, where: string): Promise<ReadonlyArray<string>> 
   ]
 }
 
+const spoken = async (page: Page, size: Size, name: string): Promise<ReadonlyArray<string>> => {
+  if (size.name !== "desktop") return []
+
+  const read = await page.locator("body").ariaSnapshot()
+  const tree = `${read.replace(/(status "Not yet sent": )"\d+"/, "$1a count")}\n`
+  const file = Bun.file(`${root}spoken/${name}.txt`)
+  if (Bun.env["SPOKEN"] === "write") return Bun.write(file, tree).then(() => [])
+
+  const kept = (await file.exists()) ? await file.text() : ""
+
+  return kept === tree
+    ? []
+    : [`${name}: what assistive technology is given has changed from spoken/${name}.txt:\n${tree}`]
+}
+
+const told = (held: boolean, problem: string): ReadonlyArray<string> => (held ? [] : [problem])
+
 const focusedText = (page: Page): Promise<string> =>
   page.evaluate(() => {
     const active = document.activeElement
@@ -86,14 +103,26 @@ const walk = async (browser: Browser, size: Size): Promise<ReadonlyArray<string>
   await page.getByRole("heading", { level: 1, name: "Agents" }).waitFor()
   await page.addScriptTag({ path: Bun.resolveSync("axe-core/axe.min.js", root) })
 
-  const start = await audit(page, `${size.name} first view`)
+  const start = [
+    ...(await audit(page, `${size.name} first view`)),
+    ...(await spoken(page, size, "first-view")),
+  ]
 
   await shot("1-first-view")
   await tabTo(page, "Start an agent")
   await page.keyboard.press("Enter")
   await page.getByRole("dialog", { name: "Start an agent" }).waitFor()
 
-  const dialog = await audit(page, `${size.name} start dialog`)
+  const dialog = [
+    ...(await audit(page, `${size.name} start dialog`)),
+    ...(await spoken(page, size, "start-dialog")),
+    ...told(
+      await page
+        .getByRole("dialog", { name: "Start an agent" })
+        .evaluate((opened) => opened.contains(document.activeElement)),
+      `${size.name}: opening the dialog did not move focus into it`,
+    ),
+  ]
 
   await page.keyboard.press("Tab")
   await page.keyboard.press("Enter")
@@ -107,14 +136,27 @@ const walk = async (browser: Browser, size: Size): Promise<ReadonlyArray<string>
   await page.getByText("Started Tidy the release notes").waitFor()
   await shot("3-started-with-toast")
 
-  const toast = await audit(page, `${size.name} toast`)
+  const toast = [
+    ...(await audit(page, `${size.name} toast`)),
+    ...(await spoken(page, size, "toast")),
+    ...told(
+      await page
+        .getByText("Started Tidy the release notes")
+        .evaluate((shown) => shown.closest("[aria-live], [role=status], [role=alert]") !== null),
+      `${size.name}: the toast is not in a live region, so it is never announced`,
+    ),
+    ...told(
+      (await focusedText(page)).includes("Start an agent"),
+      `${size.name}: closing the dialog did not return focus to the button that opened it`,
+    ),
+  ]
 
   await tabTo(page, "Actions for Trip planning")
   await page.keyboard.press("Enter")
   await page.getByRole("menu", { name: "Actions for Trip planning" }).waitFor()
   await shot("4-menu-open")
 
-  const menu = await audit(page, `${size.name} menu`)
+  const menu = [...(await audit(page, `${size.name} menu`)), ...(await spoken(page, size, "menu"))]
 
   await page.keyboard.press("ArrowDown")
   await page.keyboard.press("Enter")
@@ -126,7 +168,10 @@ const walk = async (browser: Browser, size: Size): Promise<ReadonlyArray<string>
   await page.getByRole("heading", { level: 1, name: "Trip planning" }).waitFor()
   await shot("5-agent-page")
 
-  const agent = await audit(page, `${size.name} agent page`)
+  const agent = [
+    ...(await audit(page, `${size.name} agent page`)),
+    ...(await spoken(page, size, "agent-page")),
+  ]
 
   await page.setViewportSize({ width: Math.round(size.width * 0.6), height: size.height })
   await shot("6-narrower")

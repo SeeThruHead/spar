@@ -57,20 +57,23 @@ export const SectionView = View.make(
       onDragover={props.onOver}
       onDrop={props.onDrop}
     >
-      <h2
+      <div
+        class="group-head"
         draggable={Reactive.map(props.section, (now) => now.movable)}
         onDragstart={props.onLift}
         onDragend={props.onRest}
       >
-        <button
-          type="button"
-          class="group-toggle"
-          aria-expanded={Reactive.map(props.section, (now) => !now.collapsed)}
-          onClick={props.onToggle}
-        >
-          <span>{Reactive.map(props.section, (now) => now.title)}</span>
-          <span class="group-count">{Reactive.map(props.section, countsOf)}</span>
-        </button>
+        <h2>
+          <button
+            type="button"
+            class="group-toggle"
+            aria-expanded={Reactive.map(props.section, (now) => !now.collapsed)}
+            onClick={props.onToggle}
+          >
+            <span>{Reactive.map(props.section, (now) => now.title)}</span>
+            <span class="group-count">{Reactive.map(props.section, countsOf)}</span>
+          </button>
+        </h2>
         <span class="group-moves" hidden={fixed(props.section)}>
           <button
             type="button"
@@ -89,7 +92,7 @@ export const SectionView = View.make(
             ↓
           </button>
         </span>
-      </h2>
+      </div>
       <ul>{props.rows}</ul>
     </section>
   ),

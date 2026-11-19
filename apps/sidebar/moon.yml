@@ -39,7 +39,8 @@ tasks:
   walkthrough:
     command: bun ../../packages/browsers/scripts/in.ts bun scripts/walkthrough.ts
     deps: [build]
-    inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)", "$SPAR_BROWSER"]
+    inputs:
+      ["src/**/*", "scripts/**/*", "spoken/**/*", "index.html", "@group(upstream)", "$SPAR_BROWSER"]
   traced:
     command: bun ../../packages/browsers/scripts/in.ts bun scripts/traced.ts
     deps: [build]
