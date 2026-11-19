@@ -37,34 +37,38 @@ The view never runs an Effect and the Effect never writes markup.
 
 ## The one way to do each thing
 
-| You want to                               | Do this                                                                                | Not this                                               |
-| ----------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Draw something                            | `View.make(name, { prop: Schema }, (props) => <jsx />)` in a `.tsx` file               | A plain function returning JSX                         |
-| Give a view its props                     | `View.connect(() => Effect)` or `View.taking(outerProps, (outer) => Effect)`           | Passing services into a view                           |
-| Hold state only the screen cares about    | `UiState.make(name, Schema, initial)` in the component's Effect                        | `Ref`, `SubscriptionRef`, `let`, a module variable     |
-| Hold data the app cares about             | A `Store.Tag` with actions and selectors                                               | UI state seeded from a store, a service with a Ref     |
-| Put a store where one component uses it   | `SomeStore.with(Component)`, then mount the result                                     | Wiring a layer at the root for a store one screen owns |
-| Share a store across the app              | `SomeStore.layer()` in the layers given to `App.mount`                                 | A global                                               |
-| Change app state                          | `store.commands.<action>(payload)`                                                     | Writing to state anywhere else                         |
-| Change UI state                           | `UiState.set` or `UiState.update` in a handler                                         | Writing UI state from a command, a stream or a service |
-| Read state in a view                      | A `Props.Reactive(Schema)` prop fed from `store.select.<name>` or the UI state itself  | Reading a store inside a view                          |
-| Show a list                               | `Reactive.mapBy(key, RowView, props)` in the Effect, passed as a `Props.Element`       | `.map` inside JSX                                      |
-| Show one thing or another                 | `Reactive.when` in the Effect, or `View.branch`                                        | A ternary inside JSX                                   |
-| Mount a child that needs services         | `yield* View.child(Child, props)` in the Effect, passed as a `Props.Element`           | Writing a connected component as a JSX tag             |
-| Call your backend                         | `Backend.rpc(Group, url)` and call the client                                          | `fetch`, axios, tRPC, a hand-rolled client             |
-| Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided       | `fetch`, `FetchHttpClient.layer`                       |
-| Send something that must not be lost      | `Store.outbox(action, send)`: saved on the device, retried with an idempotency key     | Calling the server from a handler and hoping           |
-| Do something after an action              | `Store.after(action, effect)`                                                          | An Effect inside a reducer                             |
-| Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                              | `catchAll` that hides it; leaving it (compile error)   |
-| Show something while a component loads    | `View.pending(LoadingView)`                                                            | A loading flag in UI state                             |
-| Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)` | `location.href`, string paths                          |
-| Build a form                              | `Form.make(Schema, initial)`, `form.field(name)`, `form.submit` or `form.submitThen`   | UI state for each input plus hand validation           |
-| Listen to the window or document          | `Events.onWindow`, `Events.onDocument` in the Effect                                   | `addEventListener`                                     |
-| Focus or measure an element               | `Handle.make`, passed as a `Props.Handle`                                              | `document.querySelector`                               |
-| Open a dialog, menu, popover or tooltip   | The ones in `@spar/ui`, or `View.portal` with `Overlay`                                | A positioned div                                       |
-| Note something that happened, for the log | `Timeline.note(kind, name, detail)`                                                    | `console.log`                                          |
-| Test a store                              | Provide its layer and call commands in `it.effect`                                     | Mounting a page to test a reducer                      |
-| Test a component                          | `spar/testing`: `Testing.mount`, then find and click by role                           | Reaching into nodes by class name                      |
+| You want to                               | Do this                                                                                  | Not this                                               |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Draw something                            | `View.make(name, { prop: Schema }, (props) => <jsx />)` in a `.tsx` file                 | A plain function returning JSX                         |
+| Give a view its props                     | `View.connect(() => Effect)` or `View.taking(outerProps, (outer) => Effect)`             | Passing services into a view                           |
+| Hold state only the screen cares about    | `UiState.make(name, Schema, initial)` in the component's Effect                          | `Ref`, `SubscriptionRef`, `let`, a module variable     |
+| Hold data the app cares about             | A `Store.Tag` with actions and selectors                                                 | UI state seeded from a store, a service with a Ref     |
+| Put a store where one component uses it   | `SomeStore.with(Component)`, then mount the result                                       | Wiring a layer at the root for a store one screen owns |
+| Share a store across the app              | `SomeStore.layer()` in the layers given to `App.mount`                                   | A global                                               |
+| Change app state                          | `store.commands.<action>(payload)`                                                       | Writing to state anywhere else                         |
+| Change UI state                           | `UiState.set` or `UiState.update` in a handler                                           | Writing UI state from a command, a stream or a service |
+| Read state in a view                      | A `Props.Reactive(Schema)` prop fed from `store.select.<name>` or the UI state itself    | Reading a store inside a view                          |
+| Show a list                               | `Reactive.mapBy(key, RowView, props)` in the Effect, passed as a `Props.Element`         | `.map` inside JSX                                      |
+| Show one thing or another                 | `Reactive.when` in the Effect, or `View.branch`                                          | A ternary inside JSX                                   |
+| Mount a child that needs services         | `yield* View.child(Child, props)` in the Effect, passed as a `Props.Element`             | Writing a connected component as a JSX tag             |
+| Load data from the server                 | A `Query.Tag`, and `yield* TheQuery.ensure` where it is needed                           | Fetching in a component and passing the result down    |
+| Use loaded data in an action              | Read the query store in the action's `Store.after` effect, then `send` the result        | Props or arguments that carry server data              |
+| Stop a command that is wrong right now    | A guard as the third argument of `Store.action`, returning the reason                    | Disabling the button and hoping nothing else sends it  |
+| Run a flow with a wait in it              | A state field, an action that starts it, `Store.after` that waits and `send`s the finish | A lock, a queue, a flag in UI state                    |
+| Call your backend                         | `Backend.rpc(Group, url)` and call the client                                            | `fetch`, axios, tRPC, a hand-rolled client             |
+| Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided         | `fetch`, `FetchHttpClient.layer`                       |
+| Send something that must not be lost      | `Store.outbox(action, send)`: saved on the device, retried with an idempotency key       | Calling the server from a handler and hoping           |
+| Do something after an action              | `Store.after(action, effect)`                                                            | An Effect inside a reducer                             |
+| Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                                | `catchAll` that hides it; leaving it (compile error)   |
+| Show something while a component loads    | `View.pending(LoadingView)`                                                              | A loading flag in UI state                             |
+| Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)`   | `location.href`, string paths                          |
+| Build a form                              | `Form.make(Schema, initial)`, `form.field(name)`, `form.submit` or `form.submitThen`     | UI state for each input plus hand validation           |
+| Listen to the window or document          | `Events.onWindow`, `Events.onDocument` in the Effect                                     | `addEventListener`                                     |
+| Focus or measure an element               | `Handle.make`, passed as a `Props.Handle`                                                | `document.querySelector`                               |
+| Open a dialog, menu, popover or tooltip   | The ones in `@spar/ui`, or `View.portal` with `Overlay`                                  | A positioned div                                       |
+| Note something that happened, for the log | `Timeline.note(kind, name, detail)`                                                      | `console.log`                                          |
+| Test a store                              | Provide its layer and call commands in `it.effect`                                       | Mounting a page to test a reducer                      |
+| Test a component                          | `spar/testing`: `Testing.mount`, then find and click by role                             | Reaching into nodes by class name                      |
 
 ## What is refused, and why
 
@@ -77,6 +81,8 @@ compile):
 - A component whose Effect needs a service nobody provided, or can fail with an error nobody
   recovers, mounted anyway. Needs and failures are settled at mount.
 - A backend error from the shared contract that the component does not handle.
+- A reducer returning an object literal with a literal-typed field needs its return type written
+  (`(state: State): State => ...`), or TypeScript widens the literal and the action is rejected.
 - UI state made in a service, written from a command, a stream or a service listener, or seeded
   from a store. UI state belongs to one component and changes only in its handlers.
 - A connected component written as a JSX tag, a service passed into a view, a modal outside a
@@ -116,6 +122,20 @@ store and the component that uses it. Mount that unit twice and there are two st
 its own state, each registered in the same root registry the devtools read. So it is still model,
 view, update: one registry, one log, every change an action. It only does not look like it,
 because the store and its view sit in the same file.
+
+## Flows, refusals and server data
+
+Read the "State, events that interleave, and server data" part below before writing any store
+with async work. The short version:
+
+- A store is plain unless some commands are wrong in some states. Then give it a state field and
+  give those actions a guard. A refused command is visible in the log, the trace and
+  `store.refused`. Never guard only in the view.
+- Async work is always three steps in a store: a command records the intent, a `Store.after`
+  effect does the work, and it `send`s a command with the result.
+- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an action
+  that needs it reads the query store itself.
+- There is no way to make a command wait for another to finish, on purpose.
 
 ## The backend
 

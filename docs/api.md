@@ -113,6 +113,19 @@ A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`,
 
 (`apps/sidebar/src/BoardStore.ts`)
 
+### A store that refuses
+
+`Store.action(Schema, reduce, refusal)` takes a third argument, a guard: it is given the state and
+the payload and answers with a reason, or null when the command is accepted. A refused command
+changes nothing and is not added to the store's log. It is noted in the log of everything that
+happened as `refused` with the reason, its span carries `spar.refused`, and `store.refused` is the
+last refusal since the store last accepted a command. This is how a store is a state machine:
+a field names the state and each action's guard says in which states it applies
+(`apps/sidebar/src/ResetCounter.ts`, `docs/state-and-server-data.md`).
+
+`Store.after(action, (payload, state, send) => effect)`: `send(otherAction, payload)` commits
+another action of the same store, so async work started by one command reports back as another.
+
 ### A store beside its view
 
 ```ts
@@ -300,6 +313,27 @@ data. `spar/devtools/span-routes` has `route` (`GET /spans/:traceId`) and `recen
 (`apps/sidebar`: `src/api.ts` is the contract, `server/handlers.ts` and `scripts/backend.ts` the
 backend; `bun run backend` serves the app with it, and `bun run traced` follows one trace through
 both in a real browser.)
+
+## Query
+
+Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
+in the log, the devtools and the traces like any other.
+
+| Function                                                         | What it does                                                                              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `Query.Tag<Self>()(key, { success, failure, load, staleAfter })` | Declares the query: Schemas for what it loads and how it fails, the Effect that loads it. |
+| `Self.live`                                                      | Its layer, for the whole app.                                                             |
+| `Self.beside(component)`                                         | The query beside one component, as `.with` does for a store.                              |
+| `Self.ensure`                                                    | Loads when idle, failed or older than `staleAfter`. Call it where the data is needed.     |
+| `Self.refetch`, `Self.invalidate`                                | Load again now; mark stale and load again.                                                |
+| `Self.invalidatedBy(action)`                                     | A reaction for another store's layer: that action invalidates this query.                 |
+
+The service has `select.status` (`idle`, `loading`, `loaded`, `failed`), `select.value`,
+`select.error`, `select.loading` and the store's own `commands`, `log` and `refused`. One request
+runs at a time (a second is refused) and an answer to an earlier request is refused. Another
+store's action reads the loaded data in its after-effect: `const users = yield* UsersQuery`.
+Not built yet: queries keyed by parameters, optimistic updates on a query, retries, dropping
+unused data. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ## Backend
 

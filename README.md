@@ -21,6 +21,8 @@ This repo is private and nothing here is published.
 
 - [LLMS.md](LLMS.md): everything in one file, for agents (`bun run llms` rebuilds it)
 - [Getting started](docs/getting-started.md)
+- [State, events that interleave, and server data](docs/state-and-server-data.md): UI state or
+  store state, stores as state machines, queries as stores, beside Foldkit and Treflex
 - [Principles](docs/principles.md): what each rule is and what it rules out
 - [API](docs/api.md): every module with an example
 - [Recipes](docs/recipes.md): timers, sockets, offline, dialogs, testing, tracing

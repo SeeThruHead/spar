@@ -32,6 +32,31 @@ const examples: ReadonlyArray<readonly [string, string]> = [
     "A store declared beside the component that uses it, shipped as one unit with `NotesStore.with`. It is mounted twice in the app and each place has its own notes.",
   ],
   [
+    "apps/sidebar/src/ResetCounter.ts",
+    "A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.",
+  ],
+  [
+    "apps/sidebar/src/ResetCounterView.tsx",
+    "Its view. The buttons are never disabled; the store decides.",
+  ],
+  [
+    "apps/sidebar/src/People.ts",
+    "Server data in a query store, a second store for the selection, and Export CSV as an action that reads the people from the query store itself.",
+  ],
+  ["apps/sidebar/src/PeopleView.tsx", "The people table."],
+  [
+    "apps/sidebar/test/people.test.ts",
+    "Tests of the export: the file, the refusal with nobody selected, one trace for the request and the result.",
+  ],
+  [
+    "packages/spar/test/machine.test.ts",
+    "The race test: Add 1 during a reset, on a clock the test controls.",
+  ],
+  [
+    "packages/spar/test/query.test.ts",
+    "Tests of a query store: one request at a time, stale time, failure, late answers, invalidation.",
+  ],
+  [
     "apps/sidebar/src/NotesView.tsx",
     "The view of that unit: a Schema for each prop, JSX and nothing else.",
   ],
@@ -65,6 +90,7 @@ const body = [
   await read("docs/llms-guide.md"),
   await part("Principles", "docs/principles.md"),
   await part("API reference", "docs/api.md"),
+  await part("State, events that interleave, and server data", "docs/state-and-server-data.md"),
   await part("Getting started", "docs/getting-started.md"),
   await part("Recipes", "docs/recipes.md"),
   await part("Coming from React", "docs/from-react.md"),

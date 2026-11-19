@@ -197,6 +197,15 @@ Every backend call goes through `Backend`. Effect RPC is the way to talk to a ba
 HttpApi and JSON clients plug into the same client; everything that would go around it is refused
 by the build. A call the framework cannot see is a call missing from the trace.
 
+## 18a. A store says which commands it accepts, and server data is a store
+
+Events interleave: anything can arrive while a multi-step flow is waiting. Spar has no holding or
+queueing primitive. A flow is states in a store, and each action's guard says in which states it
+applies; a command that does not apply is refused with a reason that the log, the trace and the
+view can all show. The rule is in the model, so a button, a key and an agent get the same answer.
+Server data is no exception: a query is a store with typed loading, loaded and failed states, and
+any other store's action reads it directly, so no prop carries server data.
+
 ## 18. The past can be walked and branched
 
 Any moment in the log can be shown again, stepped through with the trace each step caused, and
