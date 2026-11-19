@@ -5,6 +5,7 @@ import { ActionScope } from "./internal/actionScope.ts"
 import { browserScheduler } from "./internal/soon.ts"
 import * as Dom from "./internal/dom.ts"
 import { Frame } from "./internal/frame.ts"
+import { installed } from "./internal/hook.ts"
 import { renderInto } from "./internal/render.ts"
 import type { Component } from "./View.ts"
 
@@ -44,6 +45,12 @@ const started = <R, LayerError>(
           }),
         ),
         Effect.andThen(options.shown ?? Effect.void),
+        Effect.andThen(
+          Option.match(installed.read(), {
+            onNone: () => Effect.void,
+            onSome: (hook) => hook.attach,
+          }),
+        ),
         Effect.provideService(Hydrating, hydrating),
         Effect.provideService(ActionScope, scope),
         Effect.provideService(Frame, { target: options.target, overlays }),
@@ -52,6 +59,8 @@ const started = <R, LayerError>(
     Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),
     Effect.andThen(Effect.never),
     Effect.provide(options.layer),
+    (app) =>
+      Option.match(installed.read(), { onNone: () => app, onSome: (hook) => hook.wrap(app) }),
     Effect.scoped,
     Effect.provideService(Scheduler.Scheduler, browserScheduler),
   )

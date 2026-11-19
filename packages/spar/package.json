@@ -10,6 +10,9 @@
     "./transform/check": "./src/transform/check.ts",
     "./transform/bun": "./src/transform/bun.ts",
     "./transform/vite": "./src/transform/vite.ts",
+    "./devtools/client": "./src/devtools/client.ts",
+    "./devtools/entry": "./src/devtools/entry.ts",
+    "./devtools/vite": "./src/devtools/vite.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {

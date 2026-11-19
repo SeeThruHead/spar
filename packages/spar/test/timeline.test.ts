@@ -80,10 +80,10 @@ describe("one log of everything that happened", () => {
         [3, "route", "/next", "link"],
         [4, "data", "threads", 3],
       ])
-      expect(moments.slice(0, 3).every((moment) => moment.traceId?.length === 32)).toBe(true)
-      expect(moments.slice(0, 3).every((moment) => moment.spanId?.length === 16)).toBe(true)
+      expect(moments.slice(0, 3).every((moment) => moment.traceId.length === 32)).toBe(true)
+      expect(moments.slice(0, 3).every((moment) => moment.spanId.length === 16)).toBe(true)
       expect(new Set(moments.map((moment) => moment.traceId)).size).toBe(4)
-      expect([moments[3]?.traceId, moments[3]?.spanId]).toEqual([null, null])
+      expect([moments[3]?.traceId, moments[3]?.spanId]).toEqual(["", ""])
     }).pipe(Effect.provide(layer)),
   )
 

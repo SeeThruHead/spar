@@ -1,6 +1,63 @@
 import { Schema } from "effect"
 import * as Props from "../Props.ts"
+import * as Reactive from "../Reactive.ts"
+import * as UiState from "../UiState.ts"
 import * as View from "../View.ts"
+
+export const MomentView = View.make(
+  "MomentView",
+  {
+    seq: Schema.String,
+    summary: Props.Reactive(Schema.String),
+    trace: Props.Reactive(Schema.String),
+    current: Props.Reactive(Schema.Boolean),
+    onJump: Props.Action,
+  },
+  ({ seq, summary, trace, current, onJump }) => (
+    <li aria-current={current}>
+      <button onClick={onJump}>Jump to {seq}</button>
+      <code>{summary}</code> <small aria-label={`Trace of ${seq}`}>{trace}</small>
+    </li>
+  ),
+)
+
+export const TimelineView = View.make(
+  "TimelineView",
+  {
+    position: Props.Reactive(Schema.String),
+    moments: Props.Element,
+    onBack: Props.Action,
+    onForward: Props.Action,
+    onLive: Props.Action,
+  },
+  ({ position, moments, onBack, onForward, onLive }) => (
+    <section aria-label="Everything that happened">
+      <h2>Everything that happened</h2>
+      <p>
+        <output aria-label="Timeline position">{position}</output>{" "}
+        <button onClick={onBack}>Earlier</button> <button onClick={onForward}>Later</button>{" "}
+        <button onClick={onLive}>Back to now</button>
+      </p>
+      <ol>{moments}</ol>
+    </section>
+  ),
+)
+
+export const ToolsView = View.make(
+  "ToolsView",
+  { open: Props.State(Schema.Boolean), timeline: Props.Element, stores: Props.Element },
+  ({ open, timeline, stores }) => (
+    <aside aria-label="Spar devtools" data-spar-devtools="">
+      <button aria-expanded={open} onClick={UiState.update(open, (shown) => !shown)}>
+        Devtools
+      </button>
+      <div hidden={Reactive.map(open, (shown) => !shown)}>
+        {timeline}
+        {stores}
+      </div>
+    </aside>
+  ),
+)
 
 export const EntryView = View.make(
   "EntryView",

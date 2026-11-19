@@ -13,7 +13,16 @@ import {
 import { run } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
-import { DeadView, EntryView, OutboxView, PanelView, StoreView } from "./devtools/PanelView.tsx"
+import {
+  DeadView,
+  EntryView,
+  MomentView,
+  OutboxView,
+  PanelView,
+  StoreView,
+  TimelineView,
+  ToolsView,
+} from "./devtools/PanelView.tsx"
 import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
@@ -73,12 +82,16 @@ const reachedBy = (store: Store.Inspected) =>
 
 export const layer: Layer.Layer<Registry> = Layer.effectContext(
   Effect.gen(function* () {
-    const tree = yield* UiState.Tree
+    const first = yield* UiState.Tree
+    const trees = Cell.make(first)
     const stores = Cell.make<ReadonlyArray<Store.Inspected>>([])
     const past = Cell.make<Past>({ remembered: [], viewing: null, live: [] })
 
     const record = Effect.fnUntraced(function* (noted: Timeline.Noted) {
+      const tree = yield* UiState.Tree
       const reached = yield* Effect.forEach(stores.read(), reachedBy)
+      trees.write(tree)
+
       const before = past.read()
       const seq =
         Option.getOrElse(
@@ -109,12 +122,12 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
             ),
           { discard: true },
         ),
-        Effect.sync(() => tree.restore(ui)),
+        Effect.sync(() => trees.read().restore(ui)),
       )
 
     const travelTo = Effect.fnUntraced(function* (seq: number | null) {
       const before = past.read()
-      const live = before.viewing === null ? tree.snapshot() : before.live
+      const live = before.viewing === null ? trees.read().snapshot() : before.live
       const found = Array.findFirst(before.remembered, (kept) => kept.moment.seq === seq)
 
       yield* Option.match(found, {
@@ -268,3 +281,64 @@ export const Panel = View.connect(
     }
   }),
 )(PanelView)
+
+const summaryOfMoment = (moment: Timeline.Moment): string =>
+  `${moment.kind} ${moment.name} ${Formatter.formatJson(moment.detail)}`
+
+const neighbour = (
+  seqs: ReadonlyArray<number>,
+  viewing: number | null,
+  by: number,
+): number | null =>
+  seqs.at(Math.max((viewing === null ? seqs.length : seqs.indexOf(viewing)) + by, 0)) ?? null
+
+export const TimelinePanel = View.connect(
+  Effect.fnUntraced(function* () {
+    const registry = yield* Registry
+    const stepped = Effect.fnUntraced(function* (by: number) {
+      const moments = yield* registry.moments.get
+      const viewing = yield* registry.viewing.get
+
+      yield* registry.travelTo(
+        neighbour(
+          moments.map((moment) => moment.seq),
+          viewing,
+          by,
+        ),
+      )
+    })
+
+    return {
+      position: Reactive.map(registry.viewing, (viewing) =>
+        viewing === null ? "Now" : `At ${viewing}`,
+      ),
+      moments: yield* pipe(
+        registry.moments,
+        Reactive.mapBy(
+          (moment: Timeline.Moment) => String(moment.seq),
+          MomentView,
+          (moment, seq) => ({
+            seq,
+            summary: Reactive.map(moment, summaryOfMoment),
+            trace: Reactive.map(moment, (now) => now.traceId),
+            current: Reactive.map(registry.viewing, (viewing) => String(viewing) === seq),
+            onJump: registry.travelTo(Number(seq)),
+          }),
+        ),
+      ),
+      onBack: stepped(-1),
+      onForward: stepped(1),
+      onLive: registry.travelTo(null),
+    }
+  }),
+)(TimelineView)
+
+export const Tools = View.connect(
+  Effect.fnUntraced(function* () {
+    return {
+      open: yield* UiState.make("open", Schema.Boolean, false),
+      timeline: yield* View.child(TimelinePanel, {}),
+      stores: yield* View.child(Panel, {}),
+    }
+  }),
+)(ToolsView)

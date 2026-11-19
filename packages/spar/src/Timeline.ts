@@ -8,8 +8,8 @@ export const Noted = Schema.Struct({
   kind: Kind,
   name: Schema.String,
   detail: Schema.Json,
-  traceId: Schema.NullOr(Schema.String),
-  spanId: Schema.NullOr(Schema.String),
+  traceId: Schema.String,
+  spanId: Schema.String,
 })
 
 export type Noted = typeof Noted.Type
@@ -32,8 +32,14 @@ export const note = (kind: Kind, name: string, detail: () => Schema.Json): Effec
         kind,
         name,
         detail: detail(),
-        traceId: Option.getOrNull(Option.map(span, (found) => found.traceId)),
-        spanId: Option.getOrNull(Option.map(span, (found) => found.spanId)),
+        traceId: Option.getOrElse(
+          Option.map(span, (found) => found.traceId),
+          () => "",
+        ),
+        spanId: Option.getOrElse(
+          Option.map(span, (found) => found.spanId),
+          () => "",
+        ),
       }),
     )
   })
