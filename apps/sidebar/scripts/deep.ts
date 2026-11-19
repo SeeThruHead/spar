@@ -68,6 +68,18 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await page.getByLabel("Spans").locator("li", { hasText: "input from" }).first().waitFor()
 
   const data = await page.getByLabel("Spans").locator("li").allInnerTexts()
+  await page
+    .getByLabel("Spans")
+    .locator("li", { hasText: "sidebar/Author/requested" })
+    .scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${root}artifacts/devtools-deep-wait.png` })
+
+  const waited = await page
+    .getByLabel("Spans")
+    .locator("li", { hasText: "sidebar/Author/requested" })
+    .locator("[data-waited]")
+    .first()
+    .getAttribute("data-waited")
 
   await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${root}artifacts/devtools-deep-data.png` })
@@ -111,6 +123,9 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
     )
       ? []
       : [`the data lens did not say what the author's query waited for: ${data.join(" | ")}`]),
+    ...(Number.parseFloat(waited ?? "0") > 20
+      ? []
+      : [`the waterfall did not draw how long the author waited on the report: ${waited}`]),
     ...(data.some((line) => line.includes("SegmentView"))
       ? ["the data lens still showed components"]
       : []),

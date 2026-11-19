@@ -785,6 +785,8 @@ type Bar = {
   readonly left: string
   readonly width: string
   readonly note: string
+  readonly waitedFrom: string
+  readonly waited: string
 }
 
 const endOf = (span: Spans.Recorded): number => span.endedAt ?? span.startedAt
@@ -812,6 +814,20 @@ const noteOf = (attributes: Readonly<Record<string, string>>): string => {
     : `served from what trace ${from.slice(0, 8)} loaded`
 }
 
+const askedBefore = (
+  span: Spans.Recorded,
+  ordered: ReadonlyArray<Sided>,
+): Spans.Recorded | undefined => {
+  const source = span.attributes["spar.query.after"] ?? ""
+  if (source === "" || !span.name.endsWith("/requested")) return undefined
+
+  const asked = `${source.split(" . ")[0]?.split("made from ").at(-1)}/requested`
+
+  return ordered.findLast(
+    (each) => each.span.name === asked && each.span.startedAt <= span.startedAt,
+  )?.span
+}
+
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
   const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
@@ -828,6 +844,11 @@ export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
     left: percent(span.startedAt - start, whole),
     width: percent(endOf(span) - span.startedAt, whole),
     note: noteOf(span.attributes),
+    waitedFrom: percent((askedBefore(span, ordered)?.startedAt ?? span.startedAt) - start, whole),
+    waited: percent(
+      span.startedAt - (askedBefore(span, ordered)?.startedAt ?? span.startedAt),
+      whole,
+    ),
   }))
 }
 
@@ -905,6 +926,8 @@ export const TracePanel = View.taking(
             indent: Reactive.map(bar, (now) => now.indent),
             left: Reactive.map(bar, (now) => now.left),
             width: Reactive.map(bar, (now) => now.width),
+            waitedFrom: Reactive.map(bar, (now) => now.waitedFrom),
+            waited: Reactive.map(bar, (now) => now.waited),
             note: Reactive.map(bar, (now) => now.note),
           }),
         ),

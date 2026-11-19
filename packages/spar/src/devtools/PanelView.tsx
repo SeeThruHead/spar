@@ -33,8 +33,10 @@ export const BarView = View.make(
     left: Props.Reactive(Schema.String),
     width: Props.Reactive(Schema.String),
     note: Props.Reactive(Schema.String),
+    waitedFrom: Props.Reactive(Schema.String),
+    waited: Props.Reactive(Schema.String),
   },
-  ({ name, where, took, failed, indent, left, width, note }) => (
+  ({ name, where, took, failed, indent, left, width, note, waitedFrom, waited }) => (
     <li
       data-where={where}
       data-failed={Reactive.map(failed, (bad) => (bad ? "yes" : "no"))}
@@ -52,6 +54,17 @@ export const BarView = View.make(
       <div
         style={{ position: "relative", height: "6px", background: "#eef1f5", borderRadius: "3px" }}
       >
+        <div
+          data-waited={waited}
+          style={{
+            position: "absolute",
+            top: "2px",
+            height: "2px",
+            left: waitedFrom,
+            width: waited,
+            background: "#b54708",
+          }}
+        />
         <div
           style={{
             position: "absolute",

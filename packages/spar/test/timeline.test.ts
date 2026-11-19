@@ -164,6 +164,8 @@ describe("one log of everything that happened", () => {
         left: "0.00%",
         width: "100.00%",
         note: "",
+        waitedFrom: "0.00%",
+        waited: "0.00%",
       },
       {
         key: "page inner",
@@ -175,6 +177,8 @@ describe("one log of everything that happened", () => {
         left: "20.00%",
         width: "30.00%",
         note: "",
+        waitedFrom: "20.00%",
+        waited: "0.00%",
       },
       {
         key: "backend open",
@@ -186,6 +190,8 @@ describe("one log of everything that happened", () => {
         left: "80.00%",
         width: "0.00%",
         note: "",
+        waitedFrom: "80.00%",
+        waited: "0.00%",
       },
     ])
     expect(
@@ -199,6 +205,31 @@ describe("one log of everything that happened", () => {
         },
       ]).map((bar) => bar.note),
     ).toEqual(["input from test/Users . value"])
+    expect(
+      Devtools.barsOf([
+        { span: recorded("whole", null, 0, 100, false), where: "page" },
+        { span: recorded("test/Users/requested", "whole", 10, 11, false), where: "page" },
+        {
+          span: {
+            ...recorded("test/Orders/requested", "whole", 60, 61, false),
+            attributes: { "spar.query.after": "made from test/Users . value" },
+          },
+          where: "page",
+        },
+        {
+          span: {
+            ...recorded("Lookup", "whole", 62, 90, false),
+            attributes: { "spar.query.after": "made from test/Users . value" },
+          },
+          where: "page",
+        },
+      ]).map((bar) => [bar.waitedFrom, bar.waited]),
+    ).toEqual([
+      ["0.00%", "0.00%"],
+      ["10.00%", "0.00%"],
+      ["10.00%", "50.00%"],
+      ["62.00%", "0.00%"],
+    ])
     expect(
       ["0123456789abcdef", ""].map(
         (from) =>

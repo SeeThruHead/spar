@@ -1,6 +1,6 @@
 ---
 id: spa-mk0t
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-11-19T15:15:37Z
