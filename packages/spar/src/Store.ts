@@ -21,6 +21,7 @@ import type { Reactive } from "./internal/reactive.ts"
 import {
   Entries,
   LogText,
+  Refused,
   UnknownAction,
   Unreadable,
   inMemory,
@@ -49,13 +50,18 @@ import { within } from "./View.ts"
 import type { Mountable } from "./View.ts"
 import * as Timeline from "./Timeline.ts"
 
-export { Entries, LogText, Seed, UnknownAction, Unreadable, replay }
+export { Entries, LogText, Refused, Seed, UnknownAction, Unreadable, replay }
 export type { Action, Definition, Durable, Entry, Selector }
+
+export type Send<State> = <Payload>(
+  action: Action<State, Payload>,
+  payload: Payload,
+) => Effect.Effect<void>
 
 export type Reaction<State, R = never> = {
   readonly action: Action<State, unknown>
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
-  readonly run: (entry: Entry, state: State) => Effect.Effect<void, never, R>
+  readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
   readonly start: (channel: string) => Effect.Effect<void, never, R | Scope.Scope>
   readonly leftovers: (
     channel: string,
@@ -83,6 +89,7 @@ type Held<State> = Past<State> & {
   readonly state: State
   readonly viewing: number | null
   readonly borrowed: Past<State> | null
+  readonly refused: Option.Option<Refusal>
 }
 
 const pastOf = <State>(held: Held<State>): Past<State> => held.borrowed ?? held
@@ -126,6 +133,7 @@ export type Shape<State, A extends Actions<State>, S extends Selectors<State>> =
   readonly state: Reactive<State>
   readonly log: Reactive<ReadonlyArray<Entry>>
   readonly viewing: Reactive<number | null>
+  readonly refused: Reactive<Option.Option<Refusal>>
   readonly travelTo: (seq: number | null) => Effect.Effect<void>
   readonly select: { readonly [Name in keyof S]: Struct.Apply<ToReactive<State>, S[Name]> }
   readonly commands: {
@@ -144,20 +152,39 @@ export class Abandoned extends Schema.TaggedError<Abandoned, { readonly brand: u
 
 const logLimit = 1000
 
+const accepted = <State>(before: State, tried: State | Refused): State =>
+  tried instanceof Refused ? before : tried
+
 export const action = <Payload, Encoded, State>(
   schema: Schema.Codec<Payload, Encoded>,
   reduce: (state: State, payload: Payload) => State,
+  refusal: (state: NoInfer<State>, payload: NoInfer<Payload>) => string | null = () => null,
 ): Action<State, Payload> => {
   const json = Schema.toCodecJson(schema)
   const decode = Schema.decodeUnknownEffect(json)
+  const attempt = (payload: Schema.Json) =>
+    Effect.map(decode(payload), (decoded) => (state: State) => {
+      const reason = refusal(state, decoded)
+
+      return reason === null ? reduce(state, decoded) : new Refused({ reason })
+    })
 
   return {
     encode: Schema.encodeUnknownEffect(json),
     decode,
+    attempt,
     reducer: (payload) =>
-      Effect.map(decode(payload), (decoded) => (state) => reduce(state, decoded)),
+      Effect.map(attempt(payload), (tried) => (state) => accepted(state, tried(state))),
   }
 }
+
+export const Refusal = Schema.Struct({
+  action: Schema.String,
+  reason: Schema.String,
+  payload: Schema.Json,
+})
+
+export type Refusal = typeof Refusal.Type
 
 export const selector = <A, State>(
   schema: Schema.Codec<A, unknown>,
@@ -223,6 +250,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         trail: lastOf(restored, inspector.keepStates),
         viewing: null,
         borrowed: null,
+        refused: Option.none(),
       }
       const cell = Cell.make(opened)
       const current = fromCell(cell)
@@ -262,6 +290,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
                   trail: held.trail.filter((kept) => kept.seq <= seq),
                   viewing: null,
                   borrowed: null,
+                  refused: Option.none(),
                 }),
               },
             ),
@@ -294,20 +323,40 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         })
       })
 
+      const turnAway = Effect.fnUntraced(function* (
+        name: string,
+        payload: Schema.Json,
+        reason: string,
+        intent: string,
+      ) {
+        yield* Effect.annotateCurrentSpan({
+          "spar.store": key,
+          "spar.action": name,
+          "spar.refused": reason,
+        })
+        yield* journal.settle(intent)
+        cell.write({ ...cell.read(), refused: Option.some({ action: name, reason, payload }) })
+        yield* Timeline.note("refused", channelOf(key, name), () => ({ payload, reason }))
+
+        return Option.none<{ readonly entry: Entry; readonly next: State }>()
+      })
+
       const record = Effect.fnUntraced(function* (
         name: string,
         handled: Action<State, unknown>,
         payload: Schema.Json,
-        reduce: (state: State) => State,
+        attempt: (state: State) => State | Refused,
         intent: string,
       ) {
         yield* absorb
 
+        const before = cell.read()
+        const next = attempt(before.state)
+        if (next instanceof Refused) return yield* turnAway(name, payload, next.reason, intent)
+
         const id = yield* random.uuidV7()
         const seq = yield* Ref.updateAndGet(sequence, (last) => last + 1)
         const entry: Entry = { id, action: name, payload, seq }
-        const before = cell.read()
-        const next = reduce(before.state)
 
         yield* Effect.annotateCurrentSpan({
           "spar.store": key,
@@ -330,8 +379,17 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         yield* journal.tell
         yield* Timeline.note("command", channelOf(key, name), () => payload)
 
-        return { entry, next }
+        return Option.some({ entry, next })
       })
+
+      const send: Send<State> = (target, payload) =>
+        Effect.suspend(() =>
+          Effect.forEach(
+            Record.toEntries(named).filter(([, handled]) => Object.is(handled, target)),
+            ([name, handled]) => command(name, handled)(payload),
+            { discard: true },
+          ),
+        )
 
       const react = (
         handled: Action<State, unknown>,
@@ -339,7 +397,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       ) =>
         Effect.forEach(
           reactionsTo(handled),
-          (reaction) => Effect.forkIn(reaction.run(done.entry, done.next), scope),
+          (reaction) => Effect.forkIn(reaction.run(done.entry, done.next, send), scope),
           { discard: true },
         )
 
@@ -347,14 +405,13 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         Record.get(named, orphan.action).pipe(
           Effect.fromOption,
           Effect.flatMap((handled) =>
-            handled.reducer(orphan.payload).pipe(
-              Effect.flatMap((reduce) =>
-                record(orphan.action, handled, orphan.payload, reduce, orphan.key),
+            handled.attempt(orphan.payload).pipe(
+              Effect.flatMap((attempt) =>
+                record(orphan.action, handled, orphan.payload, attempt, orphan.key),
               ),
-              Effect.map((done) => ({ handled, done })),
+              Effect.map(Option.map((done) => ({ handled, done }))),
             ),
           ),
-          Effect.asSome,
           Effect.catch((cause) =>
             journal
               .settle(orphan.key)
@@ -369,14 +426,16 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         const carryOut = Effect.fnUntraced(
           function* (input: unknown) {
             const payload = yield* handled.encode(input)
-            const reduce = yield* handled.reducer(payload)
+            const attempt = yield* handled.attempt(payload)
             const intent = yield* journal.intend(name, payload)
             const done = yield* Semaphore.withPermit(
               turn,
-              journal.exclusively(record(name, handled, payload, reduce, intent)),
+              journal.exclusively(record(name, handled, payload, attempt, intent)),
             )
 
-            yield* react(handled, done)
+            yield* Effect.forEach(Option.toArray(done), (recorded) => react(handled, recorded), {
+              discard: true,
+            })
           },
           Effect.orDie,
           (effect) => provideTo<void, never, R>(effect, context),
@@ -453,6 +512,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         state,
         log,
         viewing,
+        refused: map(current, (held) => held.refused),
         travelTo,
         select,
         commands,
@@ -530,14 +590,14 @@ export const Tag =
 
 export const after = <State, Payload, R>(
   trigger: Action<State, Payload>,
-  effect: (payload: Payload, state: State) => Effect.Effect<void, never, R>,
+  effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
 ): Reaction<State, R> => ({
   action: trigger,
   persist: () => Effect.void,
-  run: (entry, state) =>
+  run: (entry, state, send) =>
     trigger.decode(entry.payload).pipe(
       Effect.orDie,
-      Effect.flatMap((payload) => effect(payload, state)),
+      Effect.flatMap((payload) => effect(payload, state, send)),
     ),
   start: () => Effect.void,
   leftovers: () => Effect.succeed([]),

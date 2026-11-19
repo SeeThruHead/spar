@@ -1,4 +1,4 @@
-import { Array, Effect, Option, Record, Ref, Schema, Stream } from "effect"
+import { Array, Data, Effect, Option, Record, Ref, Schema, Stream } from "effect"
 import type { Cause, Scope } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
@@ -25,9 +25,14 @@ export const Entries = Schema.Array(StoredEntry)
 
 export const LogText = Schema.fromJsonString(Entries)
 
+export class Refused extends Data.TaggedClass("Refused")<{ readonly reason: string }> {}
+
 export type Action<State, Payload> = {
   readonly encode: (input: unknown) => Effect.Effect<Schema.Json, Schema.SchemaError>
   readonly decode: (payload: Schema.Json) => Effect.Effect<Payload, Schema.SchemaError>
+  readonly attempt: (
+    payload: Schema.Json,
+  ) => Effect.Effect<(state: State) => State | Refused, Schema.SchemaError>
   readonly reducer: (
     payload: Schema.Json,
   ) => Effect.Effect<(state: State) => State, Schema.SchemaError>
