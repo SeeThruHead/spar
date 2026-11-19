@@ -36,15 +36,17 @@ export const Board = Schema.Struct({
 
 export type Board = typeof Board.Type
 
-export type Section = {
-  readonly key: string
-  readonly movable: boolean
-  readonly title: string
-  readonly collapsed: boolean
-  readonly count: number
-  readonly needsYou: number
-  readonly rows: ReadonlyArray<Agent>
-}
+export const Section = Schema.Struct({
+  key: Schema.String,
+  movable: Schema.Boolean,
+  title: Schema.String,
+  collapsed: Schema.Boolean,
+  count: Schema.Int,
+  needsYou: Schema.Int,
+  rows: Schema.Array(Agent),
+})
+
+export type Section = typeof Section.Type
 
 export const pinnedKey = "pinned"
 

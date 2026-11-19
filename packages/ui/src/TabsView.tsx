@@ -1,31 +1,32 @@
 import { Schema } from "effect"
-import { Handle, Props, View } from "spar"
-import type { Handler, Reactive } from "spar"
+import { Props, View } from "spar"
 
-type TabProps = {
-  readonly id: string
-  readonly title: string
-  readonly handle: Handle.Handle
-  readonly selected: Reactive.Reactive<boolean>
-  readonly tabIndex: Reactive.Reactive<number>
-  readonly onSelect: Handler<Event>
-  readonly onKey: Handler<KeyboardEvent>
-}
-
-export const TabView = (props: TabProps) => (
-  <button
-    ref={props.handle}
-    type="button"
-    role="tab"
-    id={`${props.id}-tab`}
-    aria-controls={`${props.id}-panel`}
-    aria-selected={props.selected}
-    tabIndex={props.tabIndex}
-    onClick={props.onSelect}
-    onKeydown={props.onKey}
-  >
-    {props.title}
-  </button>
+export const TabView = View.make(
+  "TabView",
+  {
+    id: Schema.String,
+    title: Schema.String,
+    handle: Props.Handle,
+    selected: Props.Reactive(Schema.Boolean),
+    tabIndex: Props.Reactive(Schema.Finite),
+    onSelect: Props.Handler("click"),
+    onKey: Props.Handler("keydown"),
+  },
+  (props) => (
+    <button
+      ref={props.handle}
+      type="button"
+      role="tab"
+      id={`${props.id}-tab`}
+      aria-controls={`${props.id}-panel`}
+      aria-selected={props.selected}
+      tabIndex={props.tabIndex}
+      onClick={props.onSelect}
+      onKeydown={props.onKey}
+    >
+      {props.title}
+    </button>
+  ),
 )
 
 export const TabPanelView = View.make(

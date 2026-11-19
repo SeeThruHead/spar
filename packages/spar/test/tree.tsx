@@ -1,36 +1,43 @@
-import type { Action, Element, UiState } from "spar"
+import { Schema } from "effect"
+import { Props, View } from "spar"
 
-type NoteProps = {
-  readonly id: string
-  readonly text: UiState.UiState<string>
-  readonly onClear: Action
-}
-
-export const NoteView = ({ id, text, onClear }: NoteProps) => (
-  <li>
-    <output aria-label="Note">{text}</output>
-    <button onClick={onClear}>Clear {id}</button>
-  </li>
+export const NoteView = View.make(
+  "NoteView",
+  { id: Schema.String, text: Props.State(Schema.String), onClear: Props.Action },
+  ({ id, text, onClear }) => (
+    <li>
+      <output aria-label="Note">{text}</output>
+      <button onClick={onClear}>Clear {id}</button>
+    </li>
+  ),
 )
 
-export const PanelView = ({ open }: { readonly open: UiState.UiState<boolean> }) => (
-  <aside hidden={open}>Panel</aside>
+export const PanelView = View.make(
+  "PanelView",
+  { open: Props.State(Schema.Boolean) },
+  ({ open }) => <aside hidden={open}>Panel</aside>,
 )
 
-type BoardProps = {
-  readonly title: UiState.UiState<string>
-  readonly notes: Element
-  readonly always: Element
-  readonly sometimes: Element
-}
-
-export const BoardView = ({ title, notes, always, sometimes }: BoardProps) => (
-  <section>
-    <h1>{title}</h1>
-    <ul>{notes}</ul>
-    {always}
-    {sometimes}
-  </section>
+export const BoardView = View.make(
+  "BoardView",
+  {
+    title: Props.State(Schema.String),
+    notes: Props.Element,
+    always: Props.Element,
+    sometimes: Props.Element,
+  },
+  ({ title, notes, always, sometimes }) => (
+    <section>
+      <h1>{title}</h1>
+      <ul>{notes}</ul>
+      {always}
+      {sometimes}
+    </section>
+  ),
 )
 
-export const TwiceView = ({ first }: { readonly first: UiState.UiState<string> }) => <p>{first}</p>
+export const TwiceView = View.make(
+  "TwiceView",
+  { first: Props.State(Schema.String) },
+  ({ first }) => <p>{first}</p>,
+)

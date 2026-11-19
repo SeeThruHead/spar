@@ -1,39 +1,45 @@
-import { Reactive } from "spar"
-import type { Action, Element } from "spar"
+import { Schema } from "effect"
+import { Props, Reactive, View } from "spar"
 
-export type Item = { readonly id: string; readonly label: string }
+export const Item = Schema.Struct({ id: Schema.String, label: Schema.String })
 
-type RowProps = {
-  readonly item: Reactive.Reactive<Item>
-  readonly shared: Reactive.Reactive<string>
-  readonly marked: Reactive.Reactive<boolean>
-  readonly onPick: Action
-}
+export type Item = typeof Item.Type
 
-export const RowView = ({ item, shared, marked, onPick }: RowProps) => (
-  <li class={{ marked }}>
-    <span>{Reactive.map(item, (current) => current.label)}</span>
-    <em>{shared}</em>
-    <button type="button" onClick={onPick}>
-      Pick
-    </button>
-  </li>
+export const RowView = View.make(
+  "RowView",
+  {
+    item: Props.Reactive(Item),
+    shared: Props.Reactive(Schema.String),
+    marked: Props.Reactive(Schema.Boolean),
+    onPick: Props.Action,
+  },
+  ({ item, shared, marked, onPick }) => (
+    <li class={{ marked }}>
+      <span>{Reactive.map(item, (current) => current.label)}</span>
+      <em>{shared}</em>
+      <button type="button" onClick={onPick}>
+        Pick
+      </button>
+    </li>
+  ),
 )
 
-type ListProps = {
-  readonly rows: Element
-  readonly shared: Reactive.Reactive<string>
-  readonly picks: Reactive.Reactive<number>
-  readonly onMark: Action
-}
-
-export const ListView = ({ rows, shared, picks, onMark }: ListProps) => (
-  <section aria-label="Things">
-    <p aria-label="Shared">{shared}</p>
-    <output aria-label="Picks">{picks}</output>
-    <button type="button" onClick={onMark}>
-      Mark
-    </button>
-    <ul>{rows}</ul>
-  </section>
+export const ListView = View.make(
+  "ListView",
+  {
+    rows: Props.Element,
+    shared: Props.Reactive(Schema.String),
+    picks: Props.Reactive(Schema.Finite),
+    onMark: Props.Action,
+  },
+  ({ rows, shared, picks, onMark }) => (
+    <section aria-label="Things">
+      <p aria-label="Shared">{shared}</p>
+      <output aria-label="Picks">{picks}</output>
+      <button type="button" onClick={onMark}>
+        Mark
+      </button>
+      <ul>{rows}</ul>
+    </section>
+  ),
 )

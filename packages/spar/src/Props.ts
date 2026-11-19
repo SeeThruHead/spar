@@ -73,11 +73,20 @@ export const Callback = <A>(
     named("callback"),
   )
 
-export const Handler = <const Name extends keyof HTMLElementEventMap>(
+type On<Tag> = [Tag] extends [keyof HTMLElementTagNameMap]
+  ? { readonly currentTarget: HTMLElementTagNameMap[Tag] }
+  : unknown
+
+export const Handler = <
+  const Name extends keyof HTMLElementEventMap,
+  const Tag extends keyof HTMLElementTagNameMap | undefined = undefined,
+>(
   _event: Name,
-): Schema.declare<AnyHandler<HTMLElementEventMap[Name]>> =>
+  _on?: Tag,
+): Schema.declare<AnyHandler<HTMLElementEventMap[Name] & On<Tag>>> =>
   kind(
-    (value): value is AnyHandler<HTMLElementEventMap[Name]> => Predicate.isNotNullish(value),
+    (value): value is AnyHandler<HTMLElementEventMap[Name] & On<Tag>> =>
+      Predicate.isNotNullish(value),
     named("handler"),
   )
 

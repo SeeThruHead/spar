@@ -1,52 +1,51 @@
-import { Reactive, UiState } from "spar"
-import type { Action, Element } from "spar"
+import { Schema } from "effect"
+import { Props, Reactive, UiState, View } from "spar"
 
-export type Item = {
-  readonly id: string
-  readonly label: string
-}
+export const Item = Schema.Struct({ id: Schema.String, label: Schema.String })
 
-export const ItemView = ({ item }: { readonly item: Reactive.Reactive<Item> }) => (
+export type Item = typeof Item.Type
+
+export const ItemView = View.make("ItemView", { item: Props.Reactive(Item) }, ({ item }) => (
   <li>{Reactive.map(item, (current) => current.label)}</li>
+))
+
+export const BoardView = View.make(
+  "BoardView",
+  { total: Props.Reactive(Schema.Finite), rows: Props.Element, onAdd: Props.Action },
+  ({ total, rows, onAdd }) => (
+    <section aria-label="Board">
+      <output aria-label="Total">{total}</output>
+      <button onClick={onAdd}>Add item</button>
+      <ul aria-label="Items">{rows}</ul>
+    </section>
+  ),
 )
 
-type BoardProps = {
-  readonly total: Reactive.Reactive<number>
-  readonly rows: Element
-  readonly onAdd: Action
-}
+export const DetailsView = View.make("DetailsView", { note: Schema.String }, ({ note }) => (
+  <p role="note">{note}</p>
+))
 
-export const BoardView = ({ total, rows, onAdd }: BoardProps) => (
-  <section aria-label="Board">
-    <output aria-label="Total">{total}</output>
-    <button onClick={onAdd}>Add item</button>
-    <ul aria-label="Items">{rows}</ul>
-  </section>
+export const DisclosureView = View.make(
+  "DisclosureView",
+  { open: Props.State(Schema.Boolean), details: Props.Element },
+  ({ open, details }) => (
+    <section aria-label="Disclosure">
+      <button onClick={UiState.update(open, (shown) => !shown)}>Toggle details</button>
+      {details}
+    </section>
+  ),
 )
 
-export const DetailsView = ({ note }: { readonly note: string }) => <p role="note">{note}</p>
+export const LoadingView = View.make("LoadingView", { id: Schema.String }, ({ id }) => (
+  <p role="status">Loading {id}</p>
+))
 
-type DisclosureProps = {
-  readonly open: UiState.UiState<boolean>
-  readonly details: Element
-}
+export const LoadedView = View.make("LoadedView", { title: Schema.String }, ({ title }) => (
+  <h2>{title}</h2>
+))
 
-export const DisclosureView = ({ open, details }: DisclosureProps) => (
-  <section aria-label="Disclosure">
-    <button onClick={UiState.update(open, (shown) => !shown)}>Toggle details</button>
-    {details}
-  </section>
-)
+const Failure = Schema.TaggedStruct("LoadFailed", { message: Schema.String })
 
-export const LoadingView = ({ id }: { readonly id: string }) => <p role="status">Loading {id}</p>
-
-export const LoadedView = ({ title }: { readonly title: string }) => <h2>{title}</h2>
-
-type Failure = {
-  readonly _tag: "LoadFailed"
-  readonly message: string
-}
-
-export const FailedView = ({ error }: { readonly error: Failure }) => (
+export const FailedView = View.make("FailedView", { error: Failure }, ({ error }) => (
   <p role="alert">{error.message}</p>
-)
+))

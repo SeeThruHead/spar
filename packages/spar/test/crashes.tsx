@@ -1,29 +1,35 @@
-import { Reactive } from "spar"
-import type { Action, Element } from "spar"
-import type { Item } from "./views.tsx"
+import { Schema } from "effect"
+import { Props, Reactive, View } from "spar"
+import { Item } from "./views.tsx"
 
-export const BrokenPartView = ({ defect }: { readonly defect: unknown }) => (
-  <p role="alert">This part is unavailable: {String(defect)}</p>
+export const BrokenPartView = View.make(
+  "BrokenPartView",
+  { defect: Schema.Unknown },
+  ({ defect }) => <p role="alert">This part is unavailable: {String(defect)}</p>,
 )
 
-export const WidgetView = ({ title }: { readonly title: string }) => <h2>{title}</h2>
+export const WidgetView = View.make("WidgetView", { title: Schema.String }, ({ title }) => (
+  <h2>{title}</h2>
+))
 
-type PageProps = {
-  readonly widget: Element
-  readonly label: Reactive.Reactive<string>
-  readonly reports: Reactive.Reactive<number>
-  readonly onBreak: Action
-  readonly onRename: Action
-}
-
-export const PageView = ({ widget, label, reports, onBreak, onRename }: PageProps) => (
-  <main>
-    {widget}
-    <button onClick={onBreak}>Break</button>
-    <button onClick={onRename}>Rename</button>
-    <output aria-label="Label">{label}</output>
-    <output aria-label="Reports">{reports}</output>
-  </main>
+export const PageView = View.make(
+  "PageView",
+  {
+    widget: Props.Element,
+    label: Props.Reactive(Schema.String),
+    reports: Props.Reactive(Schema.Finite),
+    onBreak: Props.Action,
+    onRename: Props.Action,
+  },
+  ({ widget, label, reports, onBreak, onRename }) => (
+    <main>
+      {widget}
+      <button onClick={onBreak}>Break</button>
+      <button onClick={onRename}>Rename</button>
+      <output aria-label="Label">{label}</output>
+      <output aria-label="Reports">{reports}</output>
+    </main>
+  ),
 )
 
 const shownLabel = (item: Item): string => {
@@ -32,6 +38,8 @@ const shownLabel = (item: Item): string => {
   return item.label
 }
 
-export const FussyItemView = ({ item }: { readonly item: Reactive.Reactive<Item> }) => (
-  <li>{Reactive.map(item, shownLabel)}</li>
+export const FussyItemView = View.make(
+  "FussyItemView",
+  { item: Props.Reactive(Item) },
+  ({ item }) => <li>{Reactive.map(item, shownLabel)}</li>,
 )

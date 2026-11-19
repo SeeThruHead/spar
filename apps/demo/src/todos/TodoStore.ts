@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { Store } from "spar"
 
-const Todo = Schema.Struct({
+export const Todo = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   done: Schema.Boolean,

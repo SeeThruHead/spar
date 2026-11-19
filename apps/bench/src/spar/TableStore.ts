@@ -2,7 +2,9 @@ import { Schema } from "effect"
 import { Store } from "spar"
 import { exclaimEveryTenth, makeRows, swapSecondAndSecondLast } from "../shared/rows.ts"
 
-const Rows = Schema.Array(Schema.Struct({ id: Schema.Int, label: Schema.String }))
+export const Row = Schema.Struct({ id: Schema.Int, label: Schema.String })
+
+const Rows = Schema.Array(Row)
 
 const State = Schema.Struct({ rows: Rows, selected: Schema.Int, nextId: Schema.Int })
 

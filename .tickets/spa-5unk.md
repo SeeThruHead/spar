@@ -23,3 +23,7 @@ A view without a props Schema does not compile or is rejected by the build check
 **2026-11-19T03:40:23Z**
 
 Step 1 done: Props module (Reactive, State, Action, Element, Handle, Callback kinds; shown/allShown for the inspector), View.make(name, fields, draw), build check lets JSX be the body of View.make. Left: View.connect takes the outer props Schema; convert every view in every package to View.make; then the build check rejects a plain function view (proof by build) and a connect without a Schema (proof by types).
+
+**2026-11-19T03:46:28Z**
+
+Step 2 done: every view in ui, demo, sidebar, stories, ssr, bench, the devtools panel and the framework's tests is View.make with a props Schema. Props.Handler(event, tag?) types currentTarget when the element is named. Memory gate unchanged (1.22 times Solid). Left: connect takes the outer props Schema; the build rule that rejects a plain function view; the two proofs; docs.

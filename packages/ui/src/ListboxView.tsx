@@ -1,6 +1,5 @@
 import { Schema } from "effect"
-import { Handle, Overlay, Props, View } from "spar"
-import type { Action, Element, Handler, Reactive } from "spar"
+import { Overlay, Props, View } from "spar"
 
 export const ListboxOptionView = View.make(
   "ListboxOptionView",
@@ -40,36 +39,38 @@ export const ListboxListView = View.make(
   ),
 )
 
-type ListboxProps = {
-  readonly label: string
-  readonly listId: string
-  readonly name: string
-  readonly value: Reactive.Reactive<string>
-  readonly shown: Reactive.Reactive<string>
-  readonly trigger: Handle.Handle
-  readonly open: Reactive.Reactive<boolean>
-  readonly onToggle: Action
-  readonly onKey: Handler<KeyboardEvent>
-  readonly list: Element
-}
-
-export const ListboxView = (props: ListboxProps) => (
-  <span class="spar-anchor">
-    <button
-      ref={props.trigger}
-      type="button"
-      role="combobox"
-      class="spar-button spar-quiet spar-listbox-button"
-      aria-label={props.label}
-      aria-haspopup="listbox"
-      aria-controls={props.listId}
-      aria-expanded={props.open}
-      onClick={props.onToggle}
-      onKeydown={props.onKey}
-    >
-      {props.shown}
-    </button>
-    <input type="hidden" name={props.name} value={props.value} />
-    {props.list}
-  </span>
+export const ListboxView = View.make(
+  "ListboxView",
+  {
+    label: Schema.String,
+    listId: Schema.String,
+    name: Schema.String,
+    value: Props.Reactive(Schema.String),
+    shown: Props.Reactive(Schema.String),
+    trigger: Props.Handle,
+    open: Props.Reactive(Schema.Boolean),
+    onToggle: Props.Action,
+    onKey: Props.Handler("keydown"),
+    list: Props.Element,
+  },
+  (props) => (
+    <span class="spar-anchor">
+      <button
+        ref={props.trigger}
+        type="button"
+        role="combobox"
+        class="spar-button spar-quiet spar-listbox-button"
+        aria-label={props.label}
+        aria-haspopup="listbox"
+        aria-controls={props.listId}
+        aria-expanded={props.open}
+        onClick={props.onToggle}
+        onKeydown={props.onKey}
+      >
+        {props.shown}
+      </button>
+      <input type="hidden" name={props.name} value={props.value} />
+      {props.list}
+    </span>
+  ),
 )
