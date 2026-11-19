@@ -132,7 +132,7 @@ const Loaded = View.taking(
   }),
 )(LoadedView)
 
-const Loader = pipe(Loaded, View.recover("LoadFailed", FailedView), View.pending(LoadingView))
+const Loader = pipe(Loaded, View.recover(LoadFailed, FailedView), View.pending(LoadingView))
 
 const LoaderPage = pipe(
   Loader,

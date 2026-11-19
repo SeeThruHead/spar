@@ -136,6 +136,30 @@ Overlay, Devtools, App, and `spar/testing`. Timers are Effect's schedules and we
 
 Rules out: two styles of the same app in one codebase.
 
+## 13. Everything declared has a Schema
+
+Nothing that is data can be declared with a TypeScript type alone. Each of these takes a Schema, and
+the plain form does not compile or does not build:
+
+- a view's props (`View.make(name, fields, draw)`; a function that just returns JSX is rejected by
+  the build), and a component's outer props (`View.taking(fields, props)`);
+- UI state (`UiState.make(name, schema, initial)`);
+- a store's state, each command's payload and each selector's output;
+- a route's params, whenever its path has any, and the Schema must name every one of them;
+- an error a component recovers from (`View.recover(ErrorSchema, ErrorView)`).
+
+What is not data has a Schema of its own kind, checked by what it is: reactive values and UI state
+carry the Schema of their value, and actions, handlers, callbacks, elements, handles, links, form
+fields and placements each have one. Reactive values themselves are plumbing between these points
+and take no Schema of their own: wherever one is shown, kept or passed it crosses one of the
+declarations above. DOM events are not data either; a handler prop names the event it takes.
+
+The Schemas are what the devtools read: a component's props and UI state can be shown as plain
+values, restored, and sent to an agent, without any of it being written twice.
+
+Rules out: props, state and params that exist only as types, which nothing at run time can read,
+check, show or restore.
+
 ## Where this differs from the first brief
 
 - `recover` takes one tag at a time. Looking up a handler by tag in a record cannot be typed without

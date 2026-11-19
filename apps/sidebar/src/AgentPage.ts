@@ -61,6 +61,6 @@ export const AgentPage = pipe(
       }
     }),
   )(AgentPageView),
-  View.recover("AgentNotFound", AgentMissingView),
+  View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
 )

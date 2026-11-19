@@ -1,4 +1,4 @@
-import { Effect, flow } from "effect"
+import { Effect, Schema, flow } from "effect"
 import { View } from "spar"
 import { MailApi } from "../src/mail/MailApi.ts"
 import { ThreadSkeletonView } from "../src/mail/ThreadView.tsx"
@@ -11,6 +11,6 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
 })
 
 export const Waiting = flow(
-  View.connect(threadProps),
+  View.taking({ id: Schema.String }, threadProps),
   View.pending(ThreadSkeletonView),
 )(ThreadSkeletonView)

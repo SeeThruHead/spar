@@ -5,23 +5,23 @@ repo where the API is used and type-checked.
 
 ## View
 
-| Function                           | What it does                                                                                                               |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `View.make(name, fields, draw)`    | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                      |
-| `View.connect(props)(View)`        | Makes a component: `props` is `() => Effect<Props, E, R>`, run once on mount.                                              |
-| `View.taking(fields, props)(View)` | The same for a component its parent gives props to: `fields` is their Schema, `props` is `(outer) => Effect<Props, E, R>`. |
-| `View.child(component, props)`     | Mounts a child from a parent's Effect and gives back its element.                                                          |
-| `View.recover(tag, ErrorView)`     | Handles one tagged error with a view and removes it from the type.                                                         |
-| `View.pending(PlaceholderView)`    | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                     |
-| `View.crash(FallbackView)`         | Shows a fallback if the component's Effect dies, and reports it.                                                           |
-| `View.mapProps(f)`                 | Changes the props a component takes.                                                                                       |
-| `View.branch(test, Other)`         | Mounts `Other` instead when `test(props)` holds.                                                                           |
-| `View.portal`                      | Mounts the component in a layer above the app.                                                                             |
+| Function                               | What it does                                                                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                      |
+| `View.connect(props)(View)`            | Makes a component: `props` is `() => Effect<Props, E, R>`, run once on mount.                                              |
+| `View.taking(fields, props)(View)`     | The same for a component its parent gives props to: `fields` is their Schema, `props` is `(outer) => Effect<Props, E, R>`. |
+| `View.child(component, props)`         | Mounts a child from a parent's Effect and gives back its element.                                                          |
+| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                         |
+| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                     |
+| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                           |
+| `View.mapProps(f)`                     | Changes the props a component takes.                                                                                       |
+| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                           |
+| `View.portal`                          | Mounts the component in a layer above the app.                                                                             |
 
 ```ts
 export const AgentPage = pipe(
   View.taking({ id: Schema.String }, agentProps)(AgentPageView),
-  View.recover("AgentNotFound", AgentMissingView),
+  View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
 )
 ```

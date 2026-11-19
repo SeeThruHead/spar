@@ -1,6 +1,6 @@
 import { Effect, flow, pipe, Schema } from "effect"
 import { Events, Outbox, Reactive, UiState, View } from "spar"
-import { MailApi } from "./MailApi.ts"
+import { MailApi, ThreadLoadFailed } from "./MailApi.ts"
 import { MailStore } from "./MailStore.ts"
 import type { Reply } from "./MailStore.ts"
 import {
@@ -62,7 +62,7 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
 
 export const Thread = flow(
   View.taking({ id: Schema.String }, threadProps),
-  View.recover("ThreadLoadFailed", ThreadErrorView),
+  View.recover(ThreadLoadFailed, ThreadErrorView),
   View.pending(ThreadSkeletonView),
 )(ThreadView)
 

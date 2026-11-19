@@ -1,5 +1,4 @@
-import { Context, Effect, Predicate, Scope, SubscriptionRef } from "effect"
-import type { Schema } from "effect"
+import { Context, Effect, Predicate, Schema, Scope, SubscriptionRef } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -145,15 +144,15 @@ export const crash =
     )
 
 export const recover =
-  <const Tag extends string, Err extends { readonly _tag: Tag }, R2 = never>(
-    tag: Tag,
+  <Err, R2 = never>(
+    failure: Schema.Codec<Err, unknown>,
     handler: Mountable<{ readonly error: Err }, never, R2>,
   ) =>
   <Props, E = never, R = never, ViewProps = never>(self: Mountable<Props, E | Err, R, ViewProps>) =>
     component(viewOf(self), (props: Props) =>
       child(self, props).pipe(
         Effect.catchIf(
-          (error: E | Err): error is Err => Predicate.isTagged(error, tag),
+          (error: E | Err): error is Err => Schema.is(failure)(error),
           (error) => child(handler, { error }),
         ),
       ),

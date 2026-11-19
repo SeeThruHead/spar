@@ -66,9 +66,9 @@ const expectations: ReadonlyArray<Expectation> = [
   },
   {
     file: "recover-wrong-tag.ts",
-    rule: "Recovering a tag the handler's error does not have",
+    rule: "Recovering an error by a tag name instead of its Schema",
     by: "types",
-    expect: '"ThreadLoadFaild"',
+    expect: "Argument of type 'string' is not assignable to parameter of type 'Codec<",
   },
   {
     file: "connected-component-in-jsx.tsx",
