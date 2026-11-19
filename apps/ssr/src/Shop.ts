@@ -1,5 +1,4 @@
-import { Context, Effect, Layer, pipe, Schema } from "effect"
-import { SecureRandom } from "effect/crypto"
+import { Context, Effect, pipe, Schema } from "effect"
 import { Reactive, UiState, View } from "spar"
 import { ShopStore } from "./ShopStore.ts"
 import type { Item } from "./ShopStore.ts"
@@ -8,11 +7,7 @@ import { CountingView, ItemView, ShopView, StockView } from "./ShopView.tsx"
 export class Stockroom extends Context.Service<
   Stockroom,
   { readonly count: Effect.Effect<number> }
->()("ssr/Stockroom") {
-  static readonly layer = Layer.succeed(Stockroom, {
-    count: Effect.as(Effect.sleep("40 millis"), 12),
-  })
-}
+>()("ssr/Stockroom") {}
 
 const Stock = pipe(
   View.connect(
@@ -48,7 +43,3 @@ export const Shop = View.connect(
     }
   }),
 )(ShopView)
-
-export const layer = Layer.merge(ShopStore.layer(), Stockroom.layer).pipe(
-  Layer.provide(SecureRandom.layerWebCrypto),
-)

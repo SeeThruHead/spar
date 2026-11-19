@@ -1,15 +1,25 @@
-import { Effect } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { App } from "spar"
-import { Shop, layer } from "./Shop.ts"
+import * as Spans from "spar/devtools/spans"
+import { layer } from "./client.ts"
+import { Shop } from "./Shop.ts"
 
 const program = Effect.gen(function* () {
   const target = yield* Effect.fromNullishOr(document.getElementById("root"))
+  const spans = yield* Layer.build(Spans.layer())
+  const buffer = Context.get(spans, Spans.SpanBuffer)
 
-  return yield* App.hydrate(Shop, {
-    target,
-    layer,
-    shown: Effect.sync(() => target.setAttribute("data-ready", "")),
-  })
+  return yield* Effect.provide(
+    App.hydrate(Shop, {
+      target,
+      layer,
+      shown: Effect.sync(() => {
+        navigator.sendBeacon("/client-spans", Spans.textOf(buffer.recent()))
+        target.setAttribute("data-ready", "")
+      }),
+    }),
+    spans,
+  )
 })
 
-Effect.runFork(program)
+Effect.runFork(Effect.scoped(program))

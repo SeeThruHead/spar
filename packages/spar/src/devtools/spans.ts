@@ -67,3 +67,9 @@ export const layer = (
   options: { readonly keep: number } = { keep: 2000 },
 ): Layer.Layer<SpanBuffer> =>
   Layer.effectContext(Effect.map(Effect.tracer, (inner) => buffering(inner, options.keep)))
+
+const Listed = Schema.fromJsonString(Schema.Array(Recorded))
+
+export const textOf = (spans: ReadonlyArray<Recorded>): string => Schema.encodeSync(Listed)(spans)
+
+export const fromText = Schema.decodeUnknownOption(Listed)

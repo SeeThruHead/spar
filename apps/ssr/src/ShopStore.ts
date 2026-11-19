@@ -9,13 +9,7 @@ const State = Schema.Struct({ items: Schema.Array(Item) })
 
 type State = typeof State.Type
 
-const initialState: State = {
-  items: [
-    { id: "apples", name: "Apples" },
-    { id: "bread", name: "Bread" },
-    { id: "cheese", name: "Cheese & crackers" },
-  ],
-}
+const initialState: State = { items: [] }
 
 export class ShopStore extends Store.Tag<ShopStore>()("ssr/ShopStore", {
   state: State,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { HttpRouter } from "effect/http"
 import * as SpanRoutes from "spar/devtools/span-routes"
 import * as Spans from "spar/devtools/spans"
@@ -35,6 +35,8 @@ describe("a backend keeps its own spans for the devtools", () => {
       expect(after[0]?.endedAt).toBeGreaterThanOrEqual(after[0]?.startedAt ?? Infinity)
       expect(Schema.is(Schema.Array(Spans.Recorded))(after)).toBe(true)
       expect(buffer.ofTrace("none")).toEqual([])
+      expect(Spans.fromText(Spans.textOf(after))).toEqual(Option.some(after))
+      expect(Spans.fromText("not spans")).toEqual(Option.none())
       expect(buffer.recent()).toEqual(after)
     }),
   )
