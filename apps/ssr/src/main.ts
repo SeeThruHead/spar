@@ -2,7 +2,7 @@ import { Context, Effect, Layer } from "effect"
 import { App, Backend } from "spar"
 import * as Spans from "spar/devtools/spans"
 import { layer } from "./client.ts"
-import { Shop } from "./Shop.ts"
+import { Site } from "./Site.ts"
 
 const program = Effect.gen(function* () {
   const target = yield* Effect.fromNullishOr(document.getElementById("root"))
@@ -10,7 +10,7 @@ const program = Effect.gen(function* () {
   const buffer = Context.get(spans, Spans.SpanBuffer)
 
   return yield* Effect.provide(
-    App.hydrate(Shop, {
+    App.hydrate(Site, {
       target,
       layer,
       shown: Effect.andThen(

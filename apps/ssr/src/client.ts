@@ -1,7 +1,8 @@
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { HttpClient } from "effect/http"
-import { Backend } from "spar"
+import { Backend, Router } from "spar"
+import { Catalogue, queries } from "./Catalogue.ts"
 import { Stockroom } from "./Shop.ts"
 import { ShopStore } from "./ShopStore.ts"
 
@@ -17,8 +18,12 @@ const overHttp = Layer.effect(
       Effect.orElseSucceed(() => 0),
     ),
   })),
-).pipe(Layer.provide(Backend.layer))
+)
 
-export const layer = Layer.merge(ShopStore.layer(), overHttp).pipe(
+const fromTheServer = Layer.provide(queries, Catalogue.layerRemote(`${location.origin}/rpc`))
+
+export const layer = Layer.mergeAll(ShopStore.layer(), overHttp, fromTheServer).pipe(
+  Layer.provide(Backend.layer),
+  Layer.provideMerge(Router.Router.layerBrowser),
   Layer.provide(SecureRandom.layerWebCrypto),
 )

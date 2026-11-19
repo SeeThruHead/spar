@@ -36,14 +36,13 @@ const spansOf = async (traceId: string, left: number): Promise<ReadonlyArray<Rec
   return spansOf(traceId, left - 1)
 }
 
-const sameTrace = async (page: Page): Promise<void> => {
+const sameTrace = async (page: Page, wanted: ReadonlyArray<string>): Promise<void> => {
   const state = Schema.decodeSync(Sent)(
     await page.evaluate(() => document.getElementById("spar-state")?.textContent ?? ""),
   )
   const spans = await spansOf(state.trace?.traceId ?? "none", 40)
   const names = spans.map((span) => span.name)
   const takeover = spans.find((span) => span.name === "App.hydrate")
-  const wanted = ["Server.render", "Database.items", "Database.crates", "App.hydrate"]
   const missing = wanted.filter((name) => !names.includes(name))
 
   if (missing.length > 0) throw new Error(`The trace of the render lacks: ${missing.join(", ")}`)
@@ -80,7 +79,7 @@ const walk = async (page: Page): Promise<void> => {
   )
   script.resolve()
   await page.locator("#root[data-ready]").waitFor()
-  await sameTrace(page)
+  await sameTrace(page, ["Server.render", "Database.items", "Database.crates", "App.hydrate"])
   await page.getByRole("button", { name: "Put one in the basket" }).click()
   await page.getByLabel("Basket").filter({ hasText: /^1$/ }).waitFor()
 
@@ -90,10 +89,75 @@ const walk = async (page: Page): Promise<void> => {
   await page.getByRole("button", { name: "Stock pears" }).click()
   await page.getByLabel("Kinds").filter({ hasText: /^4$/ }).waitFor()
   await page.getByRole("button", { name: "Remove Bread" }).click()
-  await page.getByText("Bread").first().waitFor({ state: "detached" })
+  await page
+    .getByRole("list", { name: "Shelf" })
+    .getByText("Bread", { exact: true })
+    .waitFor({ state: "detached" })
 
   const made = await unmarked(page)
   if (made !== 3) throw new Error(`Expected only the new row's 3 nodes to be new, found ${made}`)
+}
+
+const asked = (page: Page): Promise<number> =>
+  page.evaluate(
+    () =>
+      performance.getEntriesByType("resource").filter((entry) => entry.name.includes("/rpc"))
+        .length,
+  )
+
+const said = (page: Page, label: string, text: string): Promise<void> =>
+  page.getByLabel(label, { exact: true }).filter({ hasText: text }).waitFor()
+
+const routed = async (page: Page): Promise<void> => {
+  await page.goto(`${origin}/shelf/cheese`)
+  await page.locator("#root[data-ready]").waitFor()
+  await said(page, "Product", "Cheese & crackers")
+  await said(page, "Supplier", "Valley dairy")
+  await said(page, "Supplier status", "loaded")
+  await sameTrace(page, ["Server.render", "Database.product", "Database.supplier", "App.hydrate"])
+  await page.waitForTimeout(200)
+
+  const afterTakeover = await asked(page)
+  if (afterTakeover !== 0)
+    throw new Error(
+      `The browser asked the server ${afterTakeover} times for data the page came with`,
+    )
+
+  await page.evaluate(() => Reflect.set(window, "sameDocument", true))
+  const call = page.waitForRequest((request) => request.url().includes("/rpc"))
+
+  await page.getByRole("link", { name: "About the bread" }).click()
+  await said(page, "Product", "Bread")
+  await said(page, "Supplier", "The mill on the hill")
+
+  const sentWith = Schema.decodeUnknownSync(
+    Schema.fromJsonString(Schema.Struct({ traceId: Schema.String })),
+  )((await call).postData())
+  const reached = (await spansOf(sentWith.traceId, 0)).map((span) => span.name)
+  const unreached = ["Database.product", "Database.supplier"].filter(
+    (name) => !reached.includes(name),
+  )
+  if (unreached.length > 0)
+    throw new Error(
+      `The navigation in the browser is not one trace with the server: ${unreached.join(", ")} missing from ${reached.join(", ")}`,
+    )
+
+  const afterBread = await asked(page)
+  if (afterBread !== 2)
+    throw new Error(`Going to another product asked the server ${afterBread} times, not 2`)
+
+  await page.getByRole("link", { name: "Back to the shop" }).click()
+  await page.getByRole("heading", { name: "Corner shop" }).waitFor()
+  await said(page, "Stock", "12 crates in the stockroom")
+  await said(page, "Kinds", "3")
+  await page.goBack()
+  await said(page, "Supplier", "The mill on the hill")
+
+  const afterBack = await asked(page)
+  if (afterBack !== 2) throw new Error("Going back asked the server again for data it had")
+
+  const kept = await page.evaluate(() => Reflect.get(window, "sameDocument") === true)
+  if (!kept) throw new Error("Following a link loaded a new document")
 }
 
 const run = async (): Promise<void> => {
@@ -103,13 +167,22 @@ const run = async (): Promise<void> => {
     page.on("pageerror", reject)
   })
 
-  await Promise.race([walk(page), broke]).finally(() => browser.close())
+  await Promise.race([walk(page).then(() => routed(page)), broke]).finally(() => browser.close())
 }
 
 expectSent("<h1>Corner shop</h1>")
 expectSent("Cheese &amp; crackers")
 expectSent("12 crates in the stockroom")
 expectSent('"ssr/ShopStore":{"items":[{"id":"apples","name":"Apples"}')
+
+const product = await (await fetch(`${origin}/shelf/cheese`)).text()
+
+const missing = ["Cheese &amp; crackers", "Valley dairy", '"ssr/Product"', '"ssr/Supplier"'].filter(
+  (text) => !product.includes(text),
+)
+
+if (missing.length > 0)
+  throw new Error(`The server's product page does not hold: ${missing.join(", ")}`)
 
 const opening = await firstPart()
 
@@ -118,5 +191,5 @@ if (!opening.includes("<title>Corner shop</title>") || opening.includes("Cheese"
 
 await run().finally(() => server.stop(true))
 console.log(
-  `Server rendering passed in ${engine()}: the document opens before the page is drawn, the page arrives complete with its state, its nodes are kept, the browser starts from the server stores, and the takeover is in the trace of the render`,
+  `Server rendering passed in ${engine()}: the document opens before the page is drawn, the page arrives complete with its state, its nodes are kept, the browser starts from the server stores, the takeover is in the trace of the render, and a routed page arrives with what its queries loaded, asks for none of it again, and goes on to other pages without a new document, each navigation one trace with the server`,
 )

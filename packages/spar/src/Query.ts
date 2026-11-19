@@ -11,6 +11,7 @@ import {
   Tracer,
 } from "effect"
 import { sourceOf, sourced } from "./internal/inspect.ts"
+import { OnServer } from "./internal/server.ts"
 import type { Action } from "./internal/journal.ts"
 import { isReactive, map, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -54,6 +55,13 @@ const isFresh = <A, E>(entry: Entry<A, E>, now: number, staleAfter: number): boo
 
   return now - entry.loadedAt <= staleAfter
 }
+
+const stands = <A, E>(
+  entry: Entry<A, E>,
+  now: number,
+  staleAfter: number,
+  onServer: boolean,
+): boolean => onServer || isFresh(entry, now, staleAfter)
 
 const answersAnother = <A, E>(
   state: State<A, E>,
@@ -237,6 +245,7 @@ export const Tag =
     ) {
       const store = yield* Effect.service(base)
       const now = yield* Clock.currentTimeMillis
+      const onServer = yield* OnServer
       const held = yield* store.state.get
       const span = yield* Effect.option(Effect.currentSpan)
       const from = Option.match(span, {
@@ -248,7 +257,9 @@ export const Tag =
         Option.toArray(asked),
         (wanted) => {
           const known = held.entries[wanted.key]
-          if (known !== undefined && isFresh(known, now, staleAfter)) return served(wanted, known)
+          if (known !== undefined && stands(known, now, staleAfter, onServer)) {
+            return served(wanted, known)
+          }
 
           return Effect.annotateSpans(store.commands.requested({ ...wanted, after, ...from }), {
             "spar.kind": "data",

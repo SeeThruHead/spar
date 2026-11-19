@@ -2,9 +2,11 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Context, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Query, Reactive, Server, Store, UiState, View } from "spar"
+import { App, Query, Reactive, Router, Server, Store, UiState, View } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { RowsView } from "./graphics.tsx"
+import { NotFoundView } from "./routes.tsx"
 import { ShelfView } from "./shelf.tsx"
 import { OrdersView } from "./units.tsx"
 
@@ -107,6 +109,17 @@ const Priced = View.connect(
   }),
 )(OrdersView)
 
+const Routed = View.connect(
+  Effect.fnUntraced(function* () {
+    return {
+      rows: yield* Router.outlet({
+        routes: [Router.on(Router.route("/orders"), Priced)],
+        otherwise: NotFoundView,
+      }),
+    }
+  }),
+)(RowsView)
+
 const queries = Layer.merge(Catalog.live, Price.live).pipe(
   Layer.provideMerge(Asked.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
@@ -121,6 +134,18 @@ describe("a page whose data comes from queries, drawn on the server", () => {
       expect(made.html).toContain('<output aria-label="Orders count">3</output>')
       expect(Object.keys(made.state.stores)).toEqual(["test/Catalog", "test/Price"])
       expect(JSON.stringify(made.state.stores)).toContain('"value":["tea","ink","pen"]')
+    }),
+  )
+
+  it.live("it waits too for queries that only start once a routed page is drawn", () =>
+    Effect.gen(function* () {
+      const made = yield* Server.render(Routed, {
+        layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+      })
+
+      expect(made.html).toContain('<output aria-label="Orders status">loaded</output>')
+      expect(made.html).toContain('<output aria-label="Orders count">3</output>')
+      expect(JSON.stringify(made.state.stores)).not.toContain('"status":"loading"')
     }),
   )
 

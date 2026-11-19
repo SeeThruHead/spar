@@ -1,6 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import type { Cell as Held } from "./internal/cell.ts"
-import type { Layer } from "effect"
+import type { Layer, Scope } from "effect"
+import type { Element } from "./internal/element.ts"
 import * as Cell from "./internal/cell.ts"
 import { Dehydrated, Text, stateId } from "./internal/dehydrated.ts"
 import { Frame, noPage } from "./internal/frame.ts"
@@ -39,12 +40,24 @@ const stillLoading = (stores: Held<ReadonlyArray<Inspected>>): Effect.Effect<boo
     (states) => states.some(isLoading),
   )
 
-const settled = (stores: Held<ReadonlyArray<Inspected>>, quiet: number): Effect.Effect<void> =>
+const settled = (
+  stores: Held<ReadonlyArray<Inspected>>,
+  quiet: number,
+  waited: boolean,
+): Effect.Effect<boolean> =>
   quiet === 2
-    ? Effect.void
+    ? Effect.succeed(waited)
     : Effect.flatMap(Effect.andThen(Effect.sleep("1 milli"), stillLoading(stores)), (busy) =>
-        settled(stores, busy ? 0 : quiet + 1),
+        settled(stores, busy ? 0 : quiet + 1, waited || busy),
       )
+
+const drawn = (
+  element: Element,
+  stores: Held<ReadonlyArray<Inspected>>,
+): Effect.Effect<string, never, Scope.Scope> =>
+  Effect.flatMap(Effect.zip(toHtml(element), settled(stores, 0, false)), ([html, waited]) =>
+    waited ? drawn(element, stores) : Effect.succeed(html),
+  )
 
 export const render = <R, LayerError = never>(
   component: Component<NoProps, never, R>,
@@ -56,9 +69,9 @@ export const render = <R, LayerError = never>(
   return Effect.gen(function* () {
     const element = yield* component.mount({})
 
-    yield* settled(stores, 0)
+    yield* settled(stores, 0, false)
 
-    const html = yield* toHtml(element)
+    const html = yield* drawn(element, stores)
     const span = yield* Effect.orDie(Effect.currentSpan)
     const states = yield* Effect.forEach(stores.read(), encodedOf)
 
