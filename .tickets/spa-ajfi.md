@@ -1,6 +1,6 @@
 ---
 id: spa-ajfi
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-11-19T13:35:01Z

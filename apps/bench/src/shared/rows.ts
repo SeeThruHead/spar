@@ -78,6 +78,11 @@ export const makeRows = (count: number, firstId: number): ReadonlyArray<Row> =>
 export const exclaimEveryTenth = (rows: ReadonlyArray<Row>): ReadonlyArray<Row> =>
   rows.map((row, index) => (index % 10 === 0 ? { ...row, label: `${row.label} !!!` } : row))
 
+export const exclaimMiddle = (rows: ReadonlyArray<Row>): ReadonlyArray<Row> =>
+  rows.map((row, index) =>
+    index === Math.floor(rows.length / 2) ? { ...row, label: `${row.label} !!!` } : row,
+  )
+
 export const swapSecondAndSecondLast = <A>(rows: ReadonlyArray<A>): ReadonlyArray<A> => {
   const second = rows.at(1)
   const secondLast = rows.at(-2)

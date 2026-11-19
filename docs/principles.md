@@ -182,6 +182,27 @@ at any moment, and can open any moment as one trace across the page and the back
 Rules out: debugging by guessing what state a component is in, and devtools that only work with a
 browser extension or only for people.
 
+## 16. State is declared where it is used and registered in one place
+
+UI state and stores are made only through Spar: `UiState.make` in a component's Effect, and a
+`Store.Tag` placed app-wide with `.layer` or beside a view with `.with`. Wherever one is declared,
+making it registers it in the one registry the devtools read, and every change to it is an entry
+in the one log. So a component can own app state, be reused, and compose with others without the
+app root knowing about it, and it is still model, view, update underneath. The build refuses
+state held any other way.
+
+## 17. One way to the backend
+
+Every backend call goes through `Backend`. Effect RPC is the way to talk to a backend you own;
+HttpApi and JSON clients plug into the same client; everything that would go around it is refused
+by the build. A call the framework cannot see is a call missing from the trace.
+
+## 18. The past can be walked and branched
+
+Any moment in the log can be shown again, stepped through with the trace each step caused, and
+forked: the program carries on from there while the original is kept. People do it in the tools
+and agents do it over MCP or from a shell.
+
 ## Where this differs from the first brief
 
 - `recover` takes one tag at a time. Looking up a handler by tag in a record cannot be typed without

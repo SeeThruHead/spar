@@ -1,6 +1,7 @@
 # Spar
 
-A UI framework for Effect. A component is a pure JSX view plus one Effect that makes its props. The
+A UI framework for people who are all in on Effect, and for nobody else. It is opinionated on
+purpose: where a thing could be done two ways, one is refused. A component is a pure JSX view plus one Effect that makes its props. The
 Effect runs once when the component mounts; reactive values update single DOM nodes; errors and
 required services are part of a component's type and are settled where the app is mounted.
 
@@ -8,19 +9,25 @@ Everything declared has a Schema: props, UI state, store state, commands, select
 and errors. A click and the backend work it causes are one trace. The same components run on a
 server and in the browser, by the layers they are given. In development a Vite plugin adds the
 devtools: an inspector for the component under the pointer, one log of everything that happened
-with rewind, and a trace waterfall across the page and the backend; an agent gets the same over
-MCP.
+with rewind, step and fork, and a trace waterfall across the page and the backend; an agent gets
+the same over MCP or from a shell.
+
+State is held only in a store or in UI state, wherever it is declared, and every backend call goes
+through one client, so there is no change and no call the framework does not see.
 
 This repo is private and nothing here is published.
 
 ## Read
 
+- [LLMS.md](LLMS.md): everything in one file, for agents (`bun run llms` rebuilds it)
 - [Getting started](docs/getting-started.md)
 - [Principles](docs/principles.md): what each rule is and what it rules out
 - [API](docs/api.md): every module with an example
 - [Recipes](docs/recipes.md): timers, sockets, offline, dialogs, testing, tracing
 - [Coming from Foldkit](docs/from-foldkit.md) and [coming from React](docs/from-react.md)
-- [Benchmarks](docs/benchmarks.md) against Solid and Foldkit
+- [Benchmarks](docs/benchmarks.md) against Solid, React and Foldkit, with graphs in
+  `docs/benchmarks.html`
+- [The devtools beside Foldkit's](docs/devtools-compared.md)
 - [What is not done](docs/gaps.md)
 
 `bun run --cwd apps/docs dev` serves the same pages as a site on http://127.0.0.1:4183.
@@ -30,12 +37,14 @@ This repo is private and nothing here is published.
 | Command                              | What it does                                                                       |
 | ------------------------------------ | ---------------------------------------------------------------------------------- |
 | `bun install`                        | Installs everything and the git hooks.                                             |
+| `bun run showcase`                   | The showcase with its backend and the devtools, on http://127.0.0.1:4181.          |
+| `bun run bench`                      | Reruns the benchmarks and rewrites `docs/benchmarks.md` and the graphs.            |
+| `bun run llms`                       | Rebuilds `LLMS.md` from the docs and the showcase's source.                        |
 | `bun run check`                      | Typecheck, lint, format check, unit tests at 100% coverage, forbidden-code proofs. |
 | `bun run moon run demo:browser`      | Drives the demo in headless Chromium.                                              |
 | `bun run moon run stories:play`      | Plays every component story at three sizes with an accessibility audit.            |
 | `bun run moon run sidebar:features`  | Runs the proof app's Gherkin scenarios in Chromium.                                |
 | `bun run moon run bench:leaks`       | Checks that mounting and unmounting leaves nothing behind.                         |
-| `bun run moon run bench:bench`       | Reruns the benchmarks (several minutes) and rewrites `docs/benchmarks.md`.         |
 | `bun run --cwd apps/sidebar dev`     | The proof app on http://127.0.0.1:4181, with the devtools.                         |
 | `bun run --cwd apps/sidebar backend` | The proof app served by its real backend on http://127.0.0.1:4182.                 |
 | `bun run moon run sidebar:devtools`  | Drives the devtools through the Vite dev server with the backend behind it.        |
@@ -50,5 +59,5 @@ This repo is private and nothing here is published.
 - `packages/lint`: this repo's own lint rules and the commit-message check
 - `apps/demo`: the first demo and `forbidden/`, code that must not compile
 - `apps/stories`: one page per base component, with play tests
-- `apps/sidebar`: the proof app, a port of a real Foldkit screen
-- `apps/bench`: the same table app in Spar, Solid and Foldkit, plus the leak test
+- `apps/sidebar`: the showcase, a port of a real Foldkit screen with an Effect RPC backend
+- `apps/bench`: the same table app in Spar, Solid, React and Foldkit, plus the leak test

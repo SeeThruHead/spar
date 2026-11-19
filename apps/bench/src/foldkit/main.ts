@@ -4,7 +4,12 @@ import type { Update } from "foldkit"
 import { createKeyedLazy } from "foldkit/html"
 import type { Document, Html, HtmlBuilder } from "foldkit/html"
 import { defineMessageUnion } from "foldkit/message"
-import { exclaimEveryTenth, makeRows, swapSecondAndSecondLast } from "../shared/rows.ts"
+import {
+  exclaimEveryTenth,
+  exclaimMiddle,
+  makeRows,
+  swapSecondAndSecondLast,
+} from "../shared/rows.ts"
 
 const Row = Schema.Struct({ id: Schema.Int, label: Schema.String })
 
@@ -22,6 +27,7 @@ export const Message = defineMessageUnion({
   ClickedCreate: { count: Schema.Int },
   ClickedAppend: { count: Schema.Int },
   ClickedUpdate: {},
+  ClickedUpdateOne: {},
   ClickedClear: {},
   ClickedSwap: {},
   ClickedRow: { id: Schema.Int },
@@ -47,6 +53,7 @@ export const update = (model: Model, message: Message) =>
       },
     }),
     ClickedUpdate: () => ({ model: { ...model, rows: exclaimEveryTenth(model.rows) } }),
+    ClickedUpdateOne: () => ({ model: { ...model, rows: exclaimMiddle(model.rows) } }),
     ClickedClear: () => ({ model: { ...model, rows: [], selected: 0 } }),
     ClickedSwap: () => ({ model: { ...model, rows: swapSecondAndSecondLast(model.rows) } }),
     ClickedRow: ({ id }) => ({ model: { ...model, selected: id } }),
@@ -95,6 +102,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
           button(h, "runlots", "Create 10,000 rows", Message.ClickedCreate({ count: 10_000 })),
           button(h, "add", "Append 1,000 rows", Message.ClickedAppend({ count: 1000 })),
           button(h, "update", "Update every 10th row", Message.ClickedUpdate()),
+          button(h, "updateone", "Update one row", Message.ClickedUpdateOne()),
           button(h, "clear", "Clear", Message.ClickedClear()),
           button(h, "swaprows", "Swap rows", Message.ClickedSwap()),
         ],

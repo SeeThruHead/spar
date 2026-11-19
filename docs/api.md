@@ -101,7 +101,8 @@ on screen until they mount. Give an app its own tree with
 | `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                    |
 | `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                  |
 | `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                       |
-| `Self.layer(reactions?)`                                              | The store in memory.                                                                                                   |
+| `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                           |
+| `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.         |
 | `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes. |
 | `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                        |
 | `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                         |
@@ -111,6 +112,28 @@ A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`,
 `travelTo(seq | null)`.
 
 (`apps/sidebar/src/BoardStore.ts`)
+
+### A store beside its view
+
+```ts
+export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
+
+const NotesPanel = View.taking({ id: Schema.String, title: Schema.String }, ...)(NotesView)
+
+export const Notes = NotesStore.with(NotesPanel)
+```
+
+`Notes` is one unit: mount it anywhere with `View.child(Notes, props)` and nothing is wired at the
+app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
+store's key and the place it is mounted (`sidebar/Notes @ ShellView / NotesView`), a second one
+beside it is numbered (`... NotesView#2`), and it registers with the devtools like every other
+store, so its actions are in the one log and it rewinds and forks with the rest. Underneath it is
+the same model, view, update as an app-wide store: one definition, pure reducers, every change an
+action. (`apps/sidebar/src/Notes.ts`)
+
+The build refuses any other way to hold state in app code (rule `state-only-through-spar`):
+`Ref.make`, `SubscriptionRef.make` and their relatives, `let` and `var`. Code under a `server/`
+folder is not page state and is left alone.
 
 ### Several tabs
 
@@ -278,6 +301,34 @@ data. `spar/devtools/span-routes` has `route` (`GET /spans/:traceId`) and `recen
 backend; `bun run backend` serves the app with it, and `bun run traced` follows one trace through
 both in a real browser.)
 
+## Backend
+
+Every call to a backend goes through one client, so each is a span in the trace and an entry in
+the log.
+
+| Function                    | What it does                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Backend.layer`             | The `HttpClient` of the app. Each request is noted in the log as a `call` with the trace it belongs to.       |
+| `Backend.layerFrom(client)` | The same over another `HttpClient` layer (a test double, a client with a base address).                       |
+| `Backend.rpc(group, url)`   | A client for an Effect RPC group over that `HttpClient`. This is the blessed way to talk to your own backend. |
+| `Backend.layerTelemetry`    | A client for telemetry exporters. It is deliberately not logged, or each export would log itself.             |
+| `Backend.beacon(url, body)` | `navigator.sendBeacon`, for what must still be sent as the page goes away.                                    |
+
+How the other ways fit:
+
+- **Effect RPC** is the one to use for a backend you own: the contract, its errors and the trace
+  context are shared, and an error the component does not handle is a compile error.
+- **Effect HttpApi** clients and **hand-written JSON calls** take `HttpClient.HttpClient` from
+  context. Provide `Backend.layer` and they are logged and traced like RPC.
+- **Generated OpenAPI clients** fit when they are built on an Effect `HttpClient`. Ones that call
+  `fetch` themselves are refused.
+- **tRPC, axios, ky, got, superagent, graphql-request, openapi-fetch, Apollo, socket.io-client**,
+  and plain `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon` and
+  `FetchHttpClient.layer` are refused by the build (rule `backend-only-through-spar`). Port a tRPC
+  router to an RPC group.
+
+(`apps/sidebar/src/server/Server.ts`, `apps/sidebar/src/main.ts`)
+
 ## Timeline
 
 `Timeline.note(kind, name, detail)` reports something that happened to whoever is recording; with
@@ -308,8 +359,12 @@ What the tools show, docked at the corner of the page:
   are now, and the store selector each comes from), its UI state, the services its Effect uses,
   the failures it recovers from, and a list of what changed in it after each action.
 - **Everything that happened.** One log of store commands, UI state changes, route changes and
-  data arriving, in order, each with its trace id. Jump to any moment, step earlier and later, or
-  go back to now; the whole app, stores and UI state together, shows that moment.
+  data arriving and backend calls, in order, each with its trace id. Jump to any moment, step
+  earlier and later, or go back to now; the whole app, stores and UI state together, shows that
+  moment, and stepping opens the trace of the moment stepped to.
+- **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
+  branch, and keeps the original. The Branches list switches between them. A fork lives in the
+  page: a durable store's saved log is not rewritten, so a reload returns to what was saved.
 - **Trace.** Any moment opens as a waterfall of its spans: the page's and the backends' on one
   time line, nested by parent, with how long each took and the failed ones marked.
 - **Stores.** Each store's actions and state, with Back, Forward, Live and Go to; export a log as
@@ -329,14 +384,22 @@ it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4
 connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and can ask what the app is doing right
 now:
 
-| Tool                                  | What it gives                                                                                |
-| ------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `list_stores`, `get_state`, `get_log` | The stores, a store's state, its recorded actions                                            |
-| `travel_to`, `run_action`, `load_log` | Step one store through its log, carry out an action, replay another log                      |
-| `get_ui_state`, `set_ui_state`        | Every piece of UI state by component path; set one (refused when it does not fit its Schema) |
-| `get_timeline`, `rewind`              | The one log with trace ids; show the whole app as it was after a moment                      |
-| `list_components`, `get_component`    | The mounted components; one component's props, UI state, services and recovered failures     |
-| `get_trace`                           | The spans the page recorded for a trace                                                      |
+| Tool                                     | What it gives                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                            |
+| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                      |
+| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema) |
+| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                      |
+| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures     |
+| `get_trace`                              | The spans the page recorded for a trace                                                      |
+| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                    |
+| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one    |
+| `count_moments`                          | How many times each thing happened, most frequent first                                      |
+| `diff_states`                            | What changed in a store between two of its actions, by path                                  |
+
+The same tools answer from a shell: `bun run --filter @spar/devtools-mcp cli tools` lists them and
+`bun run --filter @spar/devtools-mcp cli call <tool> '<json>'` asks one (add `--url` when the
+server is not on 127.0.0.1:4188).
 
 Each failure comes back as a plain sentence. With several pages linked, the tools speak for the
 one that reported last.

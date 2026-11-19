@@ -1,6 +1,11 @@
 import { Schema } from "effect"
 import { Store } from "spar"
-import { exclaimEveryTenth, makeRows, swapSecondAndSecondLast } from "../shared/rows.ts"
+import {
+  exclaimEveryTenth,
+  exclaimMiddle,
+  makeRows,
+  swapSecondAndSecondLast,
+} from "../shared/rows.ts"
 
 export const Row = Schema.Struct({ id: Schema.Int, label: Schema.String })
 
@@ -33,6 +38,10 @@ export class TableStore extends Store.Tag<TableStore>()("bench/TableStore", {
     updated: Store.action(Schema.Void, (state: State) => ({
       ...state,
       rows: exclaimEveryTenth(state.rows),
+    })),
+    oneUpdated: Store.action(Schema.Void, (state: State) => ({
+      ...state,
+      rows: exclaimMiddle(state.rows),
     })),
     swapped: Store.action(Schema.Void, (state: State) => ({
       ...state,

@@ -14,8 +14,8 @@ Both are built on Effect and both keep app state changes explicit and replayable
 | Routes from parser combinators                       | `Router.route(path, Schema)` values and `Router.outlet`                                  |
 | `foldkit/story` and `foldkit/scene`                  | Stores tested as services; components tested with `spar/testing` by role                 |
 | Crash view                                           | `View.crash` per part, plus `App.CrashReporter`                                          |
-| DevTools overlay and MCP server                      | `Devtools.Panel` (no MCP server)                                                         |
-| Server rendering and hydration                       | Not in Spar                                                                              |
+| DevTools overlay and MCP server                      | Devtools from the Vite plugin, an MCP server and a CLI (`docs/devtools-compared.md`)     |
+| Server rendering and hydration                       | `Server.render` and `App.hydrate`, the same components chosen by layers                  |
 
 ## Porting a screen
 
@@ -31,6 +31,7 @@ Both are built on Effect and both keep app state changes explicit and replayable
   (`src/domain.ts`) and are tested the same way.
 - `update` tests became store tests; scene tests became `spar/testing` or browser scenarios.
 
-What you give up: one place to see all state, time travel over screen state, and server rendering.
+What you give up: one Model value holding everything. The one log, time travel over stores and
+screen state together, forking and server rendering are all there.
 What you get: rows that update without re-running a view, local state without ceremony, and errors
 and services checked at the mount.

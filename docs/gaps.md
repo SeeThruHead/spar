@@ -1,6 +1,7 @@
 # What is not done
 
-Everything that was on this list has been built. What remains needs a person or a device.
+Two things need a person or a device. The rest of the list is small and is written down so nobody
+has to find it.
 
 1. **A screen reader.** axe audits every story and every step of the proof app, and the proof
    app's walkthrough compares what the browser hands to assistive technology (roles, names and
@@ -22,6 +23,22 @@ Everything that was on this list has been built. What remains needs a person or 
    - VoiceOver or TalkBack driven by touch.
 
    Unblocked by: a device, or a device farm, to run the same suites on.
+
+Built since, and smaller than they sound, but not done:
+
+- **Toasts and generated ids in `@spar/ui` keep their state in a `Ref`.** The package is outside
+  the build rule, so a toast appearing is not an entry in the log. They should move to a store.
+- **A socket made with `effect/socket` is not seen by `Backend`.** The build refuses
+  `new WebSocket` in app code, but a stream of socket messages is not logged as calls. Turn each
+  message into a store command and it is in the log from there.
+- **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
+  returns to what was saved. A store that was made beside a view stays listed in the devtools
+  after its view unmounts.
+- **For agents:** an action's payload Schema is not reported, several actions cannot be sent in
+  one call, and with several tabs open the tools speak for the one that reported last
+  (`docs/devtools-compared.md`).
+- **The showcase is `apps/sidebar`, and server rendering is shown by `apps/ssr`.** No single app
+  uses every feature.
 
 The joined trace has been looked up in Tempo: run with `OTLP_ENDPOINT` set, one form submit in the
 proof app came back from Tempo as one trace with spans from the page and from the backend under one

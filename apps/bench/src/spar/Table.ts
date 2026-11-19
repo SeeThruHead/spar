@@ -28,6 +28,7 @@ export const Table = View.connect(
       onRunLots: store.commands.created({ count: 10_000 }),
       onAdd: store.commands.appended({ count: 1000 }),
       onUpdate: store.commands.updated(),
+      onUpdateOne: store.commands.oneUpdated(),
       onClear: store.commands.cleared(),
       onSwap: store.commands.swapped(),
     }

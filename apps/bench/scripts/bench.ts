@@ -13,6 +13,7 @@ type Operation = {
   readonly before: ReadonlyArray<{ readonly click: string; readonly rows: number }>
   readonly click: string
   readonly until: Until
+  readonly stop?: "changed"
 }
 
 type Timing = {
@@ -29,12 +30,13 @@ type Result = {
   readonly slowestFrameAt10k: number
   readonly typicalFrameAt10k: number
   readonly bundleBytes: number
+  readonly startup: number
 }
 
 const root = new URL("..", import.meta.url).pathname
 const repo = new URL("../../..", import.meta.url).pathname
 
-const frameworks = ["spar", "solid", "foldkit"] as const
+const frameworks = ["spar", "solid", "react", "foldkit"] as const
 
 const thousand = [{ click: "#run", rows: 1000 }]
 
@@ -102,6 +104,21 @@ const operations: ReadonlyArray<Operation> = [
     click: "#clear",
     until: { kind: "rows", count: 0 },
   },
+  {
+    id: "one10k",
+    label: "Change one row among 10,000, to the next frame",
+    before: [{ click: "#runlots", rows: 10_000 }],
+    click: "#updateone",
+    until: { kind: "labelEnds", row: 5001, suffix: " !!!" },
+  },
+  {
+    id: "one10kScript",
+    label: "Change one row among 10,000, until the DOM changed",
+    before: [{ click: "#runlots", rows: 10_000 }],
+    click: "#updateone",
+    until: { kind: "labelEnds", row: 5001, suffix: " !!!" },
+    stop: "changed",
+  },
 ]
 
 const runs = 12
@@ -122,7 +139,7 @@ const urlOf = (framework: string): string => `http://127.0.0.1:${server.port}/${
 
 const timeIn = (page: Page, operation: Operation): Promise<number> =>
   page.evaluate(
-    ({ click, until }) =>
+    ({ click, until, stop }) =>
       new Promise<number>((resolve) => {
         const tbody = document.querySelector("#tbody")
         const rowAt = (row: number) => tbody?.querySelector(`tr:nth-child(${row})`)
@@ -141,7 +158,11 @@ const timeIn = (page: Page, operation: Operation): Promise<number> =>
         const observer = new MutationObserver(() => {
           if (!reached()) return
 
+          const changedAfter = performance.now() - start
+
           observer.disconnect()
+          if (stop === "changed") return resolve(changedAfter)
+
           requestAnimationFrame(() => setTimeout(() => resolve(performance.now() - start), 0))
         })
 
@@ -153,7 +174,7 @@ const timeIn = (page: Page, operation: Operation): Promise<number> =>
         })
         document.querySelector<HTMLElement>(click)?.click()
       }),
-    { click: operation.click, until: operation.until },
+    { click: operation.click, until: operation.until, stop: operation.stop ?? null },
   )
 
 const prepare = async (page: Page, framework: string, operation: Operation): Promise<void> => {
@@ -229,6 +250,33 @@ const framesWhileScrolling = (page: Page): Promise<ReadonlyArray<number>> =>
       }),
   )
 
+const watchForTheApp = (): void => {
+  const observer = new MutationObserver(() => {
+    if (document.querySelector("#run") === null) return
+
+    observer.disconnect()
+    Reflect.set(globalThis, "appShownAt", performance.now())
+  })
+
+  observer.observe(document, { childList: true, subtree: true })
+}
+
+const paintedAt = async (page: Page, framework: string): Promise<number> => {
+  await page.goto(urlOf(framework))
+  await page.waitForFunction(() => typeof Reflect.get(globalThis, "appShownAt") === "number")
+
+  return page.evaluate(() => Number(Reflect.get(globalThis, "appShownAt")))
+}
+
+const startupOf = (page: Page, framework: string): Promise<number> =>
+  Array.from({ length: runs })
+    .reduce<Promise<ReadonlyArray<number>>>(
+      (collected) =>
+        collected.then(async (samples) => [...samples, await paintedAt(page, framework)]),
+      Promise.resolve([]),
+    )
+    .then((samples) => summarise(samples).median)
+
 const bundleBytes = async (framework: string): Promise<number> => {
   const files = [...new Bun.Glob("assets/*.js").scanSync(`${root}dist/${framework}`)]
   const sizes = await Promise.all(
@@ -254,6 +302,9 @@ const measure = async (browser: Browser, framework: string): Promise<Result> => 
   const heapAfter1k = await heapAfter(page, framework, "#run", 1000)
   const heapAfter10k = await heapAfter(page, framework, "#runlots", 10_000)
   const frames = (await framesWhileScrolling(page)).toSorted((left, right) => left - right)
+  await page.addInitScript(watchForTheApp)
+
+  const startup = await startupOf(page, framework)
 
   await page.close()
   console.log(`measured ${framework}`)
@@ -266,6 +317,7 @@ const measure = async (browser: Browser, framework: string): Promise<Result> => 
     slowestFrameAt10k: frames.at(-1) ?? 0,
     typicalFrameAt10k: middle(frames),
     bundleBytes: await bundleBytes(framework),
+    startup,
   }
 }
 
@@ -282,10 +334,12 @@ const report = (results: ReadonlyArray<Result>, browserVersion: string): string 
   [
     "# Benchmarks",
     "",
-    `The same table app in Spar, Solid ${solidVersion} and Foldkit ${foldkitVersion}, built with Vite and`,
+    `The same table app in Spar, Solid ${solidVersion}, React ${reactVersion} and Foldkit ${foldkitVersion}, built with Vite and`,
     `driven in headless Chromium ${browserVersion} on this machine. Each number is the median of ${runs - warmups} runs`,
     `after ${warmups} warm-up runs, from the click until the next frame after the DOM reached its final state.`,
-    "Lower is better. Rerun with `bun run moon run bench:bench`.",
+    "Lower is better. Rerun with `bun run bench` at the repo root, which also writes docs/benchmarks.html with the graphs.",
+    "",
+    "Change one row among 10,000 is the suite chosen for Spar's model, where one store action should end in one text node changing. It is timed twice: to the next frame like the rest, and until the DOM changed, which leaves out the browser's own layout and paint of 10,000 rows. Spar does not win it. Until the DOM changed it is the slowest of the four. The cause has not been profiled; the store action builds a new array of 10,000 rows and the keyed list is given all of them again, where Solid sets one signal. Startup is the time from the start of navigation until the app's first button is in the page, from a local server.",
     "",
     row(
       "Operation",
@@ -318,9 +372,91 @@ const report = (results: ReadonlyArray<Result>, browserVersion: string): string 
       results.map((result) => ms(result.slowestFrameAt10k)),
     ),
     row(
+      "Startup, until the app is in the page",
+      results.map((result) => ms(result.startup)),
+    ),
+    row(
       "JavaScript shipped (gzip)",
       results.map((result) => kilobytes(result.bundleBytes)),
     ),
+    "",
+  ].join("\n")
+
+type Metric = {
+  readonly label: string
+  readonly unit: string
+  readonly values: ReadonlyArray<number>
+}
+
+const colours: Readonly<Record<string, string>> = {
+  spar: "#1d5fd6",
+  solid: "#3f6b3a",
+  react: "#8a4a00",
+  foldkit: "#6b3fa0",
+}
+
+const metricsOf = (results: ReadonlyArray<Result>): ReadonlyArray<Metric> => [
+  ...operations.map((operation) => ({
+    label: operation.label,
+    unit: "ms",
+    values: results.map((result) => result.timings[operation.id]?.median ?? 0),
+  })),
+  {
+    label: "Heap after 1,000 rows",
+    unit: "MB",
+    values: results.map((result) => result.heapAfter1k / 1_048_576),
+  },
+  {
+    label: "Heap after 10,000 rows",
+    unit: "MB",
+    values: results.map((result) => result.heapAfter10k / 1_048_576),
+  },
+  {
+    label: "Startup, until the app is in the page",
+    unit: "ms",
+    values: results.map((result) => result.startup),
+  },
+  {
+    label: "JavaScript shipped (gzip)",
+    unit: "kB",
+    values: results.map((result) => result.bundleBytes / 1024),
+  },
+]
+
+const chart = (metric: Metric, names: ReadonlyArray<string>): string => {
+  const most = Math.max(...metric.values, 0.001)
+  const bars = metric.values
+    .map((value, index) => {
+      const name = names[index] ?? ""
+      const y = 30 + index * 26
+      const width = Math.max(2, (value / most) * 380)
+
+      return `<text x="0" y="${y + 14}" font-size="14" fill="#1b2330">${name}</text><rect x="70" y="${y}" width="${width.toFixed(1)}" height="18" fill="${colours[name] ?? "#444"}"/><text x="${(76 + width).toFixed(1)}" y="${y + 14}" font-size="14" fill="#1b2330">${value.toFixed(1)} ${metric.unit}</text>`
+    })
+    .join("")
+
+  return `<figure><svg role="img" aria-label="${metric.label}: ${names.map((name, index) => `${name} ${(metric.values[index] ?? 0).toFixed(1)} ${metric.unit}`).join(", ")}" viewBox="0 0 560 ${40 + names.length * 26}" style="max-width: 560px; width: 100%"><text x="0" y="16" font-size="15" font-weight="600" fill="#1b2330">${metric.label}</text>${bars}</svg></figure>`
+}
+
+const page = (results: ReadonlyArray<Result>, browserVersion: string): string =>
+  [
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Spar benchmarks</title>',
+    "<style>body{font:16px/1.5 system-ui,sans-serif;color:#1b2330;max-width:72rem;margin:2rem auto;padding:0 1rem}figure{margin:0 0 1.25rem}.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(20rem,1fr));gap:0.5rem 2rem}</style></head><body>",
+    "<h1>Spar benchmarks</h1>",
+    `<p>The same table app in Spar, Solid ${solidVersion}, React ${reactVersion} and Foldkit ${foldkitVersion}, built with Vite and driven in headless Chromium ${browserVersion} on one desktop machine. Each time is the median of ${runs - warmups} runs after ${warmups} warm-up runs, from the click until the next frame after the page reached its final state. Lower is better in every chart.</p>`,
+    "<p>How it is measured: each run loads the app fresh, sets up the rows the operation needs, then clicks once. A MutationObserver waits for the expected end state (a row count, an id in a given row, a label ending, a selected row) and the clock stops on the next animation frame. Heap is read after a forced garbage collection. Startup is the time from the start of navigation until the app's first button is in the page, from a local server. Shipped JavaScript is every built .js file, gzipped. Rerun everything with <code>bun run bench</code> at the repo root.</p>",
+    "<p>Change one row among 10,000 is the suite chosen for Spar's model, where one store action should end in one text node changing. It is timed twice: to the next frame like the rest, and until the DOM changed, which leaves out the browser's own layout and paint of 10,000 rows. Spar does not win it. Until the DOM changed it is the slowest of the four. The cause has not been profiled; the store action builds a new array of 10,000 rows and the keyed list is given all of them again, where Solid sets one signal.</p>",
+    "<!-- charts -->",
+    `<div class="charts">${metricsOf(results)
+      .map((metric) =>
+        chart(
+          metric,
+          results.map((result) => result.framework),
+        ),
+      )
+      .join("")}</div>`,
+    "<!-- /charts -->",
+    "</body></html>",
     "",
   ].join("\n")
 
@@ -334,6 +470,7 @@ const versionOf = async (name: string): Promise<string> => {
 
 const solidVersion = await versionOf("solid-js")
 const foldkitVersion = await versionOf("foldkit")
+const reactVersion = await versionOf("react")
 
 const browser = await chromium.launch()
 const results = await frameworks
@@ -349,6 +486,7 @@ const results = await frameworks
 
 await Bun.write(`${root}artifacts/bench.json`, JSON.stringify(results, null, 2))
 await Bun.write(`${repo}docs/benchmarks.md`, report(results, browser.version()))
+await Bun.write(`${repo}docs/benchmarks.html`, page(results, browser.version()))
 console.log(report(results, browser.version()))
 
 const budgetRatio = 2

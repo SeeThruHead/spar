@@ -42,6 +42,8 @@ const App = () => {
       }),
     )
 
+  const updateOne = () => rows()[Math.floor(rows().length / 2)]?.setLabel((label) => `${label} !!!`)
+
   const clear = () =>
     batch(() => {
       setRows([])
@@ -63,6 +65,9 @@ const App = () => {
         </button>
         <button id="update" onClick={update}>
           Update every 10th row
+        </button>
+        <button id="updateone" onClick={updateOne}>
+          Update one row
         </button>
         <button id="clear" onClick={clear}>
           Clear

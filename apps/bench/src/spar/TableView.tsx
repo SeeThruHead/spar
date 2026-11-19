@@ -37,6 +37,7 @@ export const TableView = View.make(
     onRunLots: Props.Action,
     onAdd: Props.Action,
     onUpdate: Props.Action,
+    onUpdateOne: Props.Action,
     onClear: Props.Action,
     onSwap: Props.Action,
   },
@@ -55,6 +56,9 @@ export const TableView = View.make(
         </button>
         <button id="update" onClick={props.onUpdate}>
           Update every 10th row
+        </button>
+        <button id="updateone" onClick={props.onUpdateOne}>
+          Update one row
         </button>
         <button id="clear" onClick={props.onClear}>
           Clear
