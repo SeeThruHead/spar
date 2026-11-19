@@ -31,7 +31,9 @@ const ready = async (left: number): Promise<boolean> => {
 
 const accepted = async (left: number): Promise<void> => {
   const recent = await spans("/spans")
-  const done = recent.some((span) => span.name === "Agents.start" && !span.failed)
+  const done = recent.some(
+    (span) => span.name === "Agents.start" && span.endedAt !== null && !span.failed,
+  )
   if (done || left === 0) return
 
   await Bun.sleep(100)

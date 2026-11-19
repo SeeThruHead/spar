@@ -105,7 +105,7 @@ const facts = (table: string): ReadonlyArray<string> =>
 const asked = Cell.make<ReadonlyArray<string>>([])
 
 const answered = (address: string): Response => {
-  const traceId = address.slice(address.lastIndexOf("/") + 1)
+  const traceId = address.slice(address.lastIndexOf("/") + 1, address.lastIndexOf("?"))
   const first = address.includes("/backend/0/")
 
   asked.write([

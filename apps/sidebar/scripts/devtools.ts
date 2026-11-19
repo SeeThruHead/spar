@@ -22,7 +22,7 @@ const accepted = async (left: number): Promise<void> => {
     .then(
       (spans: unknown) =>
         Schema.decodeUnknownSync(Schema.Array(Recorded))(spans).some(
-          (span) => span.name === "Agents.start" && !span.failed,
+          (span) => span.name === "Agents.start" && span.endedAt !== null && !span.failed,
         ),
       () => false,
     )
@@ -104,8 +104,8 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await waterfall.locator('li[data-where="backend"]').first().waitFor({ timeout: 8000 })
   await page.getByRole("button", { name: "Refresh trace" }).click()
   await waterfall
-    .locator('li[data-where="backend"][data-failed="no"]')
-    .first()
+    .locator('li[data-where="backend"]', { hasText: "Agents.start" })
+    .nth(1)
     .waitFor({ timeout: 8000 })
   await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
 

@@ -627,17 +627,17 @@ const backendCount = (): number =>
     () => 0,
   )
 
-const fromBackend = (index: number, traceId: string) =>
-  HttpClient.get(`${location.origin}${backendPath(index)}/spans/${traceId}`).pipe(
+const fromBackend = (index: number, traceId: string, ask: number) =>
+  HttpClient.get(`${location.origin}${backendPath(index)}/spans/${traceId}?ask=${ask}`).pipe(
     Effect.flatMap((answer) => answer.json),
     Effect.map((found) => Option.getOrElse(decodeSpans(found), () => [])),
     Effect.orElseSucceed((): ReadonlyArray<Spans.Recorded> => []),
   )
 
-const fromBackends = (traceId: string) =>
+const fromBackends = (traceId: string, ask: number) =>
   Effect.map(
     Effect.forEach(Array.range(0, backendCount() - 1).slice(0, backendCount()), (index) =>
-      fromBackend(index, traceId),
+      fromBackend(index, traceId, ask),
     ),
     (found) => found.flat(),
   ).pipe(Effect.provide(FetchHttpClient.layer))
@@ -650,7 +650,13 @@ export const TracePanel = View.taking(
     const registry = yield* Registry
     const page = yield* Effect.serviceOption(Spans.SpanBuffer)
     const backend = Cell.make<ReadonlyArray<Spans.Recorded>>([])
-    const asked = (id: string) => Effect.map(fromBackends(id), (found) => backend.write(found))
+    const asks = Cell.make(0)
+    const asked = (id: string) =>
+      Effect.suspend(() => {
+        asks.write(asks.read() + 1)
+
+        return Effect.map(fromBackends(id, asks.read()), (found) => backend.write(found))
+      })
     const start = yield* starter()
     const watched = yield* Reactive.zip(traceId, registry.moments)
     const shown = yield* Reactive.zip(watched, fromCell(backend))
