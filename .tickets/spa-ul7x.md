@@ -1,6 +1,6 @@
 ---
 id: spa-ul7x
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T15:15:37Z
