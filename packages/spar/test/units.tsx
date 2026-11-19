@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Props, View } from "spar"
+import { Props, Router, View } from "spar"
 
 export const TallyView = View.make(
   "Tally",
@@ -56,3 +56,19 @@ export const MarkView = View.make(
 export const LineView = View.make("Line", { text: Props.Reactive(Schema.String) }, ({ text }) => (
   <li>{text}</li>
 ))
+
+export const DoorView = View.make("Door", { orders: Router.Link }, ({ orders }) => (
+  <main>
+    <h1>Home</h1>
+    <a
+      href={orders.href}
+      onClick={orders.onClick}
+      onPointerenter={orders.onIntent}
+      onFocus={orders.onIntent}
+    >
+      Orders of 7
+    </a>
+  </main>
+))
+
+export const HallView = View.make("Hall", { page: Props.Element }, ({ page }) => <div>{page}</div>)

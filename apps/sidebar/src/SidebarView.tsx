@@ -24,7 +24,12 @@ export const AgentRowView = View.make(
       onDragstart={onLift}
       onDragend={onRest}
     >
-      <a href={link.href} onClick={link.onClick}>
+      <a
+        href={link.href}
+        onClick={link.onClick}
+        onPointerenter={link.onIntent}
+        onFocus={link.onIntent}
+      >
         <span class="agent-name">{Reactive.map(agent, (now) => now.name)}</span>
         <span class="agent-status">{Reactive.map(agent, (now) => now.status)}</span>
         <span class="agent-tags">{Reactive.map(agent, (now) => now.tags.join(", "))}</span>
@@ -243,7 +248,12 @@ export const AgentPageView = View.make(
   (props) => (
     <section>
       <p>
-        <a href={props.home.href} onClick={props.home.onClick}>
+        <a
+          href={props.home.href}
+          onClick={props.home.onClick}
+          onPointerenter={props.home.onIntent}
+          onFocus={props.home.onIntent}
+        >
           All agents
         </a>
       </p>

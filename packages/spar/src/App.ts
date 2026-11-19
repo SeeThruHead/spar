@@ -1,15 +1,20 @@
 import { Effect, Layer, Option, Scheduler, Schema, Tracer } from "effect"
+import type { Context } from "effect"
 import * as Cell from "./internal/cell.ts"
 import { Text, stateId } from "./internal/dehydrated.ts"
 import type { Dehydrated } from "./internal/dehydrated.ts"
-import { Hydrating, Seed } from "./internal/server.ts"
-import { UiTree } from "./internal/uiTree.ts"
+import { Hydrating, OnServer, Seed } from "./internal/server.ts"
+import { Tree, UiTree } from "./internal/uiTree.ts"
 import { ActionScope } from "./internal/actionScope.ts"
 import { browserScheduler } from "./internal/soon.ts"
 import * as Dom from "./internal/dom.ts"
-import { Frame } from "./internal/frame.ts"
+import { Frame, noPage } from "./internal/frame.ts"
+import { toHtml } from "./internal/html.ts"
+import { Preload } from "./internal/preload.ts"
 import { installed } from "./internal/hook.ts"
 import { renderInto } from "./internal/render.ts"
+import { Router } from "./Router.ts"
+import { Inspector } from "./Store.ts"
 import type { Component } from "./View.ts"
 
 export { CrashReporter } from "./internal/crash.ts"
@@ -38,6 +43,24 @@ const continued = (state: Dehydrated) =>
     onSome: (trace) => ({ parent: Tracer.externalSpan({ ...trace, sampled: true }) }),
   })
 
+const rehearsal =
+  <R>(component: Component<NoProps, never, R>, context: Context.Context<Exclude<R, Frame>>) =>
+  (url: string): Effect.Effect<void> =>
+    Effect.flatMap(Layer.build(Router.layerMemory(url)), (router) =>
+      Effect.flatMap(component.mount({}), toHtml).pipe(
+        Effect.provide(router),
+        Effect.provideService(Frame, noPage),
+        Effect.provideService(OnServer, true),
+        Effect.provideService(UiTree, new Tree()),
+        Effect.provideService(Inspector, Inspector.defaultValue()),
+      ),
+    ).pipe(Effect.provide(context), Effect.scoped, Effect.asVoid, (rehearsed) =>
+      Effect.withSpan(rehearsed, "Router.preload", {
+        captureStackTrace: false,
+        attributes: { "spar.url": url },
+      }),
+    )
+
 const started = <R, LayerError>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
@@ -45,8 +68,12 @@ const started = <R, LayerError>(
   state: Dehydrated,
   name: string,
 ): Effect.Effect<never, LayerError> =>
-  Effect.all({ scope: Effect.scope, overlays: overlayRoot }).pipe(
-    Effect.flatMap(({ scope, overlays }) => {
+  Effect.all({
+    scope: Effect.scope,
+    overlays: overlayRoot,
+    context: Effect.context<Exclude<R, Frame>>(),
+  }).pipe(
+    Effect.flatMap(({ scope, overlays, context }) => {
       const claim = existing(options.target)
       const hydrating = Cell.make(claim !== undefined)
 
@@ -75,6 +102,7 @@ const started = <R, LayerError>(
         Effect.provideService(Hydrating, hydrating),
         Effect.provideService(ActionScope, scope),
         Effect.provideService(Frame, { target: options.target, overlays }),
+        Effect.provideService(Preload, rehearsal(component, context)),
       )
     }),
     Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),

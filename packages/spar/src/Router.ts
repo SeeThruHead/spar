@@ -21,6 +21,7 @@ import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { events, on as onTarget } from "./internal/listen.ts"
 import * as Cell from "./internal/cell.ts"
+import { Preload } from "./internal/preload.ts"
 import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Props from "./Props.ts"
@@ -62,6 +63,7 @@ export type PathParams<Path extends string> = { readonly [Name in ParamNames<Pat
 export type Link = {
   readonly href: string
   readonly onClick: Modified<MouseEvent>
+  readonly onIntent: Effect.Effect<void>
 }
 
 const isLink = (value: unknown): value is Link =>
@@ -169,6 +171,9 @@ const locate = (url: string): Location => {
   return { pathname: parsed.pathname, search: parsed.search }
 }
 
+const preload = (url: string): Effect.Effect<void> =>
+  Effect.flatMap(Effect.service(Preload), (rehearse) => rehearse(url))
+
 export type Arrival = "link" | "history"
 
 type Driver = {
@@ -224,7 +229,9 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
     link: <Params>(target: Route<Params>, params: Params): Link => ({
       href: target.build(params),
       onClick: modify("followLink", go(target, params)),
+      onIntent: preload(target.build(params)),
     }),
+    preload: <Params>(target: Route<Params>, params: Params) => preload(target.build(params)),
   }
 })
 
@@ -304,6 +311,7 @@ export class Router extends Context.Service<
     readonly replace: <Params>(target: Route<Params>, params: Params) => Effect.Effect<void>
     readonly back: Effect.Effect<void>
     readonly link: <Params>(target: Route<Params>, params: Params) => Link
+    readonly preload: <Params>(target: Route<Params>, params: Params) => Effect.Effect<void>
   }
 >()("spar/Router") {
   static readonly layerMemory = (initial: string) =>
