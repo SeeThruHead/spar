@@ -45,6 +45,8 @@ import type {
 import { sourced } from "./internal/inspect.ts"
 import { Seed } from "./internal/server.ts"
 import { Outbox } from "./Outbox.ts"
+import { within } from "./View.ts"
+import type { Mountable } from "./View.ts"
 import * as Timeline from "./Timeline.ts"
 
 export { Entries, LogText, Seed, UnknownAction, Unreadable, replay }
@@ -476,6 +478,24 @@ export const Tag =
         durable: Durable = {},
         reactions: ReadonlyArray<Reaction<State, R>> = [],
       ) => makeLayer(service, key, definition, reactions, onDevice(key, definition, durable))
+      static readonly with = <Props, E = never, R = never, ViewProps = never, RR = never>(
+        self: Mountable<Props, E, R, ViewProps>,
+        reactions: ReadonlyArray<Reaction<State, RR>> = [],
+      ) =>
+        within(
+          (place) =>
+            Layer.provide(
+              makeLayer(
+                service,
+                `${key} @ ${place}`,
+                definition,
+                reactions,
+                seeded(`${key} @ ${place}`, definition),
+              ),
+              SecureRandom.layerWebCrypto,
+            ),
+          key,
+        )(self)
     }
   }
 

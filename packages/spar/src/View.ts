@@ -1,4 +1,4 @@
-import { Context, Effect, Schema, Scope, SubscriptionRef } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope, SubscriptionRef } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -230,6 +230,42 @@ export const pending =
           key: (shown: Shown) => shown.key,
           mount: (_key, shown) => Effect.map(shown.get, (now) => now.element),
         })
+      }),
+    )
+
+const placeOf = (parent: ReadonlyArray<string>, taken: string, mark: string): string =>
+  [...parent, taken.replace(` ${mark}`, "")].join(" / ")
+
+export const within =
+  <Provided, EL, RL>(layerAt: (place: string) => Layer.Layer<Provided, EL, RL>, mark: string) =>
+  <Props, E = never, R = never, ViewProps = never>(
+    self: Mountable<Props, E, R, ViewProps>,
+  ): Component<Props, E | EL, Exclude<R, Provided | Scope.Scope> | RL, ViewProps> =>
+    component(viewOf(self), (props) =>
+      Effect.flatMap(Effect.context<Scope.Scope>(), (context) => {
+        const scope = Context.get(context, Scope.Scope)
+        const tree = Context.get(context, UiTree)
+        const parent = Option.match(Context.getOption(context, ViewScope), {
+          onNone: () => [],
+          onSome: pathOf,
+        })
+        const label = labelled(viewOf(self).displayName, Context.get(context, RowKey))
+        const { place } = tree.enter({}, () => [...parent, `${label} ${mark}`])
+
+        return Scope.addFinalizer(
+          scope,
+          Effect.sync(() => tree.leave(place)),
+        ).pipe(
+          Effect.andThen(
+            Layer.buildWithScope(
+              layerAt(placeOf(parent, place.path.slice(parent.length).join(""), mark)),
+              scope,
+            ),
+          ),
+          Effect.flatMap((built) =>
+            Effect.provide(child(self, props), Context.add(built, Scope.Scope, scope)),
+          ),
+        )
       }),
     )
 
