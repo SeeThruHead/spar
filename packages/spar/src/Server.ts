@@ -167,6 +167,7 @@ export const renderInPieces = <R, LayerError = never>(
           stores: Object.fromEntries(states),
           ui: tree.snapshot(),
           trace: { traceId: span.traceId, spanId: span.spanId },
+          pieces: true,
         }),
         options.script,
       ])
@@ -176,7 +177,7 @@ export const renderInPieces = <R, LayerError = never>(
         Object.fromEntries(states.map(([key, held]) => [key, Formatter.formatJson(held)])),
         0,
       )
-      yield* Queue.offer(queue, options.end)
+      yield* Queue.offerAll(queue, [Pieces.script({ stores: {}, done: true }), options.end])
       yield* Queue.end(queue)
     }).pipe(
       Effect.provideService(Frame, noPage),

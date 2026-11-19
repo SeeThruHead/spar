@@ -14,6 +14,7 @@ import { Preload } from "./internal/preload.ts"
 import { installed } from "./internal/hook.ts"
 import { starter } from "./internal/listen.ts"
 import * as Pieces from "./internal/pieces.ts"
+import { fromCell } from "./internal/reactive.ts"
 import { renderInto } from "./internal/render.ts"
 import { Router } from "./Router.ts"
 import { Inspector } from "./Store.ts"
@@ -64,18 +65,29 @@ const rehearsal =
       }),
     )
 
-const adopted = (adopters: Cell.Cell<ReadonlyMap<string, Pieces.Adopt>>, piece: unknown) =>
+type Taking = {
+  readonly adopters: Cell.Cell<ReadonlyMap<string, Pieces.Adopt>>
+  readonly expecting: Cell.Cell<boolean>
+}
+
+const adopted = (taking: Taking, piece: unknown) =>
   Effect.forEach(
-    Option.toArray(Schema.decodeUnknownOption(Pieces.Piece)(piece)).flatMap((taken) =>
-      Object.entries(taken.stores),
-    ),
-    ([key, held]) => adopters.read().get(key)?.(held) ?? Effect.void,
+    Option.toArray(Schema.decodeUnknownOption(Pieces.Piece)(piece)),
+    (taken) =>
+      Effect.andThen(
+        Effect.forEach(
+          Object.entries(taken.stores),
+          ([key, held]) => taking.adopters.read().get(key)?.(held) ?? Effect.void,
+          { discard: true },
+        ),
+        Effect.sync(() => taking.expecting.write(taking.expecting.read() && taken.done !== true)),
+      ),
     { discard: true },
   )
 
-const taking = (adopters: Cell.Cell<ReadonlyMap<string, Pieces.Adopt>>) =>
+const taken = (taking: Taking) =>
   Effect.map(starter(), (start) =>
-    Dom.takePieces(Pieces.holder, (piece) => start(adopted(adopters, piece))),
+    Dom.takePieces(Pieces.holder, (piece) => start(adopted(taking, piece))),
   )
 
 const started = <R, LayerError>(
@@ -86,6 +98,7 @@ const started = <R, LayerError>(
   name: string,
 ): Effect.Effect<never, LayerError> => {
   const adopters = Cell.make<ReadonlyMap<string, Pieces.Adopt>>(new Map())
+  const expecting = Cell.make(state.pieces === true)
 
   return Effect.all({
     scope: Effect.scope,
@@ -112,7 +125,7 @@ const started = <R, LayerError>(
         (mounted) =>
           Effect.withSpan(mounted, name, { captureStackTrace: false, ...continued(state) }),
         Effect.andThen(options.shown ?? Effect.void),
-        Effect.andThen(taking(adopters)),
+        Effect.andThen(taken({ adopters, expecting })),
         Effect.andThen(
           Option.match(installed.read(), {
             onNone: () => Effect.void,
@@ -132,6 +145,7 @@ const started = <R, LayerError>(
       register: (key, adopt) =>
         Effect.sync(() => adopters.write(new Map([...adopters.read(), [key, adopt]]))),
     }),
+    Effect.provideService(Pieces.Expected, fromCell(expecting)),
     Effect.provideService(Seed, state.stores),
     (app) =>
       Option.match(installed.read(), { onNone: () => app, onSome: (hook) => hook.wrap(app) }),

@@ -251,10 +251,11 @@ browser asks the backend for nothing. The whole response is one render in one tr
 code chooses per page which of the two to call.
 
 What to know: the client script must be `async`, or the browser runs it only after the last
-piece. Without JavaScript the page stays as first drawn. A query that is first asked for by a
-component that only mounts once data is there (a row of a loaded list) is not run on the server;
-the browser asks for it. If the connection drops part way, a query whose piece never came stays
-`loading`.
+piece. Without JavaScript the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
+server is done, and whatever is still missing then is asked for by the browser. That covers a
+query first asked for by a component that only mounts once data is there (a row of a loaded
+list), which the server does not run. If the connection drops part way, the last piece never
+comes, and a query whose data was on its way stays `loading`.
 
 From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
 and picked up in the browser, a typed server boundary, and a choice per page between a complete

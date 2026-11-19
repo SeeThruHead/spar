@@ -5,6 +5,7 @@ export const Dehydrated = Schema.Struct({
   stores: Schema.Record(Schema.String, Schema.Json),
   ui: Snapshot,
   trace: Schema.NullOr(Schema.Struct({ traceId: Schema.String, spanId: Schema.String })),
+  pieces: Schema.optional(Schema.Boolean),
 })
 
 export type Dehydrated = typeof Dehydrated.Type

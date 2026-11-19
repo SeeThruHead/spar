@@ -16,7 +16,7 @@ import {
 } from "effect"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
-import { Adopters } from "./internal/pieces.ts"
+import { Adopters, Expected } from "./internal/pieces.ts"
 import type { Action } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
@@ -340,6 +340,8 @@ export const Tag =
       const store = yield* Effect.service(base)
       const now = yield* Clock.currentTimeMillis
       const onServer = yield* OnServer
+      const expected = yield* Expected
+      const coming = yield* expected.get
       const held = yield* store.state.get
       const span = yield* Effect.option(Effect.currentSpan)
       const from = Option.match(span, {
@@ -351,6 +353,7 @@ export const Tag =
         Option.toArray(asked),
         (wanted) => {
           const known = held.entries[wanted.key]
+          if (known === undefined && coming) return Effect.void
           if (known !== undefined && stands(known, now, staleAfter, onServer)) {
             return served(wanted, known)
           }
@@ -428,12 +431,18 @@ export const Tag =
         { startImmediately: true },
       )
 
+      const expected = yield* Expected
+      const allSent = map(expected, (still) => !still)
       const visible = yield* Events.visible
       const online = yield* Events.online
 
       yield* Effect.forkScoped(
-        Stream.runForEach(Stream.merge(returning(visible), returning(online)), () =>
-          Effect.flatMap(wanted.get, (asked) => Effect.provide(ensured(asked, after), context)),
+        Stream.runForEach(
+          Stream.mergeAll([returning(visible), returning(online), returning(allSent)], {
+            concurrency: "unbounded",
+          }),
+          () =>
+            Effect.flatMap(wanted.get, (asked) => Effect.provide(ensured(asked, after), context)),
         ),
         { startImmediately: true },
       )
