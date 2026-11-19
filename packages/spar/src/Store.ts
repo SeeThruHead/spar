@@ -169,11 +169,22 @@ const logLimit = 1000
 const accepted = <State>(before: State, tried: State | Refused): State =>
   tried instanceof Refused ? before : tried
 
-export const action = <Payload, Encoded, State>(
+export type SPAR_REDUCER_STATE_UNTYPED = {
+  readonly fix: "give the reducer its state type, as in (state: State, payload) => ..."
+}
+
+type Typed<State, Made> = unknown extends State ? SPAR_REDUCER_STATE_UNTYPED : Made
+
+export function action<Payload, Encoded, State>(
   schema: Schema.Codec<Payload, Encoded>,
   reduce: (state: State, payload: Payload) => State,
-  refusal: (state: NoInfer<State>, payload: NoInfer<Payload>) => string | null = () => null,
-): Action<State, Payload> => {
+  refusal?: (state: NoInfer<State>, payload: NoInfer<Payload>) => string | null,
+): Typed<State, Action<State, Payload>>
+export function action<Payload, Encoded, State>(
+  schema: Schema.Codec<Payload, Encoded>,
+  reduce: (state: State, payload: Payload) => State,
+  refusal: (state: State, payload: Payload) => string | null = () => null,
+): Action<State, Payload> | SPAR_REDUCER_STATE_UNTYPED {
   const json = Schema.toCodecJson(schema)
   const decode = Schema.decodeUnknownEffect(json)
   const attempt = (payload: Schema.Json) =>
@@ -214,7 +225,12 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
   definition: Definition<State, A, S>,
   reactions: ReadonlyArray<Reaction<State, R>>,
   open: Open<State, E, RO>,
-): Layer.Layer<Self, E, R | Exclude<RO, Scope.Scope> | SecureRandom.SecureRandom> =>
+): Layer.Layer<
+  Self,
+  E,
+  | Exclude<Exclude<R, Scope.Scope>, SecureRandom.SecureRandom>
+  | Exclude<Exclude<RO, Scope.Scope>, SecureRandom.SecureRandom>
+> =>
   Layer.effect(
     service,
     Effect.gen(function* () {
@@ -550,7 +566,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         commands,
       }
     }),
-  )
+  ).pipe(Layer.provide(SecureRandom.layerWebCrypto))
 
 const seeded =
   <State, A extends Actions<State>, S extends Selectors<State>>(

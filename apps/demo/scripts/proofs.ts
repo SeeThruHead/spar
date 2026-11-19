@@ -47,6 +47,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "the parent route must end with /* to have routes under it",
   },
   {
+    file: "reducer-without-a-state-type.ts",
+    rule: "Writing a store action's reducer without a type on its state parameter",
+    by: "types",
+    expect: "SPAR_REDUCER_STATE_UNTYPED",
+  },
+  {
     file: "route-schema-missing-a-path-param.ts",
     rule: "Giving a route a Schema that lacks a param its path names",
     by: "types",

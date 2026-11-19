@@ -97,6 +97,11 @@ export const all = {
     what: "It is in use again",
     fix: "Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.",
   },
+  SPAR_REDUCER_STATE_UNTYPED: {
+    kind: "types",
+    what: "A store action's reducer has no type on its state parameter, so the store's state is unknown. The compiler then also says a command comes from an index signature (TS4111) or is possibly undefined (TS2722).",
+    fix: "Give the reducer its state type: Store.action(Payload, (state: State, payload) => ...). Every reducer in the store needs it.",
+  },
   SPAR_ROUTE_UNDER_CLOSED: {
     kind: "types",
     what: "A route was declared under a route that does not end with /*.",

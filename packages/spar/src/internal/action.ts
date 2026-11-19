@@ -4,7 +4,10 @@ export const WriteTypeId: unique symbol = Symbol.for("~spar/UiWrite")
 
 const ModifiedTypeId = "~spar/ModifiedHandler"
 
-export type UiWrite = { readonly [WriteTypeId]: Effect.Effect<void> }
+export type UiWrite = {
+  readonly [WriteTypeId]: Effect.Effect<void>
+  readonly [Symbol.iterator]: () => ReturnType<Effect.Effect<void>[typeof Symbol.iterator]>
+}
 
 export type Action = Effect.Effect<void> | UiWrite | ReadonlyArray<Action>
 
@@ -17,7 +20,10 @@ export type Modified<Event> = {
 
 export type Handler<Event> = Action | ((event: Event) => Action) | Modified<Event>
 
-export const write = (effect: Effect.Effect<void>): UiWrite => ({ [WriteTypeId]: effect })
+export const write = (effect: Effect.Effect<void>): UiWrite => ({
+  [WriteTypeId]: effect,
+  [Symbol.iterator]: () => effect[Symbol.iterator](),
+})
 
 export const modify = <Event>(before: Before, handler: Handler<Event>): Modified<Event> => ({
   [ModifiedTypeId]: before,

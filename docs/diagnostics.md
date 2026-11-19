@@ -168,6 +168,14 @@ Fix: Nothing: a query's data was about to be dropped as unused, and a component 
 
 Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
 
+### SPAR_REDUCER_STATE_UNTYPED
+
+A store action's reducer has no type on its state parameter, so the store's state is unknown. The compiler then also says a command comes from an index signature (TS4111) or is possibly undefined (TS2722).
+
+Fix: Give the reducer its state type: Store.action(Payload, (state: State, payload) => ...). Every reducer in the store needs it.
+
+Reported by: The TypeScript compiler, in the text of a type error.
+
 ### SPAR_ROUTE_UNDER_CLOSED
 
 A route was declared under a route that does not end with /*.
