@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef } from "effect"
-import { Devtools, Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
+import { Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
+import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
 import * as Cell from "../src/internal/cell.ts"

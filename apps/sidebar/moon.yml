@@ -40,5 +40,23 @@ tasks:
     command: bun ../../packages/browsers/scripts/in.ts bun scripts/walkthrough.ts
     deps: [build]
     inputs: ["src/**/*", "scripts/**/*", "index.html", "@group(upstream)", "$SPAR_BROWSER"]
+  devtools:
+    command: bun ../../packages/browsers/scripts/in.ts bun scripts/devtools.ts
+    inputs:
+      [
+        "src/**/*",
+        "scripts/devtools.ts",
+        "index.html",
+        "vite.config.ts",
+        "@group(upstream)",
+        "$SPAR_BROWSER",
+      ]
+    options:
+      cache: false
+  production:
+    command: bun scripts/production.ts
+    deps: [build]
+    inputs:
+      ["src/**/*", "scripts/production.ts", "index.html", "vite.config.ts", "@group(upstream)"]
   check:
-    deps: [typecheck, lint, format, test]
+    deps: [typecheck, lint, format, test, production]

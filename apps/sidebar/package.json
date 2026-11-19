@@ -8,6 +8,8 @@
     "test": "bun --bun vitest run",
     "build": "vite build",
     "dev": "vite",
+    "production": "bun run build && bun scripts/production.ts",
+    "devtools": "bun ../../packages/browsers/scripts/in.ts bun scripts/devtools.ts",
     "features": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/features.ts",
     "walkthrough": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/walkthrough.ts",
     "format": "oxfmt",

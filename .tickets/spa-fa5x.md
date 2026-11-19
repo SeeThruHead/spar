@@ -17,3 +17,9 @@ Browser spans through a proxy route in the app's server to Alloy; one trace for 
 
 A trace test: a click produces one connected browser-to-server trace; an unhandled backend error is a compile error (forbidden proof).
 
+
+## Notes
+
+**2026-11-19T04:06:29Z**
+
+From the plugin ticket: the Vite plugin (packages/spar/src/devtools/vite.ts) still needs configureServer with an endpoint that takes browser spans (OTLP JSON), keeps a buffer per trace id and forwards to the configured collector (Alloy http://192.168.0.29:4318), and options for the backends' OTLP or Tempo endpoints.

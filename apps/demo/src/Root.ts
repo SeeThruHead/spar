@@ -1,6 +1,7 @@
 import { Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Devtools, Outbox, Tabs, View } from "spar"
+import { Outbox, Tabs, View } from "spar"
+import * as Devtools from "spar/devtools"
 import { AppView } from "./AppView.tsx"
 import { Counter } from "./counter/Counter.ts"
 import { CounterStore } from "./counter/CounterStore.ts"

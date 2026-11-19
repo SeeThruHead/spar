@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": [
+    "./src/devtools/entry.ts"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
@@ -10,6 +13,7 @@
     "./transform/check": "./src/transform/check.ts",
     "./transform/bun": "./src/transform/bun.ts",
     "./transform/vite": "./src/transform/vite.ts",
+    "./devtools": "./src/Devtools.ts",
     "./devtools/client": "./src/devtools/client.ts",
     "./devtools/entry": "./src/devtools/entry.ts",
     "./devtools/vite": "./src/devtools/vite.ts",

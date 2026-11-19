@@ -1,7 +1,7 @@
 import { Effect, Formatter, Function, Layer, Schedule, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
-import { Devtools } from "spar"
+import * as Devtools from "spar/devtools"
 import type { Store } from "spar"
 import { PageRpcs } from "./protocol.ts"
 import type { Ask, Command, Snapshot } from "./protocol.ts"

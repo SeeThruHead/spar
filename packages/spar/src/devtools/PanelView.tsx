@@ -43,15 +43,51 @@ export const TimelineView = View.make(
   ),
 )
 
+const dock = {
+  position: "fixed",
+  right: "12px",
+  bottom: "12px",
+  zIndex: "2147483000",
+  display: "flex",
+  flexDirection: "column-reverse",
+  alignItems: "flex-end",
+  gap: "8px",
+  maxWidth: "min(620px, calc(100vw - 24px))",
+  font: "13px/1.45 system-ui, sans-serif",
+  color: "#141a22",
+}
+
+const toggle = {
+  font: "inherit",
+  padding: "6px 12px",
+  borderRadius: "999px",
+  border: "1px solid #1f3a8a",
+  background: "#1d4ed8",
+  color: "#ffffff",
+  cursor: "pointer",
+}
+
+const sheet = {
+  boxSizing: "border-box",
+  width: "100%",
+  maxHeight: "min(70vh, 640px)",
+  overflow: "auto",
+  padding: "4px 16px 16px",
+  borderRadius: "10px",
+  border: "1px solid #c5cbd6",
+  background: "#ffffff",
+  boxShadow: "0 12px 32px rgba(15, 23, 42, 0.22)",
+}
+
 export const ToolsView = View.make(
   "ToolsView",
   { open: Props.State(Schema.Boolean), timeline: Props.Element, stores: Props.Element },
   ({ open, timeline, stores }) => (
-    <aside aria-label="Spar devtools" data-spar-devtools="">
-      <button aria-expanded={open} onClick={UiState.update(open, (shown) => !shown)}>
+    <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
+      <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
         Devtools
       </button>
-      <div hidden={Reactive.map(open, (shown) => !shown)}>
+      <div hidden={Reactive.map(open, (shown) => !shown)} style={sheet}>
         {timeline}
         {stores}
       </div>

@@ -4,7 +4,8 @@ import { Effect, Layer, Logger, Queue, References, Schedule, Schema } from "effe
 import { McpClient, McpProtocol } from "effect/ai"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
-import { Devtools, Store } from "spar"
+import { Store } from "spar"
+import * as Devtools from "spar/devtools"
 import * as Page from "../src/client.ts"
 import { layer } from "../src/server.ts"
 
