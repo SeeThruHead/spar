@@ -194,3 +194,16 @@ body {
   inline-size: 100%;
   min-inline-size: 0;
 }
+
+.reset-counter {
+  margin-block: 1.5rem;
+  min-inline-size: 0;
+}
+
+.reset-counter input {
+  box-sizing: border-box;
+  inline-size: 6rem;
+  max-inline-size: 100%;
+  min-height: 2.75rem;
+  font: inherit;
+}

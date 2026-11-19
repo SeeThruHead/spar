@@ -3,6 +3,7 @@ import { Handle, Router, View } from "spar"
 import { Toast } from "@spar/ui"
 import { AgentPage } from "./AgentPage.ts"
 import { Notes } from "./Notes.ts"
+import { ResetCounter } from "./ResetCounter.ts"
 import { agentRoute, home } from "./routes.ts"
 import { Sidebar } from "./Sidebar.ts"
 import { EmptyPageView, MissingPageView, ShellView } from "./SidebarView.tsx"
@@ -17,6 +18,7 @@ export const Shell = View.connect(
       main,
       sidebar: yield* View.child(Sidebar, {}),
       scratch: yield* View.child(Notes, { id: "scratch-note", title: "Scratchpad" }),
+      counter: yield* View.child(ResetCounter, {}),
       page: yield* Router.outlet({
         routes: [Router.on(home, EmptyPageView), Router.on(agentRoute, AgentPage)],
         otherwise: MissingPageView,

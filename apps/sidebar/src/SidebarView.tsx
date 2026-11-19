@@ -178,14 +178,16 @@ export const ShellView = View.make(
     sidebar: Props.Element,
     page: Props.Element,
     scratch: Props.Element,
+    counter: Props.Element,
     toasts: Props.Element,
   },
-  ({ main, sidebar, page, scratch, toasts }) => (
+  ({ main, sidebar, page, scratch, counter, toasts }) => (
     <div class="shell">
       {sidebar}
       <main ref={main} tabIndex={-1}>
         {page}
         {scratch}
+        {counter}
       </main>
       {toasts}
     </div>

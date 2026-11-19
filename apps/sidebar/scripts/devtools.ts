@@ -120,6 +120,30 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   await page.screenshot({ path: `${root}artifacts/devtools-trace.png` })
 
+  const counter = page.getByRole("region", { name: "Counter", exact: true })
+
+  await counter.getByRole("button", { name: "Add 1" }).click()
+  await counter.getByRole("button", { name: "Add 1" }).click()
+  await counter.getByRole("button", { name: "Reset after a delay" }).click()
+  await counter.getByRole("button", { name: "Add 1" }).click()
+  await page.keyboard.press("+")
+  await log.locator("ol li", { hasText: "refused sidebar/ResetCounter" }).nth(1).waitFor()
+
+  const duringReset = (await counter.getByLabel("Count", { exact: true }).textContent()) ?? ""
+  const lastRefusal = (await counter.getByLabel("Last refusal").textContent()) ?? ""
+
+  await log
+    .locator("ol li", { hasText: "refused sidebar/ResetCounter" })
+    .first()
+    .scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${root}artifacts/devtools-refused.png` })
+  await counter
+    .getByLabel("Counter status")
+    .filter({ hasText: "Counting" })
+    .waitFor({ timeout: 8000 })
+
+  const afterReset = (await counter.getByLabel("Count", { exact: true }).textContent()) ?? ""
+
   const scratch = page.getByRole("region", { name: "Scratchpad" })
   const noted = async (text: string) => {
     await scratch.getByRole("textbox", { name: "Note" }).fill(text)
@@ -150,6 +174,11 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const mainNotes = await scratch.getByRole("list").innerText()
 
   return [
+    ...(duringReset === "2" ? [] : [`during the reset the count was "${duringReset}"`]),
+    ...(lastRefusal.includes("A reset is in progress")
+      ? []
+      : [`the last refusal read "${lastRefusal}"`]),
+    ...(afterReset === "0" ? [] : [`after the reset the count was "${afterReset}"`]),
     ...(rewoundNotes === "1 note"
       ? []
       : [`rewound to the first note, the count was "${rewoundNotes}"`]),
@@ -195,6 +224,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, draw one trace across the page and the backend, and fork the program and go back",
+  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, draw one trace across the page and the backend, refuse Add 1 during a reset from a button and from the keyboard, and fork the program and go back",
 )
 process.exit(0)

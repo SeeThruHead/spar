@@ -89,6 +89,19 @@
       - paragraph: Kept in Scratchpad
       - paragraph
       - button "Add note"
+  - region "Counter":
+    - heading "Counter" [level=2]
+    - paragraph:
+      - status "Count": "0"
+      - status "Counter status": Counting
+    - paragraph:
+      - button "Add 1"
+      - button "Reset after a delay"
+    - text: Delay in seconds
+    - spinbutton "Delay in seconds": "2"
+    - paragraph:
+      - status "Last refusal": Nothing has been refused
+    - paragraph: Both buttons stay enabled, and the + key adds 1 too. The store decides.
 - status "Notifications":
   - list:
     - listitem:
