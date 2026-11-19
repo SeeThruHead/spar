@@ -183,7 +183,8 @@ through props (the component that needs it asks for it, or a store's action read
 
 ## Seeing it
 
-One navigation is one trace: the click, the route change, each segment mounting, each query's
+One navigation is one trace, whether it started with a link, `router.go` or the browser's Back
+and Forward buttons (those run in a span named `Router.popstate`): the click, the route change, each segment mounting, each query's
 request, the calls they make, the backend's spans, and each answer landing. In the devtools trace
 panel, lenses show one kind at a time:
 

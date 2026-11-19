@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
-import { Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
-import { Handle, Props, Router, View } from "spar"
+import { Context, Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
+import { Handle, Props, Router, Timeline, View } from "spar"
+import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import {
   BillingView,
@@ -396,5 +397,39 @@ describe("the router", () => {
       scrolled.mockRestore()
       wentBack.mockRestore()
     }).pipe(Effect.provide(Layer.fresh(Router.Router.layerBrowser))),
+  )
+
+  it.live("going back or forward with the browser is a span and a moment in its trace", () =>
+    Effect.gen(function* () {
+      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+
+      yield* Layer.build(Layer.fresh(Router.Router.layerBrowser)).pipe(
+        Effect.provide(spans),
+        Effect.provideService(
+          Timeline.Recorder,
+          Option.some((seen: Timeline.Noted) => Ref.update(noted, (all) => [...all, seen])),
+        ),
+      )
+      yield* Effect.sync(() => window.history.replaceState(null, "", "/settings/profile?tab=2"))
+      yield* Effect.sync(() => window.dispatchEvent(new PopStateEvent("popstate")))
+      yield* Effect.sleep("10 millis")
+
+      const [route] = yield* Ref.get(noted)
+      const [span] = buffer.recent().filter((each) => each.name === "Router.popstate")
+
+      expect([route?.kind, route?.name, route?.detail]).toEqual([
+        "route",
+        "/settings/profile?tab=2",
+        "history",
+      ])
+      expect(route?.traceId).toHaveLength(32)
+      expect([span?.traceId, span?.spanId]).toEqual([route?.traceId, route?.spanId])
+      expect([span?.parentSpanId, span?.attributes["spar.url"]]).toEqual([
+        null,
+        "/settings/profile?tab=2",
+      ])
+    }),
   )
 })

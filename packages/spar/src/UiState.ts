@@ -44,12 +44,16 @@ const written = <A>(self: UiState<A>, next: () => A): Write => {
   const kept = self[Backing]
 
   return write(
-    Effect.andThen(
-      Effect.sync(() => kept.write(next())),
-      Timeline.note("ui", `${kept.path.join(" / ")} . ${kept.name}`, () =>
+    Effect.suspend(() => {
+      const value = next()
+      if (Object.is(kept.read(), value)) return Effect.void
+
+      kept.write(value)
+
+      return Timeline.note("ui", `${kept.path.join(" / ")} . ${kept.name}`, () =>
         Option.getOrNull(kept.encoded()),
-      ),
-    ),
+      )
+    }),
   )
 }
 

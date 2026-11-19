@@ -209,6 +209,12 @@ return {
 }
 ```
 
+A form's values, which fields have been left, whether a submit was tried and what the server
+rejected are the component's UI state, under a name such as `form (name)`. So typing, leaving a
+field and a refused submit are entries in the log, and rewinding puts a form back as it was.
+Whether a send is in flight (`submitting`) is not kept there: going back to a moment does not
+restart a send.
+
 `Form.text(field)` and `Form.checkbox(field)` are the props to spread on an input. A field's problem
 shows once the field has been left or a submit was tried. Fail the submit Effect with
 `new Form.Rejected({ message, fields })` to put a server's messages on their fields.

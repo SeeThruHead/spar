@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Deferred, Effect, Ref, Schema, SubscriptionRef } from "effect"
-import { Form, Reactive, View } from "spar"
+import { Deferred, Effect, Layer, Option, Ref, Schema, SubscriptionRef } from "effect"
+import { Form, Reactive, Timeline, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { SignupView } from "./signup.tsx"
 
@@ -74,6 +74,77 @@ const fillValid = Effect.gen(function* () {
   yield* Testing.fill("textbox", "Email", "ada@example.com")
   yield* Testing.fill("textbox", "Age", "36")
   yield* Testing.click("checkbox", "I accept the terms")
+})
+
+const TwoForms = View.connect(
+  Effect.fnUntraced(function* () {
+    const first = yield* Form.make(Signup, { email: "", age: "", terms: false })
+    const second = yield* Form.make(Signup, { email: "", age: "", terms: false })
+
+    return {
+      email: first.field("email"),
+      age: second.field("email"),
+      terms: first.field("terms"),
+      problem: first.error,
+      submitting: first.submitting,
+      welcome: Reactive.succeed(""),
+      onReset: first.reset,
+      onSubmit: first.submit(() => Effect.void),
+    }
+  }),
+)(SignupView)
+
+describe("a form's state is the component's UI state", () => {
+  it.live("typing, leaving a field and a refused submit are in the log, and can be put back", () =>
+    Effect.gen(function* () {
+      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+      const names = Effect.map(Ref.get(noted), (all) =>
+        all.map((seen) => `${seen.kind} ${seen.name}`),
+      )
+
+      yield* started.pipe(
+        Effect.provideService(
+          Timeline.Recorder,
+          Option.some((seen: Timeline.Noted) => Ref.update(noted, (all) => [...all, seen])),
+        ),
+      )
+      yield* Testing.fill("textbox", "Email", "ada")
+      yield* leave("Email")
+      yield* shows("Email problem", "Enter an email address")
+      yield* leave("Email")
+
+      const before = yield* UiState.snapshot
+
+      expect(JSON.stringify(before)).toContain('"email":"ada"')
+      expect(yield* names).toEqual([
+        "ui SignupView . form (email, age, terms)",
+        "ui SignupView . form (email, age, terms)",
+      ])
+
+      yield* Testing.fill("textbox", "Email", "ada@example.com")
+      yield* shows("Email problem", "")
+      yield* Testing.click("button", "Create account")
+      yield* shows("Age problem", "You must be 18 or older")
+      expect((yield* names).length).toBe(4)
+
+      yield* UiState.restore(before)
+      yield* shows("Email problem", "Enter an email address")
+      yield* shows("Age problem", "")
+      expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Email" }).value).toBe("ada")
+    }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
+  )
+
+  it.live("two forms in one component keep their state apart", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(TwoForms)
+      yield* Testing.fill("textbox", "Email", "first@example.com")
+      yield* Testing.fill("textbox", "Age", "second")
+
+      expect(JSON.stringify(yield* UiState.snapshot)).toMatch(
+        /"name":"form \(email, age, terms\)".*"email":"first@example\.com".*"name":"form 2 \(email, age, terms\)".*"email":"second"/,
+      )
+    }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
+  )
 })
 
 describe("forms", () => {

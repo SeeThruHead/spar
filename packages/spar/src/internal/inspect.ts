@@ -99,7 +99,7 @@ export const recovering = (failure: string, by: string): void => {
 const sources = new WeakMap<object, string>()
 
 export const sourced = (value: object, label: string): void => {
-  Option.map(inspecting.read(), () => sources.set(value, label))
+  sources.set(value, label)
 }
 
 export const sourceOf = (value: unknown): Option.Option<string> => {

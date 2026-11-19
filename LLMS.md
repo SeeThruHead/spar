@@ -374,7 +374,8 @@ through props (the component that needs it asks for it, or a store's action read
 
 ### Seeing it
 
-One navigation is one trace: the click, the route change, each segment mounting, each query's
+One navigation is one trace, whether it started with a link, `router.go` or the browser's Back
+and Forward buttons (those run in a span named `Router.popstate`): the click, the route change, each segment mounting, each query's
 request, the calls they make, the backend's spans, and each answer landing. In the devtools trace
 panel, lenses show one kind at a time:
 
@@ -905,6 +906,12 @@ return {
   onSubmit: form.submit(({ name }) => store.commands.spaceAdded({ name })),
 }
 ```
+
+A form's values, which fields have been left, whether a submit was tried and what the server
+rejected are the component's UI state, under a name such as `form (name)`. So typing, leaving a
+field and a refused submit are entries in the log, and rewinding puts a form back as it was.
+Whether a send is in flight (`submitting`) is not kept there: going back to a moment does not
+restart a send.
 
 `Form.text(field)` and `Form.checkbox(field)` are the props to spread on an input. A field's problem
 shows once the field has been left or a submit was tried. Fail the submit Effect with

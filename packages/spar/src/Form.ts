@@ -1,20 +1,13 @@
-import {
-  Effect,
-  Option,
-  Predicate,
-  Record,
-  Result,
-  Schema,
-  SchemaIssue,
-  SubscriptionRef,
-} from "effect"
+import { Effect, Option, Predicate, Record, Result, Schema, SchemaIssue } from "effect"
 import { ActionScope } from "./internal/actionScope.ts"
-import { run, write } from "./internal/action.ts"
+import { run } from "./internal/action.ts"
 import type { Action, UiWrite } from "./internal/action.ts"
-import { fromSubscriptionRef, map } from "./internal/reactive.ts"
+import * as Cell from "./internal/cell.ts"
+import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
 import * as Props from "./Props.ts"
+import * as UiState from "./UiState.ts"
 
 type Inputs = Readonly<Record<string, string | boolean>>
 
@@ -68,12 +61,13 @@ export type Form<Valid, Input extends Inputs> = {
 
 type State<Input> = {
   readonly values: Input
-  readonly touched: ReadonlySet<string>
+  readonly touched: ReadonlyArray<string>
   readonly attempted: boolean
   readonly rejected: Messages
   readonly failure: string
-  readonly submitting: boolean
 }
+
+const Raw = Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Boolean]))
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -97,7 +91,7 @@ const messagesOf = (error: Schema.SchemaError): Messages =>
 const shown = <Input>(state: State<Input>, problems: Messages, name: string): string => {
   const rejected = state.rejected[name]
   if (rejected !== undefined) return rejected
-  if (!state.attempted && !state.touched.has(name)) return ""
+  if (!state.attempted && !state.touched.includes(name)) return ""
 
   return problems[name] ?? ""
 }
@@ -108,22 +102,47 @@ const formProblem = <Input>(state: State<Input>, problems: Messages): string => 
   return shown(state, problems, wholeForm)
 }
 
+const made = new WeakMap<object, number>()
+
+const nameIn = (mounted: object, fields: ReadonlyArray<string>): string => {
+  const earlier = made.get(mounted) ?? 0
+
+  made.set(mounted, earlier + 1)
+
+  return earlier === 0
+    ? `form (${fields.join(", ")})`
+    : `form ${earlier + 1} (${fields.join(", ")})`
+}
+
 export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
   schema: Schema.Codec<Valid, Input>,
   initial: Input,
 ) {
-  yield* ViewScope
-
+  const mounted = yield* ViewScope
   const fresh: State<Input> = {
     values: initial,
-    touched: new Set(),
+    touched: [],
     attempted: false,
     rejected: {},
     failure: "",
-    submitting: false,
   }
-  const state = yield* SubscriptionRef.make(fresh)
-  const current = fromSubscriptionRef(state)
+  const sameShape = (values: Inputs): values is Input =>
+    Object.keys(initial).every((key) => typeof values[key] === typeof initial[key])
+  const state = yield* UiState.make(
+    nameIn(mounted, Object.keys(initial)),
+    Schema.Struct({
+      values: Raw.pipe(Schema.refine(sameShape)),
+      touched: Schema.Array(Schema.String),
+      attempted: Schema.Boolean,
+      rejected: Schema.Record(Schema.String, Schema.String),
+      failure: Schema.String,
+    }),
+    fresh,
+  )
+  const current: Reactive<State<Input>> = state
+  const sending = Cell.make(false)
+  const changed = (change: (now: State<Input>) => State<Input>): Effect.Effect<void> =>
+    run(UiState.update(state, change))
   const check = Schema.decodeUnknownResult(schema, { errors: "all" })
   const problems = (values: Input): Messages =>
     Result.match(check(values), { onSuccess: () => ({}), onFailure: messagesOf })
@@ -137,18 +156,13 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
       error,
       invalid: map(error, (message) => message.length > 0),
       change: (value) =>
-        write(
-          SubscriptionRef.update(state, (now) => ({
-            ...now,
-            values: { ...now.values, [name]: value },
-            rejected: Record.remove(now.rejected, name),
-          })),
-        ),
-      touch: write(
-        SubscriptionRef.update(state, (now) => ({
+        UiState.update(state, (now) => ({
           ...now,
-          touched: new Set([...now.touched, name]),
+          values: { ...now.values, [name]: value },
+          rejected: Record.remove(now.rejected, name),
         })),
+      touch: UiState.update(state, (now) =>
+        now.touched.includes(name) ? now : { ...now, touched: [...now.touched, name] },
       ),
     }
   }
@@ -161,13 +175,9 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
     onValid(value).pipe(
       Effect.andThen(run(onDone)),
       Effect.catch((rejected) =>
-        SubscriptionRef.update(state, (now) => ({
-          ...now,
-          rejected: rejected.fields,
-          failure: rejected.message,
-        })),
+        changed((now) => ({ ...now, rejected: rejected.fields, failure: rejected.message })),
       ),
-      Effect.ensuring(SubscriptionRef.update(state, (now) => ({ ...now, submitting: false }))),
+      Effect.ensuring(Effect.sync(() => sending.write(false))),
     )
 
   const start = Effect.fnUntraced(function* <R>(
@@ -177,7 +187,8 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
   ) {
     const outliving = yield* ActionScope
 
-    yield* SubscriptionRef.update(state, (now) => ({ ...now, submitting: true, failure: "" }))
+    sending.write(true)
+    yield* changed((now) => ({ ...now, failure: "" }))
     yield* Effect.forkIn(send(value, onValid, onDone), outliving, { startImmediately: true })
   })
 
@@ -185,11 +196,11 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
     onValid: (value: Valid) => Effect.Effect<void, Rejected, R>,
     onDone: Action,
   ): Effect.Effect<void, never, R> =>
-    Effect.flatMap(SubscriptionRef.get(state), (now) => {
-      if (now.submitting) return Effect.void
+    Effect.flatMap(current.get, (now) => {
+      if (sending.read()) return Effect.void
 
       return Result.match(check(now.values), {
-        onFailure: () => SubscriptionRef.set(state, { ...now, attempted: true }),
+        onFailure: () => changed((before) => ({ ...before, attempted: true })),
         onSuccess: (value) => start(value, onValid, onDone),
       })
     })
@@ -201,10 +212,10 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
   const form: Form<Valid, Input> = {
     field,
     error: map(current, (now) => formProblem(now, problems(now.values))),
-    submitting: map(current, (now) => now.submitting),
+    submitting: fromCell(sending),
     submit,
     submitThen,
-    reset: write(SubscriptionRef.set(state, fresh)),
+    reset: UiState.set(state, fresh),
   }
 
   return form

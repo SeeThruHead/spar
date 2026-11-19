@@ -199,12 +199,15 @@ describe("what the inspector knows about what is on the page", () => {
     ),
   )
 
-  it("with no inspector nothing is remembered about where a value came from", () => {
+  it("where a value came from is remembered with no inspector too, so a trace can name it", () => {
     const selector = Reactive.succeed(1)
 
     sourced(selector, "shop . count")
     recovering("Lost", "Listed")
-    expect(sourceOf(selector)).toEqual(Option.none())
+    expect(sourceOf(selector)).toEqual(Option.some("shop . count"))
+    expect(sourceOf(Reactive.map(selector, (count) => count + 1))).toEqual(
+      Option.some("made from shop . count"),
+    )
   })
 
   it.live("with no inspector nothing is marked", () =>

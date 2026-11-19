@@ -232,6 +232,12 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
     Stream.runForEach(driver.moved, (now) =>
       Effect.sync(() => arrivedBy.write("history")).pipe(
         Effect.andThen(arrive(now, "history")),
+        (arrived) =>
+          Effect.withSpan(arrived, "Router.popstate", {
+            captureStackTrace: false,
+            root: true,
+            attributes: { "spar.url": `${now.pathname}${now.search}` },
+          }),
         Effect.andThen(Effect.forkScoped(driver.arrive)),
       ),
     ),
