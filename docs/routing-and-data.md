@@ -200,7 +200,8 @@ preload, or going back) is a short `served` span that links to the trace that lo
 
 When three or more requests each waited for the one before, or when a request had the same input
 as the one it waited for, the trace panel says so above the spans with the code
-`SPAR_QUERY_CHAIN`, names the requests in order, and says which one looks avoidable. A chain of
+`SPAR_QUERY_CHAIN`, names the requests in order with how long after the one before each started, and says which one
+looks avoidable. A chain of
 two with different inputs, such as a report and then its author, is not reported.
 
 An agent gets the same with `get_trace` and a `lens`, or `get_navigation` for the newest

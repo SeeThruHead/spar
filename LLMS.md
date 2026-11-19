@@ -391,7 +391,8 @@ preload, or going back) is a short `served` span that links to the trace that lo
 
 When three or more requests each waited for the one before, or when a request had the same input
 as the one it waited for, the trace panel says so above the spans with the code
-`SPAR_QUERY_CHAIN`, names the requests in order, and says which one looks avoidable. A chain of
+`SPAR_QUERY_CHAIN`, names the requests in order with how long after the one before each started, and says which one
+looks avoidable. A chain of
 two with different inputs, such as a report and then its author, is not reported.
 
 An agent gets the same with `get_trace` and a `lens`, or `get_navigation` for the newest
@@ -1974,9 +1975,8 @@ Effect, which is what the two Spar checks look for.
 Spar now reports a chain too (`SPAR_QUERY_CHAIN`): three or more requests that each waited for
 the one before, or two where the second had the same input as the first and so did not need its
 answer. It is worked out from the spans of a trace, so it shows in the trace panel and comes
-back from the agents' navigation tool. What Solid's check still does that Spar's does not: it
-gives the time of each link, and it warns from the running app without anyone asking for a
-trace.
+back from the agents' navigation tool. It says how long after the one before each request started. What Solid's check still does that
+Spar's does not: it warns from the running app without anyone asking for a trace.
 
 What Spar's check does that Solid's does not, as far as the package shows: it stops the build
 before the code runs.

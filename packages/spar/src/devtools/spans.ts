@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema, Tracer } from "effect"
+import { Array, Context, Effect, Layer, Schema, Tracer } from "effect"
 import * as Cell from "../internal/cell.ts"
 import * as Diagnostics from "../Diagnostics.ts"
 
@@ -52,6 +52,7 @@ export const sourceOf = (
 
 export type Chain = {
   readonly requests: ReadonlyArray<string>
+  readonly waits: ReadonlyArray<number>
   readonly sameInput: ReadonlyArray<string>
 }
 
@@ -82,6 +83,9 @@ export const chainsOf = (spans: ReadonlyArray<Recorded>): ReadonlyArray<Chain> =
     .map((leaf) => upTo(leaf, ordered))
     .map((links) => ({
       requests: links.map(queryOf),
+      waits: Array.zip(links, links.slice(1)).map(
+        ([earlier, later]) => later.startedAt - earlier.startedAt,
+      ),
       sameInput: links.filter((link) => sameInputAsSource(link, ordered)).map(queryOf),
     }))
     .filter(worthSaying)
@@ -92,9 +96,14 @@ const avoidable = (names: ReadonlyArray<string>): string =>
     ? ""
     : ` ${names.join(" and ")} had the same input as the request before it, so it did not need that answer to start.`
 
+const waited = (millis: number | undefined): string =>
+  millis === undefined ? "" : ` ${millis.toFixed(0)} ms later`
+
 export const chainText = (chain: Chain): string =>
   Diagnostics.text("SPAR_QUERY_CHAIN", {
-    said: `${chain.requests.length} requests ran one after another: ${chain.requests.join(", then ")}.${avoidable(chain.sameInput)}`,
+    said: `${chain.requests.length} requests ran one after another: ${chain.requests
+      .map((name, index) => (index === 0 ? name : `${name}${waited(chain.waits[index - 1])}`))
+      .join(", then ")}.${avoidable(chain.sameInput)}`,
   })
 
 const millis = (nanos: bigint): number => Number(nanos / 1000n) / 1000

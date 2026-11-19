@@ -304,7 +304,7 @@ describe("one log of everything that happened", () => {
     ]
 
     expect(Spans.chainsOf(three)).toEqual([
-      { requests: ["shop/Org", "shop/Report", "shop/Author"], sameInput: [] },
+      { requests: ["shop/Org", "shop/Report", "shop/Author"], waits: [10, 10], sameInput: [] },
     ])
     expect(
       Spans.chainsOf([
@@ -322,13 +322,13 @@ describe("one log of everything that happened", () => {
       ]).map(Spans.chainText),
     ).toEqual([
       [
-        "[SPAR_QUERY_CHAIN] 2 requests ran one after another: shop/Report, then shop/Notes. shop/Notes had the same input as the request before it, so it did not need that answer to start.",
+        "[SPAR_QUERY_CHAIN] 2 requests ran one after another: shop/Report, then shop/Notes 10 ms later. shop/Notes had the same input as the request before it, so it did not need that answer to start.",
         "  fix: If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.",
         '  see: LLMS.md, section "SPAR_QUERY_CHAIN"',
       ].join("\n"),
     ])
-    expect(Spans.chainText({ requests: ["a", "b", "c"], sameInput: [] })).toContain(
-      "3 requests ran one after another: a, then b, then c.\n",
+    expect(Spans.chainText({ requests: ["a", "b", "c"], waits: [120.4], sameInput: [] })).toContain(
+      "3 requests ran one after another: a, then b 120 ms later, then c.\n",
     )
   })
 
