@@ -153,6 +153,35 @@ describe("Outbox", () => {
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )
 
+  it.effect("what is sent later stays in the trace of what caused it, even after a restart", () =>
+    Effect.gen(function* () {
+      const saved = yield* KeyValueStore.KeyValueStore
+      const before = yield* started(patient)
+      const click = yield* Effect.withSpan(
+        Effect.andThen(before.persist(entry("caused", 2)), Effect.currentSpan),
+        "on click",
+      )
+
+      yield* saved.set("spar/outbox/older", '{"channel":"mail","payload":null,"seq":1}')
+
+      const after = yield* started(patient)
+      const traces = yield* Ref.make<ReadonlyArray<readonly [string, string]>>([])
+
+      yield* after.register("mail", (waiting) =>
+        Effect.flatMap(Effect.orDie(Effect.currentSpan), (span) =>
+          Ref.update(traces, (all) => [...all, [waiting.key, span.traceId] as const]),
+        ),
+      )
+      yield* TestClock.adjust("1 second")
+
+      const seen = yield* Ref.get(traces)
+
+      expect(seen.map(([key]) => key)).toEqual(["older", "caused"])
+      expect(seen[1]?.[1]).toBe(click.traceId)
+      expect(seen[0]?.[1]).not.toBe(click.traceId)
+    }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
   it.effect("a saved item that can no longer be read is set aside and the rest still goes", () =>
     Effect.gen(function* () {
       const saved = yield* KeyValueStore.KeyValueStore

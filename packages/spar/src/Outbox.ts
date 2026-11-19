@@ -11,6 +11,7 @@ import {
   Stream,
   Struct,
   SubscriptionRef,
+  Tracer,
 } from "effect"
 import type { Scope } from "effect"
 import { KeyValueStore } from "effect/persistence"
@@ -19,10 +20,13 @@ import { events, on } from "./internal/listen.ts"
 import { fromSubscriptionRef, succeed } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 
+const Trace = Schema.Struct({ traceId: Schema.String, spanId: Schema.String })
+
 const Stored = Schema.Struct({
   channel: Schema.String,
   payload: Schema.Json,
   seq: Schema.Int,
+  trace: Schema.optional(Trace),
 })
 
 const Buried = Schema.Struct({ ...Stored.fields, reason: Schema.String })
@@ -32,7 +36,14 @@ export type Entry = {
   readonly channel: string
   readonly payload: Schema.Json
   readonly seq: number
+  readonly trace?: typeof Trace.Type | undefined
 }
+
+const causedBy = (entry: Entry) =>
+  Option.match(Option.fromNullishOr(entry.trace), {
+    onNone: () => ({}),
+    onSome: (trace) => ({ parent: Tracer.externalSpan({ ...trace, sampled: true }) }),
+  })
 
 export type Dead = Entry & { readonly reason: string }
 
@@ -158,7 +169,9 @@ const make = Effect.fnUntraced(function* (options: Options) {
   )
 
   const persist = Effect.fn("Outbox.persist")(function* ({ key, ...entry }: Entry) {
-    yield* waiting.set(key, entry)
+    const span = yield* Effect.currentSpan
+
+    yield* waiting.set(key, { ...entry, trace: { traceId: span.traceId, spanId: span.spanId } })
     yield* added
   }, Effect.orDie)
 
@@ -192,6 +205,7 @@ const make = Effect.fnUntraced(function* (options: Options) {
       }),
       Effect.withSpan("Outbox.deliver", {
         attributes: { "outbox.key": entry.key, "outbox.channel": entry.channel },
+        ...causedBy(entry),
       }),
     )
 
