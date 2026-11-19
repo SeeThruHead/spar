@@ -11,6 +11,17 @@ section here:
   see: LLMS.md, section "SPAR_WAIT_IN_COMPONENT"
 ```
 
+A report from the running app about a component also has an `in` line, the components it is
+inside from the root down, and its `at` line is where that component's view was made:
+
+```
+[SPAR_PART_CRASHED] A part of the page crashed.
+  in ShellView > PeopleView
+  at /src/PeopleView.tsx:12:27
+  fix: Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.
+  see: LLMS.md, section "SPAR_PART_CRASHED"
+```
+
 The same list is in `packages/spar/diagnostics.json` for tools.
 
 ### SPAR_JSX_OUTSIDE_VIEW
@@ -74,6 +85,14 @@ Reported by: The running app: an error's message, or an entry in the log.
 Requests ran one after another: each could start only when the one before had answered.
 
 Fix: If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+### SPAR_PART_CRASHED
+
+A part of the page crashed.
+
+Fix: Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.
 
 Reported by: The running app: an error's message, or an entry in the log.
 

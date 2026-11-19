@@ -11,6 +11,7 @@ import { RowKey, UiTree } from "./internal/uiTree.ts"
 import { drawn, placed, recovering } from "./internal/inspect.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Fields } from "./Props.ts"
+import * as Diagnostics from "./Diagnostics.ts"
 import * as Timeline from "./Timeline.ts"
 
 export type View<Props> = (props: Props) => Element
@@ -21,7 +22,11 @@ export type Component<Props, E = never, R = never, ViewProps = never> = {
   readonly mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>
 }
 
-export type Declared = { readonly displayName: string; readonly props: Fields }
+export type Declared = {
+  readonly displayName: string
+  readonly props: Fields
+  readonly at: string
+}
 
 export type Mountable<Props, E = never, R = never, ViewProps = never> =
   | (View<Props> & View<ViewProps> & Declared)
@@ -72,6 +77,7 @@ const inViewScope = <A, E, Requirements>(
 export type Made<F extends Fields> = View<Schema.Struct<F>["Type"]> & {
   readonly displayName: string
   readonly props: F
+  readonly at: string
 }
 
 export const make = <const F extends Fields>(
@@ -82,6 +88,7 @@ export const make = <const F extends Fields>(
   Object.assign((given: Schema.Struct<F>["Type"]) => drawn(name, props, given, draw(given)), {
     displayName: name,
     props,
+    at: Diagnostics.locationIn(new Error("where this view was made").stack, 1),
   })
 
 const spanName = (view: Declared): string =>
@@ -117,19 +124,30 @@ const shownIn = <Props>(view: View<Props>, made: Props, services: ReadonlyArray<
 
 const aFrame = 16
 
-const noticed = <A, E, R>(name: string, made: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.timed(made), ([took, value]) => {
-    const millis = Math.round(Duration.toMillis(took))
-    if (millis < aFrame) return Effect.succeed(value)
+const noticed = <A, E, R>(
+  view: Declared,
+  made: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R | ViewScope> =>
+  Effect.flatMap(
+    Effect.zip(Effect.timed(made), Effect.service(ViewScope)),
+    ([[took, value], mounted]) => {
+      const millis = Math.round(Duration.toMillis(took))
+      if (millis < aFrame) return Effect.succeed(value)
 
-    return Effect.as(
-      Effect.andThen(
-        Effect.annotateCurrentSpan("spar.waited_ms", millis),
-        Timeline.note("waited", name, () => ({ millis, code: "SPAR_COMPONENT_WAITED" })),
-      ),
-      value,
-    )
-  })
+      return Effect.as(
+        Effect.andThen(
+          Effect.annotateCurrentSpan("spar.waited_ms", millis),
+          Timeline.note("waited", spanName(view), () => ({
+            millis,
+            code: "SPAR_COMPONENT_WAITED",
+            in: pathOf(mounted).join(" > "),
+            at: view.at,
+          })),
+        ),
+        value,
+      )
+    },
+  )
 
 const connected =
   <Props, Outer, E, Requirements>(
@@ -142,9 +160,7 @@ const connected =
     component<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
       Effect.withSpan(
         inViewScope(
-          Effect.flatMap(noticed(spanName(view), props(outer)), (made) =>
-            shownIn(view, made, services),
-          ),
+          Effect.flatMap(noticed(view, props(outer)), (made) => shownIn(view, made, services)),
           spanName(view),
         ),
         spanName(view),
@@ -187,7 +203,7 @@ export const crash =
   ): Component<Props, E, R | R2, ViewProps> =>
     component<Props, E, R | R2, ViewProps>(viewOf(self), (props) =>
       Effect.catchDefect(child(self, props), (defect) =>
-        Effect.andThen(report(defect), child(fallback, { defect })),
+        Effect.andThen(report(defect, viewOf(self)), child(fallback, { defect })),
       ),
     )
 

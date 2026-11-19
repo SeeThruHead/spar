@@ -18,6 +18,7 @@ import { Inspector } from "./Store.ts"
 import type { Component } from "./View.ts"
 
 export { CrashReporter } from "./internal/crash.ts"
+export type { Where as CrashWhere } from "./internal/crash.ts"
 export type { Frame } from "./internal/frame.ts"
 
 export type NoProps = Readonly<Record<string, never>>

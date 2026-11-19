@@ -54,6 +54,17 @@ section here:
   see: LLMS.md, section "SPAR_WAIT_IN_COMPONENT"
 \`\`\`
 
+A report from the running app about a component also has an \`in\` line, the components it is
+inside from the root down, and its \`at\` line is where that component's view was made:
+
+\`\`\`
+[SPAR_PART_CRASHED] A part of the page crashed.
+  in ShellView > PeopleView
+  at /src/PeopleView.tsx:12:27
+  fix: Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.
+  see: LLMS.md, section "SPAR_PART_CRASHED"
+\`\`\`
+
 The same list is in \`packages/spar/diagnostics.json\` for tools.
 
 ${all.map(section).join("\n\n")}

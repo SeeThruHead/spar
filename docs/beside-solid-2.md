@@ -79,8 +79,10 @@ before the code runs.
 Solid 2 ships `diagnostics.json` (code, kind, severity, trigger, repair, guide address), prints a
 report as `[CODE] message`, an `in` line with the owners, an `at` line with the file, line and
 column, and points an agent at a skill file with a section for each code. Spar now does the same
-in its own terms: `docs/diagnostics.md`. What Spar's reports lack next to Solid's: the path of
-owning components on a run-time report, and a source location on anything but a build finding.
+in its own terms: `docs/diagnostics.md`. A crashed part and a component that held its children back
+are reported with the path of owning components and the file, line and column where the view was
+made. What Spar's reports still lack next to Solid's: a location for anything finer than a view
+(a binding, an effect), and an owner path on a store's refusal, which has no component.
 
 ## Routing and preloading
 

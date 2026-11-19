@@ -1,6 +1,6 @@
 ---
 id: spa-p2k1
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T19:56:57Z

@@ -1957,8 +1957,10 @@ before the code runs.
 Solid 2 ships `diagnostics.json` (code, kind, severity, trigger, repair, guide address), prints a
 report as `[CODE] message`, an `in` line with the owners, an `at` line with the file, line and
 column, and points an agent at a skill file with a section for each code. Spar now does the same
-in its own terms: `docs/diagnostics.md`. What Spar's reports lack next to Solid's: the path of
-owning components on a run-time report, and a source location on anything but a build finding.
+in its own terms: `docs/diagnostics.md`. A crashed part and a component that held its children back
+are reported with the path of owning components and the file, line and column where the view was
+made. What Spar's reports still lack next to Solid's: a location for anything finer than a view
+(a binding, an effect), and an owner path on a store's refusal, which has no component.
 
 ### Routing and preloading
 
@@ -1989,6 +1991,17 @@ section here:
   at src/AgentPage.ts:41:23
   fix: Declare the data with a Query and ask for it (yield* TheQuery.ask(input)); the handle is there at once and the view shows its status.
   see: LLMS.md, section "SPAR_WAIT_IN_COMPONENT"
+```
+
+A report from the running app about a component also has an `in` line, the components it is
+inside from the root down, and its `at` line is where that component's view was made:
+
+```
+[SPAR_PART_CRASHED] A part of the page crashed.
+  in ShellView > PeopleView
+  at /src/PeopleView.tsx:12:27
+  fix: Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.
+  see: LLMS.md, section "SPAR_PART_CRASHED"
 ```
 
 The same list is in `packages/spar/diagnostics.json` for tools.
@@ -2054,6 +2067,14 @@ Reported by: The running app: an error's message, or an entry in the log.
 Requests ran one after another: each could start only when the one before had answered.
 
 Fix: If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_PART_CRASHED
+
+A part of the page crashed.
+
+Fix: Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.
 
 Reported by: The running app: an error's message, or an entry in the log.
 

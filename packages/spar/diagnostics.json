@@ -56,6 +56,13 @@
     "reportedBy": "The running app: an error's message, or an entry in the log."
   },
   {
+    "code": "SPAR_PART_CRASHED",
+    "kind": "run",
+    "what": "A part of the page crashed.",
+    "fix": "Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.",
+    "reportedBy": "The running app: an error's message, or an entry in the log."
+  },
+  {
     "code": "SPAR_DUPLICATE_KEY",
     "kind": "run",
     "what": "A keyed list has rows that share a key.",

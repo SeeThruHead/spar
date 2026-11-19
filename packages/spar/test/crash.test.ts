@@ -44,15 +44,26 @@ const Page = (widget: View.Mountable<App.NoProps>) =>
 
 class Reports extends Context.Service<
   Reports,
-  { readonly seen: Effect.Effect<ReadonlyArray<unknown>> }
+  {
+    readonly seen: Effect.Effect<ReadonlyArray<unknown>>
+    readonly wheres: Effect.Effect<ReadonlyArray<App.CrashWhere>>
+  }
 >()("test/Reports") {
   static readonly layer = Layer.effectContext(
     Effect.gen(function* () {
       const seen = yield* SubscriptionRef.make<ReadonlyArray<unknown>>([])
 
-      return Context.make(Reports, { seen: SubscriptionRef.get(seen) }).pipe(
-        Context.add(App.CrashReporter, (defect) =>
-          SubscriptionRef.update(seen, (all) => [...all, defect]),
+      const wheres = yield* SubscriptionRef.make<ReadonlyArray<App.CrashWhere>>([])
+
+      return Context.make(Reports, {
+        seen: SubscriptionRef.get(seen),
+        wheres: SubscriptionRef.get(wheres),
+      }).pipe(
+        Context.add(App.CrashReporter, (defect, where) =>
+          Effect.andThen(
+            SubscriptionRef.update(seen, (all) => [...all, defect]),
+            SubscriptionRef.update(wheres, (all) => [...all, where]),
+          ),
         ),
       )
     }),
@@ -81,6 +92,11 @@ describe("crashes", () => {
 
         expect(alert.textContent).toBe("This part is unavailable: the widget's data is corrupt")
         expect(yield* reports.seen).toEqual(["the widget's data is corrupt"])
+
+        const [where] = yield* reports.wheres
+
+        expect(where?.in.length).toBeGreaterThan(1)
+        expect(where?.at).toMatch(/:\d+:\d+$/)
 
         yield* Testing.click("button", "Rename")
         yield* Testing.eventually(() => expect(label()).toBe("LOUD"))

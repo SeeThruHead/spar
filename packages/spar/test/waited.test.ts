@@ -35,6 +35,9 @@ describe("a component that makes everything below it wait", () => {
 
       expect([waited?.kind, waited?.name]).toEqual(["waited", "Orders"])
       expect(millisOf(waited?.detail).millis).toBeGreaterThanOrEqual(16)
+      expect(JSON.stringify(waited?.detail)).toMatch(
+        /"code":"SPAR_COMPONENT_WAITED","in":"[^"]*Orders","at":"[^"]+:\d+:\d+"/,
+      )
     }),
   )
 

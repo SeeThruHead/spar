@@ -47,6 +47,11 @@ export const all = {
     what: "Requests ran one after another: each could start only when the one before had answered.",
     fix: "If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.",
   },
+  SPAR_PART_CRASHED: {
+    kind: "run",
+    what: "A part of the page crashed.",
+    fix: "Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",
@@ -124,6 +129,21 @@ export const all = {
   },
 } as const satisfies Readonly<Record<string, Diagnostic>>
 
+const frame = /\(?([^()\s@]+):(\d+):(\d+)\)?$/
+
+const withoutOrigin = (address: string): string =>
+  address.replace(/^[a-z]+:\/\/[^/]*/, "").replace(/\?[^:]*/, "")
+
+export const locationIn = (stack: string | undefined, skip: number): string =>
+  (stack ?? "")
+    .split("\n")
+    .flatMap((line) => {
+      const parts = frame.exec(line.trim())
+
+      return parts === null ? [] : [withoutOrigin(parts.slice(1).join(":"))]
+    })
+    .at(skip) ?? ""
+
 export type Code = keyof typeof all
 
 export const guide = (code: Code): string => `LLMS.md, section "${code}"`
@@ -132,11 +152,18 @@ export const brief = (code: Code): string => `[${code}] ${all[code].what}`
 
 export const text = (
   code: Code,
-  options: { readonly said?: string; readonly at?: string } = {},
+  options: {
+    readonly said?: string
+    readonly in?: ReadonlyArray<string>
+    readonly at?: string
+  } = {},
 ): string =>
   [
     `[${code}] ${options.said ?? all[code].what}`,
-    ...(options.at === undefined ? [] : [`  at ${options.at}`]),
+    ...(options.in === undefined || options.in.length === 0
+      ? []
+      : [`  in ${options.in.join(" > ")}`]),
+    ...(options.at === undefined || options.at === "" ? [] : [`  at ${options.at}`]),
     `  fix: ${all[code].fix}`,
     `  see: ${guide(code)}`,
   ].join("\n")
