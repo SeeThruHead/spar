@@ -126,7 +126,7 @@ const attach = (node: Dom.Host, handle: Handle): Later =>
 const listener =
   (start: (action: Action) => void, type: string, handler: unknown) =>
   (event: Event): void =>
-    start(traced(type, toAction(handler, event)))
+    start(traced(type, toAction(handler, event), event.currentTarget))
 
 const listen = (node: Dom.Host, type: string, handler: unknown, place: Place): void =>
   Cell.own(place.owner, Dom.listen(node, type, listener(place.start, type, handler)))

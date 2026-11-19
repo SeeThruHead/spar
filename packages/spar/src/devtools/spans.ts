@@ -21,6 +21,7 @@ export type Lens = typeof Lens.Type
 export const lensOf = (span: Recorded, where: "page" | "backend"): Lens | "other" => {
   if (where === "backend") return "backend"
   if (span.attributes["spar.kind"] === "view") return "rendering"
+  if (span.attributes["spar.kind"] === "action") return "rendering"
   if (span.attributes["spar.kind"] === "data") return "data"
   if (span.attributes["spar.store"] !== undefined) return "stores"
 

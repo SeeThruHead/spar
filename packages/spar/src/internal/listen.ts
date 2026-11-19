@@ -4,6 +4,7 @@ import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
 import { ActionScope } from "./actionScope.ts"
 import { report } from "./crash.ts"
+import { viewAt } from "./inspect.ts"
 
 export type Source<E> = {
   readonly add: (listener: (event: E) => void) => void
@@ -57,10 +58,20 @@ export const starter = Effect.fnUntraced(function* () {
   return yield* starterIn(outliving)
 })
 
-export const traced = (type: string, action: Action): Action => {
+export const traced = (type: string, action: Action, target: unknown): Action => {
   if (Array.isArray(action) && action.length === 0) return action
 
-  return Effect.withSpan(run(action), `on ${type}`, { captureStackTrace: false, root: true })
+  return Effect.withSpan(run(action), `on ${type}`, {
+    captureStackTrace: false,
+    root: true,
+    attributes: {
+      "spar.kind": "action",
+      ...Option.match(viewAt(target), {
+        onNone: () => ({}),
+        onSome: (view) => ({ "spar.view": view }),
+      }),
+    },
+  })
 }
 
 export const listen = Effect.fnUntraced(function* (
@@ -69,7 +80,8 @@ export const listen = Effect.fnUntraced(function* (
   handler: unknown,
 ) {
   const start = yield* starter()
-  const listener = (event: Event): void => start(traced(type, toAction(handler, event)))
+  const listener = (event: Event): void =>
+    start(traced(type, toAction(handler, event), event.currentTarget))
 
   yield* Effect.acquireRelease(
     Effect.sync(() => target.addEventListener(type, listener)),

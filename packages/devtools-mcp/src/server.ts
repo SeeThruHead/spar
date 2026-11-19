@@ -373,6 +373,35 @@ const GetTrace = Tool.make("get_trace", {
   success: Schema.Array(Spans.Recorded),
 })
 
+export const Navigation = Schema.Struct({
+  route: Schema.NullOr(Schema.String),
+  traceId: Schema.NullOr(Schema.String),
+  spans: Schema.Array(Spans.Recorded),
+})
+
+const GetNavigation = Tool.make("get_navigation", {
+  description:
+    "The newest route change and every span of its trace: the route, its trace id and the spans as get_trace gives them. Give `back` to count route changes back from the newest (1 is the one before), and `lens` to keep one kind of span. The route is null when the app has not changed route yet.",
+  parameters: Schema.Struct({
+    back: Schema.optional(Schema.Int),
+    lens: Schema.optional(Spans.Lens),
+  }),
+  success: Navigation,
+})
+
+const navigationOf = (page: Page, back: number, lens: Spans.Lens) => {
+  const route = page.moments.filter((each) => each.kind === "route").at(-1 - back)
+  if (route === undefined) return { route: null, traceId: null, spans: [] }
+
+  return {
+    route: route.name,
+    traceId: route.traceId,
+    spans: page.spans.filter(
+      (span) => span.traceId === route.traceId && Spans.inLens(lens, span, "page"),
+    ),
+  }
+}
+
 const steppedTo = (page: Page) => {
   const moment = page.moments.find((each) => each.seq === page.viewing) ?? null
 
@@ -431,6 +460,7 @@ export const Tools = Toolkit.make(
   ListComponents,
   GetComponent,
   GetTrace,
+  GetNavigation,
   ListBranches,
   Fork,
   SwitchBranch,
@@ -510,6 +540,8 @@ const ToolHandlers = Tools.toLayer(
             (span) => span.traceId === traceId && Spans.inLens(lens ?? "all", span, "page"),
           ),
         ),
+      get_navigation: ({ back, lens }) =>
+        Effect.map(pages.page, (page) => navigationOf(page, back ?? 0, lens ?? "all")),
       list_pages: () => pages.listed,
       use_page: ({ page }) => Effect.andThen(pages.choose(page), pages.listed),
       get_actions: ({ store: key }) => Effect.map(found(key), (now) => now.actions),

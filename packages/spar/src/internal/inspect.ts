@@ -72,6 +72,22 @@ export const drawn = (name: string, fields: Fields, props: unknown, element: Ele
     onSome: (inspector) => inspector.draw(name, fields, props, element),
   })
 
+const markOf = (target: unknown): Option.Option<number> => {
+  if (!(target instanceof globalThis.Element)) return Option.none()
+
+  return Option.map(Option.fromNullOr(target.closest(`[${mark}]`)), (owner) =>
+    Number(owner.getAttribute(mark)),
+  )
+}
+
+export const viewAt = (target: unknown): Option.Option<string> =>
+  Option.flatMap(inspecting.read(), (inspector) =>
+    Option.map(
+      Option.flatMap(markOf(target), (id) => inspector.find(id)),
+      (seen) => seen.name,
+    ),
+  )
+
 export const placed = (path: () => Path, services: ReadonlyArray<string>): void => {
   Option.map(inspecting.read(), (inspector) => inspector.place({ path: path(), services }))
 }

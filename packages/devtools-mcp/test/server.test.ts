@@ -6,11 +6,11 @@ import { McpClient, McpProtocol } from "effect/ai"
 import { Command } from "effect/cli"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
-import { Props, Store, Timeline, UiState, View } from "spar"
+import { Props, Router, Store, Timeline, UiState, View } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import { jsx } from "spar/jsx-runtime"
-import { command } from "../src/cli.ts"
+import { command, waterfall } from "../src/cli.ts"
 import * as Page from "../src/client.ts"
 import { changesBetween, layer } from "../src/server.ts"
 
@@ -106,6 +106,23 @@ const Note = View.described(["Tally"]).connect(
   }),
 )(NoteView)
 
+const span = (
+  name: string,
+  parentSpanId: string | null,
+  startedAt: number,
+  endedAt: number | null,
+  attributes: Readonly<Record<string, string>>,
+): Spans.Recorded => ({
+  name,
+  traceId: "t",
+  spanId: name,
+  parentSpanId,
+  startedAt,
+  endedAt,
+  failed: name === "broke",
+  attributes,
+})
+
 const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boolean) =>
   Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("20 millis") })
 
@@ -135,6 +152,7 @@ describe("the devtools server for agents", () => {
         "list_components",
         "get_component",
         "get_trace",
+        "get_navigation",
         "list_branches",
         "fork",
         "switch_branch",
@@ -459,6 +477,65 @@ describe("the devtools server for agents", () => {
       printed.mockRestore()
     }).pipe(Effect.scoped, Effect.provide(Layer.merge(Served, BunServices.layer))),
   )
+
+  it.live("the newest navigation prints as a waterfall from a shell", () =>
+    Effect.gen(function* () {
+      const built = yield* openInspected()
+      const url = yield* origin
+      const printed = vi.spyOn(console, "log").mockImplementation(() => undefined)
+      const last = () => String(printed.mock.calls.at(-1)?.[0])
+      const run = Command.runWith(command, { version: "0.0.0" })
+      const mcp = yield* agent()
+
+      yield* until(mcp.call("list_stores", {}), (answer) =>
+        JSON.stringify(answer.said).includes("test/Tally"),
+      )
+      yield* run(["trace", "--url", url])
+      expect(last()).toBe("The app has not changed route yet.")
+
+      const routed = yield* Layer.build(
+        Layer.provideMerge(Router.Router.layerMemory("/"), Layer.succeedContext(built)),
+      )
+
+      yield* Effect.provide(
+        Effect.flatMap(Effect.service(Router.Router), (router) =>
+          router.go(Router.route("/there"), {}),
+        ),
+        routed,
+      )
+
+      const found = yield* until(mcp.call("get_navigation", {}), (answer) =>
+        JSON.stringify(answer.said).includes("Router.go"),
+      )
+      const traceId = /"traceId":"([0-9a-f]+)"/.exec(JSON.stringify(found.said))?.[1] ?? ""
+
+      yield* run(["trace", "--url", url])
+      expect(last()).toMatch(/^\/there, trace [0-9a-f]+, 1 spans\nRouter\.go {2}\+0\.0 ms {2}/)
+      yield* run(["trace", "--url", url, "--id", traceId, "--lens", "stores"])
+      expect(last()).toBe(`trace ${traceId}, 0 spans\n`)
+      yield* run(["trace", "--url", url, "--back", "3"])
+      expect(last()).toBe("The app has not changed route yet.")
+      printed.mockRestore()
+    }).pipe(Effect.scoped, Effect.provide(Layer.merge(Served, BunServices.layer))),
+  )
+
+  it("a waterfall in text nests spans and says what each waited for", () => {
+    expect(
+      waterfall([
+        span("asked", "on click", 12, 13.5, { "spar.query.after": "test/Users . value" }),
+        span("on click", null, 10, 20, { "spar.view": "NoteView" }),
+        span("served", "on click", 14, null, { "spar.query.served_from": "0123456789abcdef" }),
+        span("broke", "asked", 15, 16, {}),
+      ]),
+    ).toBe(
+      [
+        "on click  +0.0 ms  10.0 ms  in NoteView",
+        "  asked  +2.0 ms  1.5 ms  input from test/Users . value",
+        "  served  +4.0 ms  0.0 ms  served from what trace 01234567 loaded",
+        "    broke  +5.0 ms  1.0 ms  failed",
+      ].join("\n"),
+    )
+  })
 
   it.live("what an agent asks for that cannot be done comes back as a plain reason", () =>
     Effect.gen(function* () {

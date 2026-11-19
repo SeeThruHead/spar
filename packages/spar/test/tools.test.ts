@@ -339,6 +339,7 @@ describe("devtools an app did not ask for", () => {
           "page on click no 0px",
           "page test/Tally/added no 12px",
         ])
+        expect(screen.getByLabelText("Spans").textContent).toMatch(/in \w+View/)
         expect(drawn.filter((span) => span.startsWith("backend"))).toEqual([
           "backend Tally.add yes 0px",
           "backend Tally.still no 12px",

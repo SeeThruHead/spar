@@ -807,6 +807,8 @@ const waitedFor = (source: string): string => (source === "" ? "" : `input from 
 
 const noteOf = (attributes: Readonly<Record<string, string>>): string => {
   const from = attributes["spar.query.served_from"]
+  const view = attributes["spar.view"]
+  if (view !== undefined) return `in ${view}`
   if (from === undefined) return waitedFor(attributes["spar.query.after"] ?? "")
 
   return from === ""

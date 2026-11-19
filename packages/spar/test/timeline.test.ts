@@ -248,6 +248,7 @@ describe("one log of everything that happened", () => {
   it("a span belongs to one lens, by what made it", () => {
     expect(Spans.lensOf(made({}), "backend")).toBe("backend")
     expect(Spans.lensOf(made({ "spar.kind": "view" }), "page")).toBe("rendering")
+    expect(Spans.lensOf(made({ "spar.kind": "action" }), "page")).toBe("rendering")
     expect(Spans.lensOf(made({ "spar.kind": "data", "spar.store": "q" }), "page")).toBe("data")
     expect(Spans.lensOf(made({ "spar.store": "s" }), "page")).toBe("stores")
     expect(Spans.lensOf(made({}), "page")).toBe("other")
