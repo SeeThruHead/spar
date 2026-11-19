@@ -1,8 +1,12 @@
+import { sparJsx } from "spar/transform/vite"
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
+  plugins: [sparJsx],
+  oxc: { jsx: { runtime: "automatic", importSource: "spar" } },
   test: {
     name: "sidebar",
+    environment: "happy-dom",
     include: ["test/**/*.test.ts"],
     coverage: {
       enabled: true,

@@ -6,6 +6,8 @@ import { BadgeView, GlossaryView, IconView, PairView, RowsView } from "./graphic
 import { eventually, find, findText, mount } from "spar/testing"
 import { ItemView } from "./views.tsx"
 import type { Item } from "./views.tsx"
+import * as Cell from "../src/internal/cell.ts"
+import { fromCell } from "../src/internal/reactive.ts"
 import type { Mountable } from "../src/View.ts"
 
 const items = (labels: ReadonlyArray<string>): ReadonlyArray<Item> =>
@@ -119,6 +121,21 @@ describe("the renderer", () => {
 
       yield* SubscriptionRef.set(size, 24)
       yield* eventually(() => expect(icon.getAttribute("width")).toBe("24"))
+    }),
+  )
+
+  it.live("a change that lands while a list is still mounting its first rows is not lost", () =>
+    Effect.gen(function* () {
+      const list = Cell.make(items(["Slow"]))
+      const Slow = View.taking(ItemView.props, (props) =>
+        Effect.as(Effect.sleep("20 millis"), props),
+      )(ItemView)
+
+      yield* mount(Listed(fromCell(list), Slow, RowsView))
+      yield* Effect.sleep("5 millis")
+      yield* Effect.sync(() => list.write(items(["After"])))
+      yield* findText("After")
+      yield* eventually(() => expect(textsOf("listitem")).toEqual(["After"]))
     }),
   )
 

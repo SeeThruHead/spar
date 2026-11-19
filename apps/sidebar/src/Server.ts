@@ -1,13 +1,9 @@
-import { Context, Effect, Layer, Ref, Schema } from "effect"
+import { Context, Effect, Layer, Ref } from "effect"
+import type { HttpClient } from "effect/http"
+import { RpcClient, RpcSerialization } from "effect/rpc"
+import { Agents, ServerUnreachable } from "./api.ts"
 
-export class ServerUnreachable extends Schema.TaggedError<
-  ServerUnreachable,
-  { readonly brand: unique symbol }
->()("ServerUnreachable", {}) {
-  override get message() {
-    return "The server did not answer. Your change is saved here and will be sent again."
-  }
-}
+export { ServerUnreachable }
 
 export class Server extends Context.Service<
   Server,
@@ -36,4 +32,23 @@ export class Server extends Context.Service<
       return Server.of({ start, started: Ref.get(seen) })
     }),
   )
+
+  static readonly layerRemote = (url: string): Layer.Layer<Server, never, HttpClient.HttpClient> =>
+    Layer.effect(
+      Server,
+      Effect.gen(function* () {
+        const agents = yield* RpcClient.make(Agents)
+
+        return Server.of({
+          start: (name, idempotencyKey) =>
+            Effect.catchTag(agents.Start({ name, idempotencyKey }), "RpcClientError", () =>
+              Effect.fail(new ServerUnreachable()),
+            ),
+          started: Effect.orElseSucceed(agents.Started(), () => []),
+        })
+      }),
+    ).pipe(
+      Layer.provide(RpcClient.layerProtocolHttp({ url })),
+      Layer.provide(RpcSerialization.layerNdjson),
+    )
 }

@@ -1,6 +1,6 @@
 import "@spar/ui/styles.css"
 import "./app.css"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient } from "effect/http"
 import { Otlp } from "effect/observability"
@@ -17,14 +17,20 @@ const telemetry = Otlp.layerJson({
   tracerExportInterval: "1 second",
 }).pipe(Layer.provide(FetchHttpClient.layer))
 
+const server = Option.match(
+  Option.fromNullishOr(
+    document.querySelector('meta[name="sidebar-backend"]')?.getAttribute("content"),
+  ),
+  {
+    onNone: () => Server.layer,
+    onSome: (path) =>
+      Layer.provide(Server.layerRemote(new URL(path, location.origin).href), FetchHttpClient.layer),
+  },
+)
+
 const layer = BoardStoreLive.pipe(
   Layer.provideMerge(
-    Layer.mergeAll(
-      Server.layer,
-      Outbox.Outbox.layer,
-      Router.Router.layerBrowser,
-      Toast.Toasts.layer,
-    ),
+    Layer.mergeAll(server, Outbox.Outbox.layer, Router.Router.layerBrowser, Toast.Toasts.layer),
   ),
   Layer.provide(Outbox.layerBrowser),
   Layer.provide(Tabs.layerBrowser),

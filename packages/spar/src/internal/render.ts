@@ -442,9 +442,7 @@ const fillRows = Effect.fnUntraced(function* <A>(
   const turn = yield* Semaphore.make(1)
   const scope = yield* Effect.scope
   const update = yield* starterIn(scope)
-  const initial = yield* rows.items.get
 
-  yield* reconcile(initial)
   yield* Effect.acquireRelease(
     rows.items[Observe](
       (next) => update(Semaphore.withPermit(turn, reconcile(next))),
@@ -452,6 +450,10 @@ const fillRows = Effect.fnUntraced(function* <A>(
     ),
     (stop) => Effect.sync(stop),
   )
+
+  const initial = yield* rows.items.get
+
+  yield* Semaphore.withPermit(turn, reconcile(initial))
 })
 
 const renderRows = <A>(rows: Rows<A>, place: Place): void => {

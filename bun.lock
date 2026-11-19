@@ -67,6 +67,7 @@
     "apps/sidebar": {
       "name": "@spar/sidebar",
       "dependencies": {
+        "@effect/platform-bun": "4.1.4",
         "@spar/ui": "workspace:*",
         "effect": "4.1.4",
         "spar": "workspace:*",
@@ -76,9 +77,11 @@
         "@effect/vitest": "4.1.4",
         "@spar/browsers": "workspace:*",
         "@spar/lint": "workspace:*",
+        "@testing-library/dom": "10.4.1",
         "@types/bun": "1.4.3",
         "@vitest/coverage-istanbul": "5.0.5",
         "axe-core": "4.14.0",
+        "happy-dom": "20.0.11",
         "oxfmt": "0.73.0",
         "oxlint": "1.91.0",
         "playwright": "1.65.1",

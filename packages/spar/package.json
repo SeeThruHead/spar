@@ -17,6 +17,7 @@
     "./devtools/client": "./src/devtools/client.ts",
     "./devtools/entry": "./src/devtools/entry.ts",
     "./devtools/vite": "./src/devtools/vite.ts",
+    "./devtools/spans": "./src/devtools/spans.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {
