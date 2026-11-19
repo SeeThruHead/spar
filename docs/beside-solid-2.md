@@ -29,10 +29,11 @@ independent pieces load side by side.
 - A change in flight is a first-class thing: the screen holds what it showed, `isPending` says a
   change is on the way, and an optimistic value reverts by itself.
 - A superseded request can be cancelled, not only ignored.
-- It is small and fast. In this repo's benchmark the Solid 2 table ships 23.7 kB of JavaScript
-  (gzip) against Spar's 69.2 kB, starts in 4.2 ms against 11.9 ms, and changes one row among
-  10,000 in 0.5 ms against 1.6 ms (`docs/benchmarks.md`).
-- Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 31,
+- It is small and quick to start. In this repo's benchmark the Solid 2 table ships 23.7 kB of
+  JavaScript (gzip) against Spar's 70.0 kB, starts in 4.5 ms against 9.3 ms, and changes one row
+  among 10,000 in 0.5 ms against 1.2 ms. Spar is ahead of it at updating, selecting, swapping and
+  removing rows among 1,000 (`docs/benchmarks.md`).
+- Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 34,
   among them slow scopes, effects that write their own source, and requests thrown away.
 
 **What Spar adds.**

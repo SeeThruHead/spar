@@ -42,11 +42,11 @@ and the backend (`docs/devtools-compared.md`).
   does not check that every action has considered every state of a store.
 - **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
   as cases of their own. In Spar you read `status` and `value` together.
-- **Speed on some list operations, depending on the run.** In the latest run of this repo's
-  benchmark Foldkit is faster than Spar at swapping two rows, removing a row and changing one
-  row among 10,000 when timed to the next frame, and Spar is faster at the rest, uses less memory and ships less JavaScript (`docs/benchmarks.md`). In an
-  earlier run on a busier machine Foldkit was also ahead at updating every 10th row, selecting
-  and clearing, so differences of a few milliseconds here are within the noise.
+- **Speed on a few list operations, depending on the run.** In the latest run of this repo's
+  benchmark Foldkit is ahead of Spar only at removing a row. In earlier runs it was also ahead at
+  swapping two rows and at changing one row among 10,000 timed to the next frame, so differences
+  of a few milliseconds here are within the noise. Spar uses less memory and ships less
+  JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
 - **It will not be tied to the DOM.** The stated plan is primitives that work across rendering

@@ -330,23 +330,23 @@ const repeated = (keys: ReadonlyArray<string>): ReadonlyArray<string> => [
 
 type Placed<A> = { readonly entry: Entry<A>; readonly position: number }
 
-const sameKeys = <A>(
+const wroteAt = <A>(entry: Entry<A> | undefined, item: A, key: (item: A) => string): boolean => {
+  if (Object.is(entry?.cell.read(), item)) return true
+  if (entry?.key !== key(item)) return false
+
+  entry.cell.write(item)
+
+  return true
+}
+
+const refreshedInPlace = <A>(
   previous: ReadonlyArray<Entry<A>>,
   next: ReadonlyArray<A>,
   key: (item: A) => string,
-): boolean =>
-  previous.length === next.length && next.every((item, index) => sameAt(previous[index], item, key))
+): boolean => {
+  if (previous.length !== next.length) return false
 
-const sameAt = <A>(entry: Entry<A> | undefined, item: A, key: (item: A) => string): boolean =>
-  Object.is(entry?.cell.read(), item) || entry?.key === key(item)
-
-const refreshChanged = <A>(previous: ReadonlyArray<Entry<A>>, next: ReadonlyArray<A>): void => {
-  next.forEach((item, index) => {
-    const cell = previous[index]?.cell
-    if (Object.is(cell?.read(), item)) return
-
-    cell?.write(item)
-  })
+  return next.every((item, index) => wroteAt(previous[index], item, key))
 }
 
 const refreshed = <A>(existing: Placed<A>, item: A): Placed<A> => {
@@ -434,7 +434,7 @@ const fillRows = Effect.fnUntraced(function* <A>(
     function* (next: ReadonlyArray<A>) {
       const previous = yield* Ref.get(entries)
 
-      if (sameKeys(previous, next, rows.key)) return refreshChanged(previous, next)
+      if (refreshedInPlace(previous, next, rows.key)) return
 
       const nextKeys = next.map(rows.key)
       const keys = new Set(nextKeys)

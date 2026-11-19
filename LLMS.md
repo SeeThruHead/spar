@@ -1874,11 +1874,11 @@ and the backend (`docs/devtools-compared.md`).
   does not check that every action has considered every state of a store.
 - **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
   as cases of their own. In Spar you read `status` and `value` together.
-- **Speed on some list operations, depending on the run.** In the latest run of this repo's
-  benchmark Foldkit is faster than Spar at swapping two rows, removing a row and changing one
-  row among 10,000 when timed to the next frame, and Spar is faster at the rest, uses less memory and ships less JavaScript (`docs/benchmarks.md`). In an
-  earlier run on a busier machine Foldkit was also ahead at updating every 10th row, selecting
-  and clearing, so differences of a few milliseconds here are within the noise.
+- **Speed on a few list operations, depending on the run.** In the latest run of this repo's
+  benchmark Foldkit is ahead of Spar only at removing a row. In earlier runs it was also ahead at
+  swapping two rows and at changing one row among 10,000 timed to the next frame, so differences
+  of a few milliseconds here are within the noise. Spar uses less memory and ships less
+  JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
 - **It will not be tied to the DOM.** The stated plan is primitives that work across rendering
@@ -1934,10 +1934,11 @@ independent pieces load side by side.
 - A change in flight is a first-class thing: the screen holds what it showed, `isPending` says a
   change is on the way, and an optimistic value reverts by itself.
 - A superseded request can be cancelled, not only ignored.
-- It is small and fast. In this repo's benchmark the Solid 2 table ships 23.7 kB of JavaScript
-  (gzip) against Spar's 69.2 kB, starts in 4.2 ms against 11.9 ms, and changes one row among
-  10,000 in 0.5 ms against 1.6 ms (`docs/benchmarks.md`).
-- Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 31,
+- It is small and quick to start. In this repo's benchmark the Solid 2 table ships 23.7 kB of
+  JavaScript (gzip) against Spar's 70.0 kB, starts in 4.5 ms against 9.3 ms, and changes one row
+  among 10,000 in 0.5 ms against 1.2 ms. Spar is ahead of it at updating, selecting, swapping and
+  removing rows among 1,000 (`docs/benchmarks.md`).
+- Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 34,
   among them slow scopes, effects that write their own source, and requests thrown away.
 
 **What Spar adds.**
@@ -3417,12 +3418,14 @@ import {
   Context,
   Deferred,
   Effect,
+  Exit,
   Layer,
   MutableRef,
   Option,
   Ref,
   Schedule,
   Schema,
+  Scope,
   SubscriptionRef,
   Tracer,
 } from "effect"
@@ -3797,6 +3800,46 @@ describe("the natural way: a value from one place feeds a query declared in anot
     ),
   )
 
+  it.live("a list whose next page is one it already has says there is no more", () =>
+    Effect.gen(function* () {
+      const Feed = View.connect(
+        Effect.fnUntraced(function* () {
+          const feed = yield* Orders.pages({ first: 1, next: () => Option.some(1) })
+
+          return {
+            items: Reactive.map(feed.pages, (all) => all.flat().join(",")),
+            state: Reactive.map(feed.loading, String),
+            more: Reactive.map(feed.more, String),
+            onMore: feed.loadMore,
+          }
+        }),
+      )(FeedView)
+      const found = yield* directory
+
+      yield* Testing.mount(Feed)
+      yield* shows("", "true", "false")
+
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, ["a"]))
+      yield* shows("a", "false", "false")
+      yield* Testing.click("button", "More")
+      yield* Effect.sleep("20 millis")
+      yield* shows("a", "false", "false")
+      expect((yield* Ref.get(found.asked)).map((each) => each.what)).toEqual(["orders 1"])
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
       const OrdersOf = View.taking(
@@ -4115,8 +4158,22 @@ describe("server data in a store", () => {
 
       yield* once(1)
       yield* once(2)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["2"])
       yield* once(3)
       expect(Object.keys((yield* few.state.get).entries)).toEqual(["3"])
+
+      const early = yield* Scope.make()
+
+      yield* Effect.provideService(Effect.provide(Few.ask(7), built), Scope.Scope, early)
+      yield* Effect.yieldNow
+      yield* answer("orders 7", ["x"])
+      yield* once(8)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["7"])
+      yield* once(6)
+      yield* TestClock.adjust("1 second")
+      yield* Scope.close(early, Exit.void)
+      yield* Effect.yieldNow
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["7"])
 
       yield* Effect.provide(Few.ask(9), built)
       yield* Effect.yieldNow
