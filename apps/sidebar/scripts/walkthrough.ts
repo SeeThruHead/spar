@@ -166,6 +166,7 @@ const walk = async (browser: Browser, size: Size): Promise<ReadonlyArray<string>
   await page.getByRole("dialog").waitFor({ state: "detached" })
   await page.getByRole("link", { name: /Trip planning/ }).click()
   await page.getByRole("heading", { level: 1, name: "Trip planning" }).waitFor()
+  await page.getByText("The server has no record of Trip planning yet.").waitFor()
   await shot("5-agent-page")
 
   const agent = [

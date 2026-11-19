@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, pipe } from "effect"
+import { Effect, Option, Schedule, Schema, pipe } from "effect"
 import { Query, Reactive, Router, View } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
@@ -27,6 +27,7 @@ export class RecordQuery extends Query.Tag<RecordQuery>()("sidebar/Record", {
   success: Started,
   failure: Schema.Union([NoRecord, ServerUnreachable]),
   load: (name: string) => Effect.flatMap(Effect.service(Server), (server) => server.describe(name)),
+  retry: Schedule.upTo(Schedule.spaced("150 millis"), { times: 4 }),
 }) {}
 
 const recordText = (

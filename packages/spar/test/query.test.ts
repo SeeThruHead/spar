@@ -87,6 +87,14 @@ class Orders extends Query.Tag<Orders>()("test/Orders", {
   staleAfter: "1 minute",
 }) {}
 
+class Patient extends Query.Tag<Patient>()("test/Patient", {
+  input: Schema.Void,
+  success: Schema.Finite,
+  failure: Schema.String,
+  load: () => Effect.flatMap(directory, (found) => found.stock),
+  retry: Schedule.recurs(1),
+}) {}
+
 const RosterState = Schema.Struct({ renamed: Schema.Int })
 
 type RosterState = typeof RosterState.Type
@@ -483,6 +491,22 @@ describe("server data in a store", () => {
         yield* connection("online")
         expect(yield* asked(4)).toEqual(["stock", "users", "stock", "stock"])
       }),
+  )
+
+  it.effect("a query given a schedule tries again by itself before it calls it a failure", () =>
+    Effect.gen(function* () {
+      const { built, whats, refuse, answer } = yield* opened
+      const patient = yield* Layer.build(Layer.provide(Patient.live, Layer.succeedContext(built)))
+      const shown = yield* Effect.provide(Patient.ask(), patient)
+
+      yield* Effect.yieldNow
+      yield* refuse("stock", "busy")
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+      expect(yield* shown.status.get).toBe("loading")
+      yield* answer("stock", 9)
+      expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
+    }),
   )
 
   it.effect("with no stale time it is stale as soon as time has passed", () =>

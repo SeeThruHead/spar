@@ -1,4 +1,15 @@
-import { Clock, Duration, Effect, Formatter, Option, Record, Schema, Stream, Tracer } from "effect"
+import {
+  Clock,
+  Duration,
+  Effect,
+  Formatter,
+  Option,
+  Record,
+  Schedule,
+  Schema,
+  Stream,
+  Tracer,
+} from "effect"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import type { Action } from "./internal/journal.ts"
 import { isReactive, map, succeed, zip } from "./internal/reactive.ts"
@@ -100,6 +111,7 @@ export const Tag =
       readonly failure: Schema.Codec<E, unknown>
       readonly load: (input: I) => Effect.Effect<A, E, R>
       readonly staleAfter?: Duration.Input
+      readonly retry?: Schedule.Schedule<unknown, E>
     },
   ) => {
     const staleAfter = Duration.toMillis(Duration.fromInputUnsafe(options.staleAfter ?? 0))
@@ -200,7 +212,7 @@ export const Tag =
     ) =>
       Effect.matchEffect(
         Effect.flatMap(Effect.orDie(Schema.decodeEffect(inputJson)(asked.input)), (input) =>
-          options.load(input),
+          Effect.retry(options.load(input), options.retry ?? Schedule.recurs(0)),
         ),
         {
           onFailure: (error) => send(base.actions.failed, { key: asked.key, request, error }),
