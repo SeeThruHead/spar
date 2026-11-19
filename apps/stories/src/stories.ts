@@ -99,10 +99,15 @@ export const DialogStory = View.connect(
       onOpen: UiState.set(open, true),
       dialog: yield* pipe(
         open,
-        Reactive.when(Dialog({ id: "details", title: "Project details" }, TextView), {
-          text: "Created last spring, three members, on the team plan.",
-          onClose: UiState.set(open, false),
-        }),
+        Reactive.when(
+          Dialog(
+            { id: "details", title: "Project details" },
+            View.child(TextView, {
+              text: "Created last spring, three members, on the team plan.",
+            }),
+          ),
+          { onClose: UiState.set(open, false) },
+        ),
       ),
     }
   }),

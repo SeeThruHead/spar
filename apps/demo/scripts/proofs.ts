@@ -107,6 +107,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "views-need-a-schema",
   },
   {
+    file: "component-props-without-a-schema.ts",
+    rule: "Giving a component outer props without a Schema for them",
+    by: "types",
+    expect: "is not assignable to parameter of type '() => Effect<",
+  },
+  {
     file: "store-without-a-state-schema.ts",
     rule: "Declaring a store whose state has no Schema",
     by: "types",

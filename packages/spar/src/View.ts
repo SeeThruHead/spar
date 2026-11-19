@@ -94,7 +94,16 @@ type OnlyWhatTheViewTakes<Props, ViewProps> = [Extra<Props, ViewProps>] extends 
   ? unknown
   : { readonly "props the view does not take": Extra<Props, ViewProps> }
 
-export const connect =
+export const connect = <Props, E, Requirements>(
+  props: () => Effect.Effect<Props, E, Requirements>,
+) => connected<Props, unknown, E, Requirements>(props)
+
+export const taking = <const F extends Fields, Props, E, Requirements>(
+  _outer: F,
+  props: (outer: Schema.Struct<F>["Type"]) => Effect.Effect<Props, E, Requirements>,
+) => connected(props)
+
+const connected =
   <Props, Outer, E, Requirements>(props: (outer: Outer) => Effect.Effect<Props, E, Requirements>) =>
   <ViewProps = Props>(
     view: View<ViewProps> & View<Props> & OnlyWhatTheViewTakes<Props, ViewProps>,

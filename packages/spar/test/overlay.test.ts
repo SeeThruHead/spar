@@ -2,14 +2,14 @@ import { describe, expect, it } from "@effect/vitest"
 import { vi } from "vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, pipe, Schema } from "effect"
-import { App, Handle, Overlay, Reactive, UiState, View } from "spar"
-import type { Action } from "spar"
+import { App, Handle, Overlay, Props, Reactive, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { ConfirmView, DialogView, MenuView, PageView } from "./overlays.tsx"
 
 const Confirm = pipe(
-  View.connect(
-    Effect.fnUntraced(function* ({ onClose }: { readonly onClose: Action }) {
+  View.taking(
+    { onClose: Props.Action },
+    Effect.fnUntraced(function* ({ onClose }) {
       yield* Overlay.modal({ onDismiss: onClose })
 
       return { onClose }
@@ -19,8 +19,9 @@ const Confirm = pipe(
 )
 
 const Dialog = pipe(
-  View.connect(
-    Effect.fnUntraced(function* ({ onClose }: { readonly onClose: Action }) {
+  View.taking(
+    { onClose: Props.Action },
+    Effect.fnUntraced(function* ({ onClose }) {
       const close = yield* Handle.make
       const confirming = yield* UiState.make("confirming", Schema.Boolean, false)
 
@@ -42,11 +43,9 @@ const Dialog = pipe(
 )
 
 const Menu = pipe(
-  View.connect(
-    Effect.fnUntraced(function* (props: {
-      readonly anchor: Handle.Handle
-      readonly onClose: Action
-    }) {
+  View.taking(
+    { anchor: Props.Handle, onClose: Props.Action },
+    Effect.fnUntraced(function* (props) {
       yield* Overlay.dismissable({ onDismiss: props.onClose, anchor: props.anchor })
 
       return { place: yield* Overlay.position(props.anchor), onPick: props.onClose }

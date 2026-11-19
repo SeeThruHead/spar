@@ -41,8 +41,9 @@ const paramsAt = <Params>(target: Router.Route<Params>, url: string) =>
 
 const Thread = (loads: Ref.Ref<ReadonlyArray<string>>, server: Latch.Latch) =>
   pipe(
-    View.connect(
-      Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
+    View.taking(
+      { id: Schema.String },
+      Effect.fnUntraced(function* ({ id }) {
         yield* Ref.update(loads, (all) => [...all, id])
         yield* Latch.whenOpen(server, Effect.void)
 
@@ -268,8 +269,9 @@ describe("the router", () => {
     Effect.gen(function* () {
       const router = yield* Router.Router
       const mounts = yield* Ref.make(0)
-      const LiveSearch = View.connect(
-        Effect.fnUntraced(function* (props: Parameters<typeof LiveSearchView>[0]) {
+      const LiveSearch = View.taking(
+        LiveSearchView.props,
+        Effect.fnUntraced(function* (props) {
           yield* Ref.update(mounts, (count) => count + 1)
 
           return props

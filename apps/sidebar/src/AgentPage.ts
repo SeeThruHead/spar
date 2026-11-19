@@ -21,8 +21,9 @@ const projectOf = (board: Board, agent: Agent): string =>
   })
 
 export const AgentPage = pipe(
-  View.connect(
-    Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
+  View.taking(
+    { id: Schema.String },
+    Effect.fnUntraced(function* ({ id }) {
       const store = yield* BoardStore
       const router = yield* Router.Router
       const board = yield* store.select.board.get

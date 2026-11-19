@@ -1,4 +1,4 @@
-import { Context, Effect, Formatter, Layer, Option, Schema, pipe } from "effect"
+import { Context, Effect, Formatter, Layer, Option, Predicate, Schema, pipe } from "effect"
 import { run } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
@@ -6,10 +6,21 @@ import { DeadView, EntryView, OutboxView, PanelView, StoreView } from "./devtool
 import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
+import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
 import * as View from "./View.ts"
 
 type OutboxService = Context.Service.Shape<typeof Outbox.Outbox>
+
+export const InspectedStore = Props.kind(
+  (value): value is Store.Inspected => Predicate.hasProperty(value, "travelTo"),
+  Props.named("store"),
+)
+
+export const OutboxShown = Props.kind(
+  (value): value is OutboxService => Predicate.hasProperty(value, "persist"),
+  Props.named("outbox"),
+)
 
 export class Registry extends Context.Service<
   Registry,
@@ -56,8 +67,9 @@ const step = Effect.fnUntraced(function* (
   )
 })
 
-const StorePanel = View.connect(
-  Effect.fnUntraced(function* (props: { readonly inspected: Reactive.Reactive<Store.Inspected> }) {
+const StorePanel = View.taking(
+  { inspected: Props.Reactive(InspectedStore) },
+  Effect.fnUntraced(function* (props) {
     const store = yield* props.inspected.get
     const entries = yield* pipe(
       store.log,
@@ -111,8 +123,9 @@ const StorePanel = View.connect(
 const summaryOfDead = (dead: Outbox.Dead): string =>
   `${dead.channel} ${Formatter.formatJson(dead.payload)}: ${dead.reason}`
 
-const OutboxPanel = View.connect(
-  Effect.fnUntraced(function* ({ outbox }: { readonly outbox: OutboxService }) {
+const OutboxPanel = View.taking(
+  { outbox: OutboxShown },
+  Effect.fnUntraced(function* ({ outbox }) {
     return {
       pending: outbox.pending,
       dead: yield* pipe(

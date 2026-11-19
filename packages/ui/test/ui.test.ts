@@ -62,10 +62,13 @@ const Kit = View.connect(
       }),
       dialog: yield* pipe(
         open,
-        Reactive.when(Dialog({ id: "details", title: "Details" }, TextView), {
-          text: "All the details",
-          onClose: UiState.set(open, false),
-        }),
+        Reactive.when(
+          Dialog(
+            { id: "details", title: "Details" },
+            View.child(TextView, { text: "All the details" }),
+          ),
+          { onClose: UiState.set(open, false) },
+        ),
       ),
       toasts: yield* View.child(Toast.Viewport, {}),
     }

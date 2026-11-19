@@ -61,7 +61,7 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
 })
 
 export const Thread = flow(
-  View.connect(threadProps),
+  View.taking({ id: Schema.String }, threadProps),
   View.recover("ThreadLoadFailed", ThreadErrorView),
   View.pending(ThreadSkeletonView),
 )(ThreadView)

@@ -1,24 +1,21 @@
 import { Array, Effect, Option, pipe, Schema } from "effect"
-import { Handle, Overlay, Reactive, UiState, View } from "spar"
-import type { Action } from "spar"
+import { Handle, Overlay, Props, Reactive, UiState, View } from "spar"
 import { MenuItemView, MenuListView, MenuView } from "./MenuView.tsx"
 import { focusAt, target } from "./roving.ts"
 
-export type Item = {
-  readonly label: string
-  readonly onChoose: Action
-}
+export const Item = Schema.Struct({ label: Schema.String, onChoose: Props.Action })
 
-type ListProps = {
-  readonly label: string
-  readonly items: ReadonlyArray<Item>
-  readonly anchor: Handle.Handle
-  readonly onClose: Action
-}
+export type Item = typeof Item.Type
 
 const List = pipe(
-  View.connect(
-    Effect.fnUntraced(function* ({ label, items, anchor, onClose }: ListProps) {
+  View.taking(
+    {
+      label: Schema.String,
+      items: Schema.Array(Item),
+      anchor: Props.Handle,
+      onClose: Props.Action,
+    },
+    Effect.fnUntraced(function* ({ label, items, anchor, onClose }) {
       const handles = yield* Effect.forEach(items, () => Handle.make)
       const place = yield* Overlay.position(anchor)
 
@@ -49,12 +46,9 @@ const List = pipe(
   View.portal,
 )
 
-export const Menu = View.connect(
-  Effect.fnUntraced(function* (props: {
-    readonly label: string
-    readonly text: string
-    readonly items: ReadonlyArray<Item>
-  }) {
+export const Menu = View.taking(
+  { label: Schema.String, text: Schema.String, items: Schema.Array(Item) },
+  Effect.fnUntraced(function* (props) {
     const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make
     const list = yield* pipe(

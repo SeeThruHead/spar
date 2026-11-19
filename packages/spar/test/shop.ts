@@ -1,7 +1,14 @@
 import { Effect, pipe, Schema, Stream, SubscriptionRef } from "effect"
-import { Events, Handle, Reactive, UiState, View } from "spar"
-import { DialogView, FruitView, LoadingView, PageView, PairView, ReportView } from "./pages.tsx"
-import type { Fruit } from "./pages.tsx"
+import { Events, Handle, Props, Reactive, UiState, View } from "spar"
+import {
+  DialogView,
+  Fruit,
+  FruitView,
+  LoadingView,
+  PageView,
+  PairView,
+  ReportView,
+} from "./pages.tsx"
 
 export const fruits: ReadonlyArray<Fruit> = [
   { id: "a", name: "Apple" },
@@ -15,9 +22,9 @@ const Report = pipe(
 
 const Dialog = pipe(View.connect(() => Effect.succeed({}))(DialogView), View.portal)
 
-const Row = View.connect(({ fruit }: { readonly fruit: Reactive.Reactive<Fruit> }) =>
-  Effect.succeed({ fruit }),
-)(FruitView)
+const Row = View.taking({ fruit: Props.Reactive(Fruit) }, ({ fruit }) => Effect.succeed({ fruit }))(
+  FruitView,
+)
 
 export const Page = (all: Reactive.Reactive<ReadonlyArray<Fruit>>) =>
   View.connect(

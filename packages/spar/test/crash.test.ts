@@ -1,12 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Context, Effect, Layer, SubscriptionRef, pipe } from "effect"
-import { App, Reactive, View } from "spar"
+import { Context, Effect, Layer, SubscriptionRef, pipe, Schema } from "effect"
+import { App, Props, Reactive, View } from "spar"
 import * as Testing from "spar/testing"
 import { BrokenPartView, FussyItemView, PageView, WidgetView } from "./crashes.tsx"
 import { RowsView } from "./graphics.tsx"
-import { ItemView, LoadingView } from "./views.tsx"
-import type { Item } from "./views.tsx"
+import { Item, ItemView, LoadingView } from "./views.tsx"
 
 const Widget = pipe(
   View.connect(() => Effect.die("the widget's data is corrupt"))(WidgetView),
@@ -14,7 +13,7 @@ const Widget = pipe(
 )
 
 const SlowWidget = pipe(
-  View.connect(({ id }: { readonly id: string }) =>
+  View.taking({ id: Schema.String }, ({ id }) =>
     Effect.andThen(Effect.sleep("10 millis"), Effect.die(`${id} never loaded`)),
   )(WidgetView),
   View.pending(LoadingView),
@@ -158,8 +157,9 @@ describe("crashes", () => {
       const reports = yield* Reports
       const released = yield* SubscriptionRef.make(0)
       const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
-      const Fragile = View.connect(
-        Effect.fnUntraced(function* ({ item }: { readonly item: Reactive.Reactive<Item> }) {
+      const Fragile = View.taking(
+        { item: Props.Reactive(Item) },
+        Effect.fnUntraced(function* ({ item }) {
           const now = yield* item.get
 
           yield* Effect.addFinalizer(() => SubscriptionRef.update(released, (count) => count + 1))

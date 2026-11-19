@@ -1,20 +1,20 @@
 import { Array, Effect, Option, Schema } from "effect"
-import { Handle, Reactive, UiState, View } from "spar"
-import type { Action, Element } from "spar"
+import { Handle, Props, Reactive, UiState, View } from "spar"
+import type { Action } from "spar"
 import { focusAt, target } from "./roving.ts"
 import { TabPanelView, TabView, TabsView } from "./TabsView.tsx"
 
-export type Tab = {
-  readonly id: string
-  readonly title: string
-  readonly content: Element
-}
+export const Tab = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  content: Props.Element,
+})
 
-export const Tabs = View.connect(
-  Effect.fnUntraced(function* (props: {
-    readonly label: string
-    readonly tabs: Array.NonEmptyReadonlyArray<Tab>
-  }) {
+export type Tab = typeof Tab.Type
+
+export const Tabs = View.taking(
+  { label: Schema.String, tabs: Schema.NonEmptyArray(Tab) },
+  Effect.fnUntraced(function* (props) {
     const selected = yield* UiState.make("selected", Schema.String, props.tabs[0].id)
     const handles = yield* Effect.forEach(props.tabs, () => Handle.make)
     const ids = props.tabs.map((tab) => tab.id)

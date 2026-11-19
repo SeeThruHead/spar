@@ -1,11 +1,11 @@
 import { Effect, pipe, Schema } from "effect"
-import { Reactive, UiState, View } from "spar"
-import { TodoStore } from "./TodoStore.ts"
-import type { Todo } from "./TodoStore.ts"
+import { Props, Reactive, UiState, View } from "spar"
+import { Todo, TodoStore } from "./TodoStore.ts"
 import { TodoRowView, TodosView } from "./TodosView.tsx"
 
-const TodoRow = View.connect(
-  Effect.fnUntraced(function* ({ todo }: { readonly todo: Reactive.Reactive<Todo> }) {
+const TodoRow = View.taking(
+  { todo: Props.Reactive(Todo) },
+  Effect.fnUntraced(function* ({ todo }) {
     const store = yield* TodoStore
     const target = Effect.map(todo.get, ({ id }) => ({ id }))
 

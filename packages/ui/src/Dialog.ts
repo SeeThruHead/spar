@@ -1,26 +1,22 @@
 import { Effect, pipe } from "effect"
-import { Handle, Overlay, View } from "spar"
-import type { Action } from "spar"
+import type { Scope } from "effect"
+import { Handle, Overlay, Props, View } from "spar"
+import type { Element } from "spar"
 import { DialogView } from "./DialogView.tsx"
 
-export const Dialog = <ContentProps, R = never>(
+export const Dialog = <R = never>(
   frame: { readonly id: string; readonly title: string },
-  content: View.Mountable<ContentProps, never, R>,
+  content: Effect.Effect<Element, never, R | Scope.Scope>,
 ) =>
   pipe(
-    View.connect(
-      Effect.fnUntraced(function* (props: ContentProps & { readonly onClose: Action }) {
+    View.taking(
+      { onClose: Props.Action },
+      Effect.fnUntraced(function* ({ onClose }) {
         const close = yield* Handle.make
 
-        yield* Overlay.modal({ onDismiss: props.onClose, initialFocus: close })
+        yield* Overlay.modal({ onDismiss: onClose, initialFocus: close })
 
-        return {
-          id: frame.id,
-          title: frame.title,
-          close,
-          onClose: props.onClose,
-          content: yield* View.child(content, props),
-        }
+        return { id: frame.id, title: frame.title, close, onClose, content: yield* content }
       }),
     )(DialogView),
     View.portal,

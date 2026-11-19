@@ -31,3 +31,7 @@ Step 2 done: every view in ui, demo, sidebar, stories, ssr, bench, the devtools 
 **2026-11-19T03:47:41Z**
 
 Step 4 done: the build check rejects JSX outside View.make (rule views-need-a-schema), proof view-without-a-schema.tsx. Left: connect takes the outer props Schema (with a types proof); docs samples still show plain function views (docs/*.md) and must be rewritten.
+
+**2026-11-19T03:51:10Z**
+
+Step 3 done: View.connect takes a props function with no argument; a component with outer props is View.taking(fields, props). Proof: component-props-without-a-schema. The ui Dialog now takes its content as an unmounted child (View.child(...)) and only onClose as a prop, because a props type cannot be derived from a generic Schema. Left for this ticket: rewrite the docs samples (docs/*.md still show plain function views and connect with typed parameters).

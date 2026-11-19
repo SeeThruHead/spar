@@ -101,8 +101,9 @@ const BoardPanel = View.connect(
   }),
 )(BoardView)
 
-const Details = View.connect(
-  Effect.fnUntraced(function* ({ note }: { readonly note: string }) {
+const Details = View.taking(
+  { note: Schema.String },
+  Effect.fnUntraced(function* ({ note }) {
     const probe = yield* Probe
 
     yield* Ref.update(probe.mounts, (count) => count + 1)
@@ -120,8 +121,9 @@ const Disclosure = View.connect(
   }),
 )(DisclosureView)
 
-const Loaded = View.connect(
-  Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
+const Loaded = View.taking(
+  { id: Schema.String },
+  Effect.fnUntraced(function* ({ id }) {
     const probe = yield* Probe
 
     yield* Effect.annotateCurrentSpan("report.id", id)

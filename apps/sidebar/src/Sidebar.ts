@@ -1,10 +1,9 @@
 import { Effect, Option, Schema, pipe } from "effect"
-import { Events, Form, Outbox, Reactive, Router, UiState, View } from "spar"
+import { Events, Form, Outbox, Props, Reactive, Router, UiState, View } from "spar"
 import type { Action } from "spar"
 import { Dialog, Menu, Select, Toast } from "@spar/ui"
 import { BoardStore } from "./BoardStore.ts"
-import { AgentId, SpaceId, needsYou, sectionsOf, tagsOf } from "./domain.ts"
-import type { Agent, Section } from "./domain.ts"
+import { Agent, AgentId, Section, SpaceId, needsYou, sectionsOf, tagsOf } from "./domain.ts"
 import { agentRoute } from "./routes.ts"
 import {
   AgentRowView,
@@ -28,10 +27,12 @@ const Dragged = Schema.Struct({ kind: Schema.Literals(["agent", "space"]), id: S
 
 type Dragged = typeof Dragged.Type
 
-type Dragging = {
-  readonly dragged: UiState.UiState<Dragged | null>
-  readonly over: UiState.UiState<string | null>
-}
+const Dragging = Schema.Struct({
+  dragged: Props.State(Schema.NullOr(Dragged)),
+  over: Props.State(Schema.NullOr(Schema.String)),
+})
+
+type Dragging = typeof Dragging.Type
 
 const lifted = (kind: Dragged["kind"], id: string): Dragged | null => ({ kind, id })
 
@@ -51,24 +52,20 @@ const agentUnder = (event: DragEvent): AgentId | null => {
   return id === null || id === undefined ? null : AgentId.make(id)
 }
 
-type Shared = {
-  readonly editing: UiState.UiState<Editing>
-  readonly onClose: Action
-}
-
 const Named = Schema.Struct({
   name: Schema.String.check(Schema.makeFilter((text) => text.trim().length > 0 || "Enter a name")),
 })
 
 const noProject = "none"
 
-const AgentRow = View.connect(
-  Effect.fnUntraced(function* (props: {
-    readonly agent: Reactive.Reactive<Agent>
-    readonly id: string
-    readonly editing: UiState.UiState<Editing>
-    readonly dragging: Dragging
-  }) {
+const AgentRow = View.taking(
+  {
+    agent: Props.Reactive(Agent),
+    id: Schema.String,
+    editing: Props.State(Editing),
+    dragging: Dragging,
+  },
+  Effect.fnUntraced(function* (props) {
     const store = yield* BoardStore
     const router = yield* Router.Router
     const id = AgentId.make(props.id)
@@ -102,13 +99,14 @@ const AgentRow = View.connect(
   }),
 )(AgentRowView)
 
-const SectionPanel = View.connect(
-  Effect.fnUntraced(function* (props: {
-    readonly section: Reactive.Reactive<Section>
-    readonly sectionKey: string
-    readonly editing: UiState.UiState<Editing>
-    readonly dragging: Dragging
-  }) {
+const SectionPanel = View.taking(
+  {
+    section: Props.Reactive(Section),
+    sectionKey: Schema.String,
+    editing: Props.State(Editing),
+    dragging: Dragging,
+  },
+  Effect.fnUntraced(function* (props) {
     const store = yield* BoardStore
     const space = SpaceId.make(props.sectionKey)
     const rows = yield* pipe(
@@ -151,8 +149,9 @@ const SectionPanel = View.connect(
   }),
 )(SectionView)
 
-const StartForm = View.connect(
-  Effect.fnUntraced(function* ({ onClose }: Shared) {
+const StartForm = View.taking(
+  { editing: Props.State(Editing), onClose: Props.Action },
+  Effect.fnUntraced(function* ({ onClose }) {
     const store = yield* BoardStore
     const toasts = yield* Toast.Toasts
     const form = yield* Form.make(Named, { name: "" })
@@ -176,8 +175,9 @@ const StartForm = View.connect(
   }),
 )(NameFormView)
 
-const ProjectForm = View.connect(
-  Effect.fnUntraced(function* ({ onClose }: Shared) {
+const ProjectForm = View.taking(
+  { editing: Props.State(Editing), onClose: Props.Action },
+  Effect.fnUntraced(function* ({ onClose }) {
     const store = yield* BoardStore
     const form = yield* Form.make(Named, { name: "" })
 
@@ -208,8 +208,9 @@ const editedAgent = Effect.fnUntraced(function* (editing: UiState.UiState<Editin
   )
 })
 
-const TagsForm = View.connect(
-  Effect.fnUntraced(function* ({ editing, onClose }: Shared) {
+const TagsForm = View.taking(
+  { editing: Props.State(Editing), onClose: Props.Action },
+  Effect.fnUntraced(function* ({ editing, onClose }) {
     const store = yield* BoardStore
     const agent = yield* editedAgent(editing)
     const tags = Option.match(agent, { onNone: () => "", onSome: (found) => found.tags.join(", ") })
@@ -235,8 +236,9 @@ const TagsForm = View.connect(
   }),
 )(NameFormView)
 
-const MoveForm = View.connect(
-  Effect.fnUntraced(function* ({ editing, onClose }: Shared) {
+const MoveForm = View.taking(
+  { editing: Props.State(Editing), onClose: Props.Action },
+  Effect.fnUntraced(function* ({ editing, onClose }) {
     const store = yield* BoardStore
     const agent = yield* editedAgent(editing)
     const spaces = yield* store.select.spaces.get
@@ -278,24 +280,37 @@ const MoveForm = View.connect(
 const dialogs = Effect.fnUntraced(function* (editing: UiState.UiState<Editing>) {
   const onClose = UiState.set(editing, { _tag: "Nothing" })
   const shared = { editing, onClose }
+  const closing = { onClose }
   const when = (tag: Editing["_tag"]) => Reactive.map(editing, (now) => now._tag === tag)
 
   return [
     yield* pipe(
       when("Starting"),
-      Reactive.when(Dialog({ id: "start", title: "Start an agent" }, StartForm), shared),
+      Reactive.when(
+        Dialog({ id: "start", title: "Start an agent" }, View.child(StartForm, shared)),
+        closing,
+      ),
     ),
     yield* pipe(
       when("AddingProject"),
-      Reactive.when(Dialog({ id: "project", title: "New project" }, ProjectForm), shared),
+      Reactive.when(
+        Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
+        closing,
+      ),
     ),
     yield* pipe(
       when("Tagging"),
-      Reactive.when(Dialog({ id: "tags", title: "Edit tags" }, TagsForm), shared),
+      Reactive.when(
+        Dialog({ id: "tags", title: "Edit tags" }, View.child(TagsForm, shared)),
+        closing,
+      ),
     ),
     yield* pipe(
       when("Moving"),
-      Reactive.when(Dialog({ id: "move", title: "Move to a project" }, MoveForm), shared),
+      Reactive.when(
+        Dialog({ id: "move", title: "Move to a project" }, View.child(MoveForm, shared)),
+        closing,
+      ),
     ),
   ]
 })

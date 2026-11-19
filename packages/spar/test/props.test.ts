@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef } from "effect"
-import { Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
+import { Devtools, Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
 import { BadgeView, CardView } from "./made.tsx"
@@ -109,6 +109,10 @@ describe("a view made from a Schema of its props", () => {
     expect(Props.shown(Router.Link, "/people")).toEqual(Option.none())
     expect(fits(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toBe(true)
     expect(fits(Overlay.Placement, { position: "fixed" })).toBe(false)
+    expect(fits(Devtools.InspectedStore, { travelTo: 1 })).toBe(true)
+    expect(fits(Devtools.InspectedStore, {})).toBe(false)
+    expect(fits(Devtools.OutboxShown, { persist: 1 })).toBe(true)
+    expect(fits(Devtools.OutboxShown, {})).toBe(false)
     expect(Props.shown(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toEqual(
       Option.some("placement"),
     )

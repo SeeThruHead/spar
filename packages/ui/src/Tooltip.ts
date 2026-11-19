@@ -4,12 +4,9 @@ import { Ids } from "./ids.ts"
 import { TooltipBubbleView } from "./TooltipView.tsx"
 
 const Bubble = pipe(
-  View.connect(
-    Effect.fnUntraced(function* (props: {
-      readonly id: string
-      readonly text: string
-      readonly anchor: Handle.Handle
-    }) {
+  View.taking(
+    { id: Schema.String, text: Schema.String, anchor: Props.Handle },
+    Effect.fnUntraced(function* (props) {
       return { id: props.id, text: props.text, place: yield* Overlay.position(props.anchor) }
     }),
   )(TooltipBubbleView),

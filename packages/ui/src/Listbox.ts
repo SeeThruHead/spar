@@ -1,24 +1,12 @@
 import { Array, Effect, Option, pipe, Schema } from "effect"
-import { Events, Handle, Overlay, Reactive, UiState, View } from "spar"
-import type { Action } from "spar"
+import { Events, Handle, Overlay, Props, Reactive, UiState, View } from "spar"
 import { ListboxListView, ListboxOptionView, ListboxView } from "./ListboxView.tsx"
 import { Ids } from "./ids.ts"
 import { focusAt, target } from "./roving.ts"
 
-export type Choice = {
-  readonly value: string
-  readonly label: string
-}
+export const Choice = Schema.Struct({ value: Schema.String, label: Schema.String })
 
-type ListProps = {
-  readonly id: string
-  readonly label: string
-  readonly choices: ReadonlyArray<Choice>
-  readonly value: Reactive.Reactive<string>
-  readonly anchor: Handle.Handle
-  readonly onChange: (value: string) => Action
-  readonly onClose: Action
-}
+export type Choice = typeof Choice.Type
 
 const startsWith = (choice: Choice, typed: string): boolean =>
   choice.label.toLowerCase().startsWith(typed.toLowerCase())
@@ -44,8 +32,17 @@ const moveTo = (
 const choosing: ReadonlySet<string> = new Set(["Enter", " "])
 
 const List = pipe(
-  View.connect(
-    Effect.fnUntraced(function* (props: ListProps) {
+  View.taking(
+    {
+      id: Schema.String,
+      label: Schema.String,
+      choices: Schema.Array(Choice),
+      value: Props.Reactive(Schema.String),
+      anchor: Props.Handle,
+      onChange: Props.Callback(Schema.String),
+      onClose: Props.Action,
+    },
+    Effect.fnUntraced(function* (props) {
       const handles = yield* Effect.forEach(props.choices, () => Handle.make)
       const place = yield* Overlay.position(props.anchor)
       const current = yield* props.value.get
@@ -96,14 +93,15 @@ const labelOf = (choices: ReadonlyArray<Choice>, value: string): string =>
     { onNone: () => "", onSome: (choice) => choice.label },
   )
 
-export const Listbox = View.connect(
-  Effect.fnUntraced(function* (props: {
-    readonly label: string
-    readonly name: string
-    readonly choices: ReadonlyArray<Choice>
-    readonly value: Reactive.Reactive<string>
-    readonly onChange: (value: string) => Action
-  }) {
+export const Listbox = View.taking(
+  {
+    label: Schema.String,
+    name: Schema.String,
+    choices: Schema.Array(Choice),
+    value: Props.Reactive(Schema.String),
+    onChange: Props.Callback(Schema.String),
+  },
+  Effect.fnUntraced(function* (props) {
     const ids = yield* Ids
     const listId = yield* ids.next
     const open = yield* UiState.make("open", Schema.Boolean, false)

@@ -7,7 +7,7 @@ import { BoardView, NoteView, PanelView, TwiceView } from "./tree.tsx"
 
 type Item = { readonly id: string }
 
-const Note = View.connect(({ id }: { readonly id: string }) =>
+const Note = View.taking({ id: Schema.String }, ({ id }) =>
   Effect.map(UiState.make("text", Schema.String, "new"), (text) => ({
     id,
     text,
