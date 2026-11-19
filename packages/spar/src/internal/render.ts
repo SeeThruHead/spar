@@ -332,7 +332,10 @@ const sameKeys = <A>(
   next: ReadonlyArray<A>,
   key: (item: A) => string,
 ): boolean =>
-  previous.length === next.length && next.every((item, index) => previous[index]?.key === key(item))
+  previous.length === next.length && next.every((item, index) => sameAt(previous[index], item, key))
+
+const sameAt = <A>(entry: Entry<A> | undefined, item: A, key: (item: A) => string): boolean =>
+  Object.is(entry?.cell.read(), item) || entry?.key === key(item)
 
 const refreshChanged = <A>(previous: ReadonlyArray<Entry<A>>, next: ReadonlyArray<A>): void => {
   next.forEach((item, index) => {

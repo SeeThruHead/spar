@@ -59,7 +59,7 @@ const cold = async (): Promise<{ readonly time: number; readonly profile: Sample
   await page.goto(url)
   await page.click("#runlots")
   await page.waitForFunction(() => document.querySelector("#tbody")?.childElementCount === 10_000)
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(Number(Bun.env["SETTLE"] ?? 300))
   await session.send("Profiler.enable")
   await session.send("Profiler.setSamplingInterval", { interval: 50 })
   await session.send("Profiler.start")

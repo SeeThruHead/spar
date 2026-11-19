@@ -480,9 +480,16 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const commands = Record.map(named, (handled, name) => command(name, handled))
       const log = map(current, (held) => pastOf(held).log)
 
+      const picked = <Picked>(pick: (state: State) => Picked): Reactive<Picked> => {
+        const held = Cell.make(pick(shown(cell.read())))
+
+        cell.subscribe((next) => held.write(pick(shown(next))))
+
+        return fromCell(held)
+      }
       const select = Struct.map(
         selectors,
-        Struct.lambda<ToReactive<State>>((chosen) => map(state, chosen.select)),
+        Struct.lambda<ToReactive<State>>((chosen) => picked(chosen.select)),
       )
 
       Object.entries(select).forEach(([name, reading]) =>
