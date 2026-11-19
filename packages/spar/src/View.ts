@@ -8,7 +8,8 @@ import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { Hydrating, OnServer } from "./internal/server.ts"
 import { RowKey, UiTree } from "./internal/uiTree.ts"
-import { ViewScope } from "./internal/viewScope.ts"
+import { drawn, placed } from "./internal/inspect.ts"
+import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Fields } from "./Props.ts"
 
 export type View<Props> = (props: Props) => Element
@@ -77,7 +78,10 @@ export const make = <const F extends Fields>(
   props: F,
   draw: (props: Schema.Struct<F>["Type"]) => Element,
 ): Made<F> =>
-  Object.assign((given: Schema.Struct<F>["Type"]) => draw(given), { displayName: name, props })
+  Object.assign((given: Schema.Struct<F>["Type"]) => drawn(name, props, given, draw(given)), {
+    displayName: name,
+    props,
+  })
 
 const spanName = (view: Declared): string =>
   view.displayName === "" ? "View (unnamed)" : view.displayName
@@ -92,23 +96,51 @@ type OnlyWhatTheViewTakes<Props, ViewProps> = [Extra<Props, ViewProps>] extends 
 
 export const connect = <Props, E, Requirements>(
   props: () => Effect.Effect<Props, E, Requirements>,
-) => connected<Props, unknown, E, Requirements>(props)
+) => connected<Props, unknown, E, Requirements>(props, [])
 
 export const taking = <const F extends Fields, Props, E, Requirements>(
   _outer: F,
   props: (outer: Schema.Struct<F>["Type"]) => Effect.Effect<Props, E, Requirements>,
-) => connected(props)
+) => connected(props, [])
+
+const shownIn = <Props>(view: View<Props>, made: Props, services: ReadonlyArray<string>) =>
+  ViewScope.use((mounted) =>
+    Effect.sync(() => {
+      const element = view(made)
+
+      placed(() => pathOf(mounted), services)
+
+      return element
+    }),
+  )
 
 const connected =
-  <Props, Outer, E, Requirements>(props: (outer: Outer) => Effect.Effect<Props, E, Requirements>) =>
+  <Props, Outer, E, Requirements>(
+    props: (outer: Outer) => Effect.Effect<Props, E, Requirements>,
+    services: ReadonlyArray<string>,
+  ) =>
   <ViewProps = Props>(
     view: View<ViewProps> & View<Props> & Declared & OnlyWhatTheViewTakes<Props, ViewProps>,
   ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
     component<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
-      Effect.withSpan(inViewScope(Effect.map(props(outer), view), spanName(view)), spanName(view), {
-        captureStackTrace: false,
-      }),
+      Effect.withSpan(
+        inViewScope(
+          Effect.flatMap(props(outer), (made) => shownIn(view, made, services)),
+          spanName(view),
+        ),
+        spanName(view),
+        { captureStackTrace: false },
+      ),
     )
+
+export const described = (services: ReadonlyArray<string>) => ({
+  connect: <Props, E, Requirements>(props: () => Effect.Effect<Props, E, Requirements>) =>
+    connected<Props, unknown, E, Requirements>(props, services),
+  taking: <const F extends Fields, Props, E, Requirements>(
+    _outer: F,
+    props: (outer: Schema.Struct<F>["Type"]) => Effect.Effect<Props, E, Requirements>,
+  ) => connected(props, services),
+})
 
 export const mapProps =
   <Outer, Props>(f: (outer: Outer) => Props) =>

@@ -1,0 +1,160 @@
+import { describe, expect, it } from "@effect/vitest"
+import { Effect, Option, Schema, SubscriptionRef, pipe } from "effect"
+import { Props, Reactive, UiState, View } from "spar"
+import * as Testing from "spar/testing"
+import { fragment } from "../src/internal/element.ts"
+import { Inspecting, inspecting, mark } from "../src/internal/inspect.ts"
+import { BadgeView } from "./made.tsx"
+import { NoteView, TwiceView } from "./tree.tsx"
+
+const Pair = View.make("Pair", { left: Props.Element, right: Props.Element }, ({ left, right }) =>
+  fragment([left, "and", right]),
+)
+
+const Listed = View.make("Listed", { rows: Props.Element }, ({ rows }) => rows)
+
+const Note = View.described(["Notes", "Router.Router"]).taking({ id: Schema.String }, ({ id }) =>
+  Effect.map(UiState.make("text", Schema.String, "new"), (text) => ({
+    id,
+    text,
+    onClear: UiState.set(text, ""),
+  })),
+)(NoteView)
+
+const Twice = View.described(["Clock"]).connect(() =>
+  Effect.map(UiState.make("same", Schema.String, "one"), (first) => ({ first })),
+)(TwiceView)
+
+const Board = (items: Reactive.Reactive<ReadonlyArray<string>>) =>
+  View.connect(
+    Effect.fnUntraced(function* () {
+      return {
+        left: yield* View.child(Twice, {}),
+        right: fragment([
+          yield* pipe(
+            items,
+            Reactive.mapBy(
+              (id: string) => id,
+              Note,
+              (_item, id) => ({ id }),
+            ),
+          ),
+          BadgeView({ text: "badge" }),
+        ]),
+      }
+    }),
+  )(Pair)
+
+const Rows = View.connect(() =>
+  Effect.map(
+    pipe(
+      Reactive.succeed(["a"]),
+      Reactive.mapBy(
+        (id: string) => id,
+        BadgeView,
+        (_item, id) => ({ text: `row ${id}` }),
+      ),
+    ),
+    (rows) => ({ rows }),
+  ),
+)(Listed)
+
+const inspected = <A, E, R>(use: (inspector: Inspecting) => Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const inspector = new Inspecting()
+
+      inspecting.write(Option.some(inspector))
+
+      return inspector
+    }),
+    use,
+    () => Effect.sync(() => inspecting.write(Option.none())),
+  )
+
+const idOf = (node: Element | null): number => Number(node?.getAttribute(mark))
+
+const onPage = (): ReadonlySet<number> =>
+  new Set([...document.querySelectorAll(`[${mark}]`)].map((node) => idOf(node)))
+
+describe("what the inspector knows about what is on the page", () => {
+  it.live("every view marks its elements and says its name, its props and their Schema", () =>
+    inspected(
+      Effect.fnUntraced(function* (inspector) {
+        const items = yield* SubscriptionRef.make<ReadonlyArray<string>>(["a"])
+
+        yield* Testing.mount(Board(Reactive.fromSubscriptionRef(items)))
+
+        const badge = yield* Testing.findText("badge")
+        const seen = Option.getOrThrow(inspector.find(idOf(badge)))
+
+        expect([seen.name, seen.props, seen.fields, seen.placed]).toEqual([
+          "Badge",
+          { text: "badge" },
+          BadgeView.props,
+          Option.none(),
+        ])
+        expect(Props.allShown(BadgeView.props, seen.props)).toEqual({ text: "badge", tone: null })
+      }),
+    ),
+  )
+
+  it.live("a component also says where it is in the tree and which services it uses", () =>
+    inspected(
+      Effect.fnUntraced(function* (inspector) {
+        const items = yield* SubscriptionRef.make<ReadonlyArray<string>>(["a", "b"])
+
+        yield* Testing.mount(Board(Reactive.fromSubscriptionRef(items)))
+
+        const second = (yield* Testing.find("button", "Clear b")).closest("li")
+        const note = Option.getOrThrow(inspector.find(idOf(second)))
+        const twice = Option.getOrThrow(inspector.find(idOf(yield* Testing.findText("one"))))
+
+        expect([note.name, note.placed]).toEqual([
+          "NoteView",
+          Option.some({ path: ["Pair", "NoteView[b]"], services: ["Notes", "Router.Router"] }),
+        ])
+        expect([twice.name, twice.placed]).toEqual([
+          "TwiceView",
+          Option.some({ path: ["Pair", "TwiceView"], services: ["Clock"] }),
+        ])
+        expect(Props.allShown(NoteView.props, note.props)).toEqual({
+          id: "b",
+          text: "new",
+          onClear: "action",
+        })
+        expect(inspector.find(0)).toEqual(Option.none())
+
+        yield* SubscriptionRef.set(items, ["b"])
+        yield* Testing.gone("button", "Clear a")
+        inspector.keepOnly(onPage())
+        expect([...inspector.seen.values()].map((kept) => kept.name).toSorted()).toEqual([
+          "Badge",
+          "NoteView",
+          "TwiceView",
+        ])
+      }),
+    ),
+  )
+
+  it.live("a view that is only a list is known but has nothing of its own to mark", () =>
+    inspected(
+      Effect.fnUntraced(function* (inspector) {
+        yield* Testing.mount(Rows)
+
+        const row = yield* Testing.findText("row a")
+
+        expect(Option.getOrThrow(inspector.find(idOf(row))).name).toBe("Badge")
+        expect([...inspector.seen.values()].map((seen) => seen.name)).toEqual(["Listed", "Badge"])
+      }),
+    ),
+  )
+
+  it.live("with no inspector nothing is marked", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(View.connect(() => Effect.succeed({ text: "plain" }))(BadgeView))
+      expect((yield* Testing.findText("plain")).getAttribute(mark)).toBeNull()
+      expect(document.querySelector(`[${mark}]`)).toBeNull()
+    }),
+  )
+})
