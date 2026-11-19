@@ -113,6 +113,21 @@ const isFetchLayer = Schema.is(
   }),
 )
 
+const isSocketDial = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("MemberExpression"),
+    object: Schema.Struct({ name: Schema.Literal("Socket") }),
+    property: Schema.Struct({
+      name: Schema.Literals([
+        "makeWebSocket",
+        "makeWebSocketChannel",
+        "layerWebSocket",
+        "layerWebSocketConstructorGlobal",
+      ]),
+    }),
+  }),
+)
+
 const clients: ReadonlySet<string> = new Set([
   "axios",
   "ky",
@@ -135,6 +150,7 @@ const isImport = Schema.is(
 const aroundTheBackend = (node: unknown): boolean => {
   if (isFetchCall(node) || isMemberCall(node)) return true
   if (isSocket(node) || isFetchLayer(node)) return true
+  if (isSocketDial(node)) return true
 
   return isImport(node) && clients.has(node.source.value)
 }

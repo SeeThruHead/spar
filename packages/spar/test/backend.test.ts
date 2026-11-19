@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Ref, Schema } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { Rpc, RpcGroup } from "effect/rpc"
+import { Socket } from "effect/socket"
 import { Backend, Timeline } from "spar"
 
 class Greetings extends RpcGroup.make(
@@ -68,5 +69,64 @@ describe("Backend", () => {
         "GET /relative",
       ])
     }).pipe(Effect.provide(Backend.layer), Effect.provideService(FetchHttpClient.Fetch, answering)),
+  )
+})
+
+describe("a socket through Backend", () => {
+  it.effect("each batch of frames received and sent is an entry in the log", () =>
+    Effect.gen(function* () {
+      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+      const written = yield* Ref.make<ReadonlyArray<unknown>>([])
+      const plain = Socket.make({
+        reader: Effect.succeed({
+          pull: Effect.succeed(["one", "two"] as const),
+          upgrade: () => Effect.void,
+        }),
+        writer: Effect.succeed({
+          write: (chunk) => Ref.update(written, (all) => [...all, chunk]),
+          writeAll: (chunks) => Ref.update(written, (all) => [...all, ...chunks]),
+        }),
+      })
+      const logged = Backend.heard("wss://backend.test/live?room=1", plain)
+      const used = Effect.gen(function* () {
+        const reader = yield* logged.reader
+        const writer = yield* logged.writer
+
+        yield* reader.upgrade()
+        yield* writer.write("hello")
+        yield* writer.writeAll(["a", "b", "c"])
+
+        return yield* reader.pull
+      })
+      const frames = yield* Effect.provideService(
+        Effect.scoped(used),
+        Timeline.Recorder,
+        Option.some((seen: Timeline.Noted) => Ref.update(noted, (all) => [...all, seen])),
+      )
+
+      expect(frames).toEqual(["one", "two"])
+      expect(yield* Ref.get(written)).toEqual(["hello", "a", "b", "c"])
+      expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name, seen.detail])).toEqual([
+        ["call", "socket /live sent", { url: "wss://backend.test/live?room=1", frames: 1 }],
+        ["call", "socket /live sent", { url: "wss://backend.test/live?room=1", frames: 3 }],
+        ["call", "socket /live received", { url: "wss://backend.test/live?room=1", frames: 2 }],
+      ])
+      yield* Effect.provideService(
+        Effect.scoped(
+          Effect.flatMap(Backend.heard("live", plain).writer, (writer) => writer.write("x")),
+        ),
+        Timeline.Recorder,
+        Option.some((seen: Timeline.Noted) => Ref.update(noted, (all) => [...all, seen])),
+      )
+      expect((yield* Ref.get(noted)).at(-1)?.name).toBe("socket live sent")
+    }),
+  )
+
+  it.effect("the layer gives a socket without dialling until it is read", () =>
+    Effect.gen(function* () {
+      const made = yield* Effect.service(Socket.Socket)
+
+      expect(Socket.isSocket(made)).toBe(true)
+    }).pipe(Effect.provide(Backend.layerSocket("ws://127.0.0.1:1/never"))),
   )
 })

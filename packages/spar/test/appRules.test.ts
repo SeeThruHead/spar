@@ -48,6 +48,10 @@ describe("the build check on app code", () => {
     expect(rules(`const client = Layer.provide(api, FetchHttpClient.layer)`)).toEqual([
       "backend-only-through-spar",
     ])
+    expect(rules(`const live = Socket.layerWebSocket("wss://backend")`)).toEqual([
+      "backend-only-through-spar",
+    ])
+    expect(rules(`const live = Backend.layerSocket("wss://backend")`)).toEqual([])
     expect(rules(`import axios from "axios"`)).toEqual(["backend-only-through-spar"])
     expect(rules(`import { createTRPCClient } from "@trpc/client"`)).toEqual([
       "backend-only-through-spar",

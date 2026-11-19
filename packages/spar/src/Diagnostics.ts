@@ -34,8 +34,8 @@ export const all = {
   },
   SPAR_BACKEND_AROUND_SPAR: {
     kind: "build",
-    what: "fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer and other client libraries go around Backend, so the call is not a span or an entry in the log.",
-    fix: "Call a backend through Backend: Backend.rpc for an Effect RPC group, or the HttpClient that Backend.layer provides for HttpApi and JSON clients.",
+    what: "fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer, a socket dialled with Socket.makeWebSocket and other client libraries go around Backend, so the call is not a span or an entry in the log.",
+    fix: "Call a backend through Backend: Backend.rpc for an Effect RPC group, the HttpClient that Backend.layer provides for HttpApi and JSON clients, or Backend.layerSocket for a WebSocket.",
   },
   SPAR_COMPONENT_WAITED: {
     kind: "run",

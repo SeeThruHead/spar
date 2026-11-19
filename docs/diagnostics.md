@@ -55,9 +55,9 @@ Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
 ### SPAR_BACKEND_AROUND_SPAR
 
-fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer and other client libraries go around Backend, so the call is not a span or an entry in the log.
+fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer, a socket dialled with Socket.makeWebSocket and other client libraries go around Backend, so the call is not a span or an entry in the log.
 
-Fix: Call a backend through Backend: Backend.rpc for an Effect RPC group, or the HttpClient that Backend.layer provides for HttpApi and JSON clients.
+Fix: Call a backend through Backend: Backend.rpc for an Effect RPC group, the HttpClient that Backend.layer provides for HttpApi and JSON clients, or Backend.layerSocket for a WebSocket.
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
