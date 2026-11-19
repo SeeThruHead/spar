@@ -9,6 +9,7 @@
     "build": "vite build",
     "dev": "vite",
     "backend": "bun run build && bun scripts/backend.ts",
+    "traced": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/traced.ts",
     "production": "bun run build && bun scripts/production.ts",
     "devtools": "bun ../../packages/browsers/scripts/in.ts bun scripts/devtools.ts",
     "features": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/features.ts",

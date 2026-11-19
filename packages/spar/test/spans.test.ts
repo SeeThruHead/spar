@@ -67,6 +67,20 @@ describe("a backend keeps its own spans for the devtools", () => {
 
       expect(listed.map((span) => span.name)).toEqual(["outer", "inner", "broken"])
       expect(yield* Effect.promise(() => none.json())).toEqual([])
+
+      const recent = yield* Effect.acquireRelease(
+        Effect.sync(() => HttpRouter.toWebHandler(Spans.recentRoute)),
+        (served) => Effect.promise(() => served.dispose()),
+      )
+      const all = yield* Effect.promise(() =>
+        recent.handler(new Request("http://backend.test/spans"), context),
+      )
+
+      const everything = yield* Schema.decodeUnknownEffect(Schema.Array(Spans.Recorded))(
+        yield* Effect.promise(() => all.json()),
+      )
+
+      expect(everything.slice(0, 3)).toEqual(listed)
     }),
   )
 })

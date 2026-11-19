@@ -59,12 +59,14 @@ jobs:
         run: bun run moon run sidebar:walkthrough
       - name: Load the devtools through the Vite plugin in the sidebar app, log an action and rewind it
         run: bun run moon run sidebar:devtools
+      - name: Run the sidebar app against its backend and follow one trace through both
+        run: bun run moon run sidebar:traced
       - name: Build the docs site and check its diagrams can be read on a narrow screen
         run: bun run moon run docs:look
       - name: A server-rendered page is taken over without remaking its nodes
         run: bun run moon run ssr:browser
       - name: The same suites in Firefox
-        run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough sidebar:devtools ssr:browser --concurrency 1
+        run: bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough sidebar:devtools sidebar:traced ssr:browser --concurrency 1
         env:
           SPAR_BROWSER: firefox
       - name: WebKit itself, for a runner with no container runtime
@@ -73,7 +75,7 @@ jobs:
           command -v podman docker || echo "no container runtime here"
           bun run --cwd apps/demo browser:install:webkit || echo "WebKit could not be installed natively"
       - name: The same suites in WebKit, sharing one WebKit server
-        run: bun packages/browsers/scripts/in.ts bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough sidebar:devtools ssr:browser --concurrency 1
+        run: bun packages/browsers/scripts/in.ts bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough sidebar:devtools sidebar:traced ssr:browser --concurrency 1
         env:
           SPAR_BROWSER: webkit
   mutation:

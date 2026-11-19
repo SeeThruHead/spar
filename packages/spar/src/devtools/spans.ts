@@ -79,3 +79,9 @@ export const route = HttpRouter.add(
     return yield* HttpServerResponse.json(buffer.ofTrace(String(params["traceId"])))
   }),
 )
+
+export const recentRoute = HttpRouter.add(
+  "GET",
+  "/spans",
+  SpanBuffer.use((buffer) => HttpServerResponse.json(buffer.recent())),
+)

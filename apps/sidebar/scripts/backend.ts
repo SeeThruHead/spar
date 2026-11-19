@@ -79,6 +79,7 @@ const exported =
 const app = Layer.mergeAll(
   Rpcs,
   Spans.route,
+  Spans.recentRoute,
   HttpRouter.add("POST", "/otlp/*", telemetry),
   HttpRouter.add("GET", "/*", page),
 )
