@@ -13,11 +13,11 @@ describe("the JSX build check", () => {
       made("List", "{ items }", "<ul>{items.map((item) => <li>{item}</li>)}</ul>"),
       made("Panel", "{ open }", '<div>{open ? <p>Open</p> : "Closed"}</div>'),
     ].join("\n")
-    const lines = format(check("src/Views.tsx", source)).split("\n")
+    const reports = format(check("src/Views.tsx", source)).split("\n\n")
 
-    expect(lines).toHaveLength(2)
-    expect(lines[0]).toMatch(/^src\/Views\.tsx:1:\d+ jsx-only-in-views: \S/)
-    expect(lines[1]).toMatch(/^src\/Views\.tsx:2:\d+ jsx-only-in-views: \S/)
+    expect(reports).toHaveLength(2)
+    expect(reports[0]).toMatch(/^\[SPAR_JSX_OUTSIDE_VIEW\] \S.*\n {2}at src\/Views\.tsx:1:\d+\n/)
+    expect(reports[1]).toMatch(/^\[SPAR_JSX_OUTSIDE_VIEW\] \S.*\n {2}at src\/Views\.tsx:2:\d+\n/)
   })
 
   it("only looks at view files, whatever a bundler adds after the name", () => {
@@ -48,7 +48,7 @@ describe("the JSX build check", () => {
     expect(rules(block)).toEqual(["views-need-a-schema"])
     expect(rules(loose)).toEqual(["views-need-a-schema"])
     expect(format(check("Row.tsx", plain))).toMatch(
-      /^Row\.tsx:1:\d+ views-need-a-schema: A view is made with View\.make/,
+      /^\[SPAR_VIEW_WITHOUT_SCHEMA\] .*\n {2}at Row\.tsx:1:\d+\n {2}fix: Make the view with View\.make/,
     )
   })
 

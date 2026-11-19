@@ -1,8 +1,10 @@
 import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
+import * as Diagnostics from "../Diagnostics.ts"
 
 export type Violation = {
   readonly rule: "jsx-only-in-views" | "no-effect-run-in-views" | "views-need-a-schema"
+  readonly code: Diagnostics.Code
   readonly message: string
   readonly file: string
   readonly line: number
@@ -33,14 +35,11 @@ const isViewMake = Schema.is(
 
 const jsxTypes: ReadonlySet<string> = new Set(["JSXElement", "JSXFragment"])
 
-const messages = {
-  "jsx-only-in-views":
-    "JSX can only be the body of a view. Inside an expression or a call it becomes template control flow: give it its own view, and use Reactive.when or Reactive.mapBy in the component's Effect.",
-  "views-need-a-schema":
-    "A view is made with View.make(name, props, draw), where props gives a Schema for each prop. A plain function that returns JSX has no Schema for its props.",
-  "no-effect-run-in-views":
-    "A view cannot run an Effect. Do the work in the component's Effect (View.connect) and pass the result in as a prop.",
-} as const satisfies Record<Violation["rule"], string>
+const codes = {
+  "jsx-only-in-views": "SPAR_JSX_OUTSIDE_VIEW",
+  "views-need-a-schema": "SPAR_VIEW_WITHOUT_SCHEMA",
+  "no-effect-run-in-views": "SPAR_EFFECT_RUN_IN_VIEW",
+} as const satisfies Record<Violation["rule"], Diagnostics.Code>
 
 type Where = "outside" | "view" | "hole"
 
@@ -95,7 +94,8 @@ const locate = (
 export const check = (file: string, source: string): ReadonlyArray<Violation> =>
   visit(parseSync(file, source).program, "outside").map(([rule, offset]) => ({
     rule,
-    message: messages[rule],
+    code: codes[rule],
+    message: `${Diagnostics.all[codes[rule]].what} ${Diagnostics.all[codes[rule]].fix}`,
     file,
     ...locate(source, offset),
   }))
@@ -104,7 +104,9 @@ export const format = (
   violations: ReadonlyArray<Omit<Violation, "rule"> & { readonly rule: string }>,
 ): string =>
   violations
-    .map(({ file, line, column, rule, message }) => `${file}:${line}:${column} ${rule}: ${message}`)
-    .join("\n")
+    .map(({ file, line, column, code }) =>
+      Diagnostics.text(code, { at: `${file}:${line}:${column}` }),
+    )
+    .join("\n\n")
 
 export const isViewFile = (path: string): boolean => /\.tsx(\?|$)/.test(path)

@@ -49,6 +49,7 @@ import { Outbox } from "./Outbox.ts"
 import { within } from "./View.ts"
 import type { Mountable } from "./View.ts"
 import * as Timeline from "./Timeline.ts"
+import * as Diagnostics from "./Diagnostics.ts"
 
 export { Entries, LogText, Refused, Seed, UnknownAction, Unreadable, replay }
 export type { Action, Definition, Durable, Entry, Selector }
@@ -155,7 +156,9 @@ export class Abandoned extends Schema.TaggedError<Abandoned, { readonly brand: u
   { store: Schema.String, action: Schema.String, cause: Schema.Defect() },
 ) {
   override get message() {
-    return `An earlier tab asked ${this.store} for "${this.action}" and closed before it was done. This version cannot carry it out, so it was dropped.`
+    return Diagnostics.text("SPAR_ABANDONED_ACTION", {
+      said: `An earlier tab asked ${this.store} for "${this.action}" and closed before it was done. This version cannot carry it out, so it was dropped.`,
+    })
   }
 }
 

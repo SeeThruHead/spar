@@ -172,7 +172,7 @@ type Under<Parent extends string, Sub extends string> = Parent extends `${infer 
 
 type InsideOpen<Parent extends string, Sub extends string> = Parent extends `${string}/*`
   ? Sub
-  : "the parent route must end with /* to have routes under it"
+  : "SPAR_ROUTE_UNDER_CLOSED: the parent route must end with /* to have routes under it"
 
 export const under = <
   ParentParams,

@@ -3,6 +3,7 @@ import type { Cause, Scope } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import { Tabs } from "../Tabs.ts"
+import * as Diagnostics from "../Diagnostics.ts"
 
 export const StoredEntry = Schema.Struct({
   id: Schema.String,
@@ -89,7 +90,9 @@ export class UnknownAction extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("UnknownAction", { action: Schema.String }) {
   override get message() {
-    return `The log holds an action this store does not define: ${this.action}`
+    return Diagnostics.text("SPAR_UNKNOWN_ACTION", {
+      said: `The log holds an action this store does not define: ${this.action}`,
+    })
   }
 }
 
@@ -98,7 +101,9 @@ export class Unreadable extends Schema.TaggedError<Unreadable, { readonly brand:
   { store: Schema.String, cause: Schema.Defect() },
 ) {
   override get message() {
-    return `What was saved for ${this.store} on this device could not be read. Clear it or read it with the version that wrote it.`
+    return Diagnostics.text("SPAR_UNREADABLE_SAVE", {
+      said: `What was saved for ${this.store} on this device could not be read. Clear it or read it with the version that wrote it.`,
+    })
   }
 }
 

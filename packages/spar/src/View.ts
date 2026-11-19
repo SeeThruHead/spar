@@ -125,7 +125,7 @@ const noticed = <A, E, R>(name: string, made: Effect.Effect<A, E, R>): Effect.Ef
     return Effect.as(
       Effect.andThen(
         Effect.annotateCurrentSpan("spar.waited_ms", millis),
-        Timeline.note("waited", name, () => ({ millis })),
+        Timeline.note("waited", name, () => ({ millis, code: "SPAR_COMPONENT_WAITED" })),
       ),
       value,
     )

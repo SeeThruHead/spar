@@ -3,13 +3,16 @@ import { Effect, Layer, Option, Schema, pipe } from "effect"
 import type { Scope } from "effect"
 import * as App from "./App.ts"
 import * as View from "./View.ts"
+import * as Diagnostics from "./Diagnostics.ts"
 
 export class NotOnScreen extends Schema.TaggedError<
   NotOnScreen,
   { readonly brand: unique symbol }
 >()("NotOnScreen", { expected: Schema.String, cause: Schema.Defect() }) {
   override get message() {
-    return `Expected ${this.expected}, and the screen never showed it.`
+    return Diagnostics.text("SPAR_NOT_ON_SCREEN", {
+      said: `Expected ${this.expected}, and the screen never showed it.`,
+    })
   }
 }
 

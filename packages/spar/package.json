@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-runtime.ts",
+    "./diagnostics": "./src/Diagnostics.ts",
     "./transform/check": "./src/transform/check.ts",
     "./transform/app": "./src/transform/app.ts",
     "./transform/bun": "./src/transform/bun.ts",

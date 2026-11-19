@@ -1,5 +1,6 @@
 import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
+import * as Diagnostics from "../Diagnostics.ts"
 
 export type Rule =
   | "state-only-through-spar"
@@ -8,20 +9,18 @@ export type Rule =
 
 export type Violation = {
   readonly rule: Rule
+  readonly code: Diagnostics.Code
   readonly message: string
   readonly file: string
   readonly line: number
   readonly column: number
 }
 
-const messages: Readonly<Record<Rule, string>> = {
-  "state-only-through-spar":
-    "State is held in a Store (Store.Tag, placed with .layer or beside a view with .with) or in UiState.make, so every change is an action in the one log the devtools read. A Ref, a SubscriptionRef or a variable that is assigned again is state the log cannot see.",
-  "no-waiting-in-components":
-    "A component's Effect does not wait. Whatever it waits for holds back every component below it, and their queries start late: a waterfall. Declare the data with a Query and ask for it (yield* TheQuery.ask(input)); the handle is there at once and the view shows its status.",
-  "backend-only-through-spar":
-    "A backend is called through Backend (Backend.rpc for an Effect RPC group, or the HttpClient that Backend.layer provides for HttpApi and JSON clients), so every call is a span and an entry in the log. fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer and other client libraries go around it.",
-}
+const codes = {
+  "state-only-through-spar": "SPAR_STATE_OUTSIDE_STORE",
+  "no-waiting-in-components": "SPAR_WAIT_IN_COMPONENT",
+  "backend-only-through-spar": "SPAR_BACKEND_AROUND_SPAR",
+} as const satisfies Record<Rule, Diagnostics.Code>
 
 const isComponent = Schema.is(
   Schema.Struct({
@@ -173,7 +172,8 @@ const locate = (
 export const check = (file: string, source: string): ReadonlyArray<Violation> =>
   visit(parseSync(file, source).program, "outside").map(([rule, offset]) => ({
     rule,
-    message: messages[rule],
+    code: codes[rule],
+    message: `${Diagnostics.all[codes[rule]].what} ${Diagnostics.all[codes[rule]].fix}`,
     file,
     ...locate(source, offset),
   }))

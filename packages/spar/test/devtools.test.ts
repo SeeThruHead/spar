@@ -162,7 +162,9 @@ describe("devtools", () => {
       )
       yield* Testing.click("button", "Load log")
       yield* Testing.eventually(() =>
-        expect(problem()).toBe("The log holds an action this store does not define: renamed"),
+        expect(problem()).toContain(
+          "[SPAR_UNKNOWN_ACTION] The log holds an action this store does not define: renamed",
+        ),
       )
       yield* shows("0", "live")
       yield* Testing.fill("textbox", "test/Tally log to load", "[]")

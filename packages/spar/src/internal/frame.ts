@@ -1,4 +1,5 @@
 import { Context } from "effect"
+import * as Diagnostics from "../Diagnostics.ts"
 
 export class Frame extends Context.Service<
   Frame,
@@ -12,9 +13,9 @@ export class OverlayLayer extends Context.Service<
 
 export const noPage: Context.Service.Shape<typeof Frame> = {
   get target(): HTMLElement {
-    throw new Error("There is no page on a server")
+    throw new Error(Diagnostics.text("SPAR_NO_PAGE_ON_SERVER"))
   },
   get overlays(): HTMLElement {
-    throw new Error("There is no page on a server")
+    throw new Error(Diagnostics.text("SPAR_NO_PAGE_ON_SERVER"))
   },
 }

@@ -25,13 +25,16 @@ import { starter, starterIn, traced } from "./listen.ts"
 import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
+import * as Diagnostics from "../Diagnostics.ts"
 
 export class DuplicateKey extends Schema.TaggedError<
   DuplicateKey,
   { readonly brand: unique symbol }
 >()("DuplicateKey", { keys: Schema.Array(Schema.String) }) {
   override get message() {
-    return `A keyed list has rows that share a key: ${this.keys.join(", ")}. Each row needs its own key.`
+    return Diagnostics.text("SPAR_DUPLICATE_KEY", {
+      said: `A keyed list has rows that share a key: ${this.keys.join(", ")}. Each row needs its own key.`,
+    })
   }
 }
 

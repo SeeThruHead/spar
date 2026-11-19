@@ -268,9 +268,9 @@ describe("a store kept on the device with several tabs open", () => {
 
       expect(yield* tab.select.total.get).toBe(2)
       expect(yield* pendingKeys).toEqual([])
-      expect((yield* Ref.get(reports)).map(String)).toEqual([
-        'Abandoned: An earlier tab asked test/Ledger for "renamed" and closed before it was done. This version cannot carry it out, so it was dropped.',
-        'Abandoned: An earlier tab asked test/Ledger for "added" and closed before it was done. This version cannot carry it out, so it was dropped.',
+      expect((yield* Ref.get(reports)).map((report) => String(report).split("\n")[0])).toEqual([
+        'Abandoned: [SPAR_ABANDONED_ACTION] An earlier tab asked test/Ledger for "renamed" and closed before it was done. This version cannot carry it out, so it was dropped.',
+        'Abandoned: [SPAR_ABANDONED_ACTION] An earlier tab asked test/Ledger for "added" and closed before it was done. This version cannot carry it out, so it was dropped.',
       ])
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )

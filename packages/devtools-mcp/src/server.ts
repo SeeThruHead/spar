@@ -18,7 +18,7 @@ import {
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
-import { Store, Timeline, UiState } from "spar"
+import { Diagnostics, Store, Timeline, UiState } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import { PageRpcs } from "./protocol.ts"
@@ -144,7 +144,9 @@ export class Pages extends Context.Service<
           Effect.flatMap(Ref.get(reports), (all) =>
             HashMap.has(all, id)
               ? Ref.set(chosen, Option.some(id))
-              : Effect.fail(`There is no page called ${id}. list_pages gives the ones there are.`),
+              : Effect.fail(
+                  Diagnostics.text("SPAR_TOOL_NO_PAGE", { said: `There is no page called ${id}.` }),
+                ),
           ),
       }
     }),
@@ -478,9 +480,8 @@ const ToolHandlers = Tools.toLayer(
     const pages = yield* Pages
     const found = (key: string) =>
       Effect.flatMap(pages.stores, (stores) =>
-        Effect.mapError(
-          Effect.fromNullishOr(stores.find((each) => each.store === key)),
-          () => `There is no store called ${key}. list_stores gives the ones there are.`,
+        Effect.mapError(Effect.fromNullishOr(stores.find((each) => each.store === key)), () =>
+          Diagnostics.text("SPAR_TOOL_NO_STORE", { said: `There is no store called ${key}.` }),
         ),
       )
     const after = (wanted: Extract<Ask, { readonly store: string }>) =>
@@ -531,7 +532,10 @@ const ToolHandlers = Tools.toLayer(
         Effect.flatMap(pages.page, (page) =>
           Effect.mapError(
             Effect.fromNullishOr(page.components.findLast((each) => each.place === place)),
-            () => `There is no component at ${place}. list_components gives the ones there are.`,
+            () =>
+              Diagnostics.text("SPAR_TOOL_NO_COMPONENT", {
+                said: `There is no component at ${place}.`,
+              }),
           ),
         ),
       get_trace: ({ traceId, lens }) =>

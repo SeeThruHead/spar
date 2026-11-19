@@ -4,6 +4,7 @@ import { FetchHttpClient } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
+import { Diagnostics } from "spar"
 import type { Store } from "spar"
 import { PageRpcs } from "./protocol.ts"
 import type { Ask, Command, Snapshot } from "./protocol.ts"
@@ -35,7 +36,9 @@ const done = (
 }
 
 const refused = (name: string) => ({
-  message: `There is no UI state called ${name} there, or the value does not fit its Schema.`,
+  message: Diagnostics.text("SPAR_TOOL_NO_UI_STATE", {
+    said: `There is no UI state called ${name} there, or the value does not fit its Schema.`,
+  }),
 })
 
 const Located = Schema.Struct({ href: Schema.String })
@@ -80,7 +83,11 @@ const link = Effect.gen(function* () {
   const onStore = (ask: OfStore) =>
     Effect.flatMap(registry.stores.get, (stores) =>
       Effect.fromNullishOr(stores.find((each) => each.key === ask.store)).pipe(
-        Effect.mapError(() => ({ message: `There is no store called ${ask.store}.` })),
+        Effect.mapError(() => ({
+          message: Diagnostics.text("SPAR_TOOL_NO_STORE", {
+            said: `There is no store called ${ask.store}.`,
+          }),
+        })),
         Effect.flatMap((store) => done(store, ask)),
       ),
     )

@@ -123,6 +123,8 @@ const span = (
   attributes,
 })
 
+const headOf = (answer: unknown): string => String(answer).split("\n")[0] ?? ""
+
 const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boolean) =>
   Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("20 millis") })
 
@@ -240,9 +242,9 @@ describe("the devtools server for agents", () => {
           value: 5,
         })
 
-        expect([refused.failed, refused.said]).toEqual([
+        expect([refused.failed, headOf(refused.said)]).toEqual([
           true,
-          "There is no UI state called text there, or the value does not fit its Schema.",
+          "[SPAR_TOOL_NO_UI_STATE] There is no UI state called text there, or the value does not fit its Schema.",
         ])
         expect((yield* mcp.call("list_components", {})).said).toEqual([
           { name: "NoteView", place: "NoteView" },
@@ -261,7 +263,11 @@ describe("the devtools server for agents", () => {
 
         expect([nowhere.failed, nowhere.said]).toEqual([
           true,
-          "There is no component at Nowhere. list_components gives the ones there are.",
+          [
+            "[SPAR_TOOL_NO_COMPONENT] There is no component at Nowhere.",
+            "  fix: Call list_components for the ones there are.",
+            '  see: LLMS.md, section "SPAR_TOOL_NO_COMPONENT"',
+          ].join("\n"),
         ])
 
         const trace = yield* mcp.call("get_trace", { traceId: first?.traceId ?? "" })
@@ -555,15 +561,18 @@ describe("the devtools server for agents", () => {
       })
       const strayStore = yield* mcp.call("travel_to", { store: "nope", seq: null })
 
-      expect([unknownStore.failed, unknownStore.said]).toEqual([
+      expect([unknownStore.failed, headOf(unknownStore.said)]).toEqual([
         true,
-        "There is no store called nope. list_stores gives the ones there are.",
+        "[SPAR_TOOL_NO_STORE] There is no store called nope.",
       ])
-      expect([unknownAction.failed, unknownAction.said]).toEqual([
+      expect([unknownAction.failed, headOf(unknownAction.said)]).toEqual([
         true,
-        "The log holds an action this store does not define: renamed",
+        "[SPAR_UNKNOWN_ACTION] The log holds an action this store does not define: renamed",
       ])
-      expect([strayStore.failed, strayStore.said]).toEqual([true, "There is no store called nope."])
+      expect([strayStore.failed, headOf(strayStore.said)]).toEqual([
+        true,
+        "[SPAR_TOOL_NO_STORE] There is no store called nope.",
+      ])
     }).pipe(Effect.scoped, Effect.provide(Served)),
   )
 

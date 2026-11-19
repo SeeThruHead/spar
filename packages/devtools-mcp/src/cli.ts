@@ -2,6 +2,7 @@ import { Console, Effect, Layer, Option, Schema } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { Argument, Command, Flag } from "effect/cli"
 import { FetchHttpClient } from "effect/http"
+import { Diagnostics } from "spar"
 import * as Spans from "spar/devtools/spans"
 import { Navigation } from "./server.ts"
 
@@ -10,7 +11,7 @@ export class NoSuchTool extends Schema.TaggedError<NoSuchTool, { readonly brand:
   { tool: Schema.String },
 ) {
   override get message() {
-    return `There is no tool called ${this.tool}. Run "tools" to list the ones there are.`
+    return Diagnostics.text("SPAR_TOOL_NO_TOOL", { said: `There is no tool called ${this.tool}.` })
   }
 }
 

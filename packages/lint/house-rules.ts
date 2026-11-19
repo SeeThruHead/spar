@@ -285,4 +285,66 @@ const rules: Readonly<Record<string, Rule>> = {
   }),
 }
 
-export default { meta: { name: "house" }, rules }
+export const codeOf = (name: string): string => `HOUSE_${name.toUpperCase().replaceAll("-", "_")}`
+
+export const guides: Readonly<Record<string, { readonly what: string; readonly fix: string }>> = {
+  "no-loops": {
+    what: "A for, for-in, for-of, while or do-while loop.",
+    fix: "Use Array methods, Effect.forEach or recursion.",
+  },
+  "no-let": {
+    what: "A let or var declaration.",
+    fix: "Use const. Where a value is built in steps, give each step its own name or use a reduce.",
+  },
+  "no-mutation": {
+    what: "A property assignment, Object.assign onto an existing value, or a method that changes an array in place.",
+    fix: "Build a new value: spread into a new object or array, or use toSorted, toReversed and the like.",
+  },
+  "no-comments": {
+    what: "A comment in the code.",
+    fix: "Remove it and let names, types and structure carry the meaning.",
+  },
+  "no-nested-if": {
+    what: "An if inside an if.",
+    fix: "Use guard clauses that return early, or move the inner condition into a named helper.",
+  },
+  "no-multiline-logical": {
+    what: "A chain of && or || that runs over several lines.",
+    fix: "Move the condition into a named helper made of one-line guard clauses.",
+  },
+  "no-casts": {
+    what: "A type cast (as, or an angle-bracket assertion).",
+    fix: "Restructure until it typechecks: decode with a Schema, narrow with a guard, or fix the type at its source.",
+  },
+  deterministic: {
+    what: "Date, Date.now, Math.random or crypto used directly.",
+    fix: "Use DateTime and the Clock and Crypto services, so time and randomness can be set in a test.",
+  },
+  "run-at-entry-only": {
+    what: "Effect.run* or runMain outside an entry point.",
+    fix: "Return the Effect and let src/main.ts, or a file in scripts/ or tools/, run it.",
+  },
+  "no-gen-wrapper": {
+    what: "A function whose whole body returns Effect.gen.",
+    fix: "Write it as Effect.fn or Effect.fnUntraced.",
+  },
+}
+
+const coded = (name: string, made: Rule): Rule => ({
+  meta: made.meta,
+  create: (context) =>
+    made.create({
+      filename: context.filename,
+      sourceCode: context.sourceCode,
+      report: ({ node, message }) =>
+        context.report({
+          node,
+          message: `[${codeOf(name)}] ${message}. See LLMS.md, section "${codeOf(name)}"`,
+        }),
+    }),
+})
+
+export default {
+  meta: { name: "house" },
+  rules: Object.fromEntries(Object.entries(rules).map(([name, made]) => [name, coded(name, made)])),
+}

@@ -60,9 +60,15 @@ describe("spar/testing", () => {
       const stuck = yield* Effect.flip(Testing.gone("heading"))
 
       expect(missing.message).toBe(
-        'Expected a button named "Delete", and the screen never showed it.',
+        [
+          '[SPAR_NOT_ON_SCREEN] Expected a button named "Delete", and the screen never showed it.',
+          "  fix: Check the role and name asked for against what the view draws, and that the data it needs was provided in the test's layer.",
+          '  see: LLMS.md, section "SPAR_NOT_ON_SCREEN"',
+        ].join("\n"),
       )
-      expect(stuck.message).toBe("Expected no more a heading, and the screen never showed it.")
+      expect(stuck.message).toContain(
+        "[SPAR_NOT_ON_SCREEN] Expected no more a heading, and the screen never showed it.",
+      )
     }),
   )
 })

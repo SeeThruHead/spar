@@ -20,6 +20,7 @@ import * as Events from "./Events.ts"
 import * as Store from "./Store.ts"
 import * as Timeline from "./Timeline.ts"
 import type { Mountable } from "./View.ts"
+import * as Diagnostics from "./Diagnostics.ts"
 
 export const Status = Schema.Literals(["waiting", "loading", "loaded", "failed"])
 
@@ -69,7 +70,9 @@ const answersAnother = <A, E>(
   state: State<A, E>,
   answer: { readonly key: string; readonly request: number },
 ): string | null =>
-  state.entries[answer.key]?.request === answer.request ? null : "This answers an earlier request"
+  state.entries[answer.key]?.request === answer.request
+    ? null
+    : Diagnostics.brief("SPAR_LATE_ANSWER")
 
 const settled = <A, E>(
   state: State<A, E>,
@@ -168,7 +171,9 @@ export const Tag =
             },
           }),
           (before, asked) =>
-            before.entries[asked.key]?.status === "loading" ? "It is already loading" : null,
+            before.entries[asked.key]?.status === "loading"
+              ? Diagnostics.brief("SPAR_ALREADY_LOADING")
+              : null,
         ),
         loaded: Store.action(
           Schema.Struct({

@@ -21,13 +21,13 @@ const build = (name: string) =>
 
 describe("the JSX build check in a build", () => {
   it("prints each violation as file, line, column, rule and what to do instead", () => {
-    const [line] = format(check("List.tsx", mapped)).split("\n")
-
-    expect(line).toMatch(/^List\.tsx:1:\d+ jsx-only-in-views: JSX can only be the body of a view/)
+    expect(format(check("List.tsx", mapped))).toMatch(
+      /^\[SPAR_JSX_OUTSIDE_VIEW\] JSX can only be the body of a view.*\n {2}at List\.tsx:1:\d+\n {2}fix: Give it its own view.*\n {2}see: LLMS\.md, section "SPAR_JSX_OUTSIDE_VIEW"$/,
+    )
   })
 
   it("the Vite plugin stops the build on a view that breaks a rule", () => {
-    expect(() => vitePlugin.transform(mapped, "/app/List.tsx")).toThrow("jsx-only-in-views")
+    expect(() => vitePlugin.transform(mapped, "/app/List.tsx")).toThrow("SPAR_JSX_OUTSIDE_VIEW")
   })
 
   it("the Vite plugin lets a clean view and every non-view file through untouched", () => {
@@ -39,7 +39,7 @@ describe("the JSX build check in a build", () => {
     Effect.gen(function* () {
       const error = yield* Effect.flip(build("Mapped.tsx"))
 
-      expect(Bun.inspect(error.cause)).toContain("jsx-only-in-views")
+      expect(Bun.inspect(error.cause)).toContain("SPAR_JSX_OUTSIDE_VIEW")
     }),
   )
 

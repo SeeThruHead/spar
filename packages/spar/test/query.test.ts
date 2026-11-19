@@ -404,7 +404,7 @@ describe("server data in a store", () => {
 
       expect(yield* whats).toEqual(["users"])
       expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("It is already loading"),
+        Option.some("[SPAR_ALREADY_LOADING] It is already loading"),
       )
       expect((yield* Ref.get(noted)).map((seen) => seen.kind)).toEqual(["command", "refused"])
     }),
@@ -697,7 +697,7 @@ describe("server data in a store", () => {
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
       expect(yield* shown.status.get).toBe("loading")
       expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("This answers an earlier request"),
+        Option.some("[SPAR_LATE_ANSWER] This answers an earlier request"),
       )
     }),
   )
@@ -757,7 +757,7 @@ describe("server data in a store", () => {
     expect(
       Schema.is(Store.Refusal)({
         action: "requested",
-        reason: "It is already loading",
+        reason: "[SPAR_ALREADY_LOADING] It is already loading",
         payload: null,
       }),
     ).toBe(true)

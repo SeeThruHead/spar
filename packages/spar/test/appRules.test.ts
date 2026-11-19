@@ -95,10 +95,16 @@ describe("the build check on app code", () => {
 
   it("says where the problem is and what to do instead", () => {
     expect(check("src/Board.ts", `const a = 1\nconst count = Ref.make(0)`)).toMatchObject([
-      { file: "src/Board.ts", line: 2, column: 15, rule: "state-only-through-spar" },
+      {
+        file: "src/Board.ts",
+        line: 2,
+        column: 15,
+        rule: "state-only-through-spar",
+        code: "SPAR_STATE_OUTSIDE_STORE",
+      },
     ])
     expect(check("src/Board.ts", `fetch("/x")`)[0]?.message).toContain("Backend.rpc")
-    expect(check("src/Board.ts", `let a = 1`)[0]?.message).toContain("State is held in a Store")
+    expect(check("src/Board.ts", `let a = 1`)[0]?.message).toContain("Hold state in a Store")
     expect(check("src/Board.ts", `const a = 1\nfetch("/x")\nconst b = 2\n`)).toMatchObject([
       { line: 2, column: 1 },
     ])
@@ -118,7 +124,7 @@ describe("the build check on app code", () => {
 
   it("the Vite plugin stops the build on app code that breaks a rule, and only there", () => {
     expect(() => sparJsx.transform(`let total = 0`, "/app/src/Board.ts")).toThrow(
-      "state-only-through-spar",
+      "SPAR_STATE_OUTSIDE_STORE",
     )
     expect(sparJsx.transform(`let total = 0`, "/app/src/server/Fake.ts")).toBeNull()
     expect(sparJsx.transform(`const total = 0`, "/app/src/Board.ts")).toBeNull()
