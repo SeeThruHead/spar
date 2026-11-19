@@ -30,8 +30,11 @@ component function running again.
 
 ## 2. A component is a pure view plus one Effect that makes its props
 
-`View.connect((outerProps) => Effect<Props, E, R>)(View)`, with the view last. The view is a plain
-function from props to an element and cannot reach a service. The Effect is ordinary Effect code. It
+`View.connect(() => Effect<Props, E, R>)(View)`, with the view last, or
+`View.taking(fields, (outerProps) => Effect<Props, E, R>)(View)` when the parent gives it props. The
+view is made with `View.make(name, fields, draw)`: a function from props to an element that cannot
+reach a service. Both kinds of props are declared with a Schema for each one, and the build rejects a
+view written as a plain function. The Effect is ordinary Effect code. It
 runs once when the component mounts, in the component's own scope, and everything it started is
 cancelled when the component unmounts. Every component keeps its pure view as `.view`, so a test or
 a story can render it with sample props. `connect` rejects props the view does not take.

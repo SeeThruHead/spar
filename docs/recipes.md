@@ -45,7 +45,10 @@ is mounted fresh each time the dialog opens.
 yield *
   pipe(
     Reactive.map(editing, (now) => now._tag === "AddingProject"),
-    Reactive.when(Dialog({ id: "project", title: "New project" }, ProjectForm), shared),
+    Reactive.when(
+      Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
+      { onClose },
+    ),
   )
 ```
 

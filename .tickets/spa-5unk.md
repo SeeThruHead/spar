@@ -1,6 +1,6 @@
 ---
 id: spa-5unk
-status: in_progress
+status: closed
 deps: [spa-pa0r]
 links: []
 created: 2026-11-19T03:35:14Z
@@ -35,3 +35,7 @@ Step 4 done: the build check rejects JSX outside View.make (rule views-need-a-sc
 **2026-11-19T03:51:10Z**
 
 Step 3 done: View.connect takes a props function with no argument; a component with outer props is View.taking(fields, props). Proof: component-props-without-a-schema. The ui Dialog now takes its content as an unmounted child (View.child(...)) and only onClose as a prop, because a props type cannot be derived from a generic Schema. Left for this ticket: rewrite the docs samples (docs/*.md still show plain function views and connect with typed parameters).
+
+**2026-11-19T03:51:40Z**
+
+Docs rewritten (getting-started, api, principles, recipes). Done.

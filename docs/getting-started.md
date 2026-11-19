@@ -60,38 +60,48 @@ export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/Counte
 
 ## A view
 
-A view is a plain function from props to JSX, in a `.tsx` file. It cannot reach a service. Reactive
-values go straight into the markup; each one updates the single text node or attribute it sits in.
+A view is made with `View.make`: a name, a Schema for each prop, and a function from those props to
+JSX, in a `.tsx` file. It cannot reach a service. Reactive values go straight into the markup; each
+one updates the single text node or attribute it sits in. A plain function that returns JSX is
+rejected by the build, because its props would have no Schema.
 
 ```tsx
-import type { Action, Reactive } from "spar"
+import { Schema } from "effect"
+import { Props, View } from "spar"
 
-type Props = {
-  readonly count: Reactive.Reactive<number>
-  readonly doubled: Reactive.Reactive<number>
-  readonly onIncrement: Action
-  readonly onReset: Action
-}
-
-export const CounterView = ({ count, doubled, onIncrement, onReset }: Props) => (
-  <section aria-label="Counter">
-    <h2>Counter</h2>
-    <p>
-      Count <output aria-label="Count">{count}</output>, doubled{" "}
-      <output aria-label="Doubled">{doubled}</output>
-    </p>
-    <button onClick={onIncrement}>Add one</button>
-    <button onClick={onReset}>Reset</button>
-  </section>
+export const CounterView = View.make(
+  "CounterView",
+  {
+    count: Props.Reactive(Schema.Finite),
+    doubled: Props.Reactive(Schema.Finite),
+    onIncrement: Props.Action,
+    onReset: Props.Action,
+  },
+  ({ count, doubled, onIncrement, onReset }) => (
+    <section aria-label="Counter">
+      <h2>Counter</h2>
+      <p>
+        Count <output aria-label="Count">{count}</output>, doubled{" "}
+        <output aria-label="Doubled">{doubled}</output>
+      </p>
+      <button onClick={onIncrement}>Add one</button>
+      <button onClick={onReset}>Reset</button>
+    </section>
+  ),
 )
 ```
+
+`Props` has the Schemas for what is not plain data: `Props.Reactive(schema)`, `Props.State(schema)`,
+`Props.Action`, `Props.Handler("keydown")`, `Props.Callback(schema)`, `Props.Element` and
+`Props.Handle`, next to `Form.Field(schema)`, `Router.Link` and `Overlay.Placement`.
 
 (`apps/demo/src/counter/CounterView.tsx`)
 
 ## A component
 
 `View.connect` joins an Effect that makes the props to the view that shows them. The Effect runs
-once, when the component mounts.
+once, when the component mounts. A component that takes props from its parent names them with a
+Schema too: `View.taking({ id: Schema.String }, ({ id }) => ...)(View)`.
 
 ```ts
 import { Effect } from "effect"
