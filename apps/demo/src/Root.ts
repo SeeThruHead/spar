@@ -8,7 +8,7 @@ import { MailApi } from "./mail/MailApi.ts"
 import { MailStoreLive } from "./mail/MailStore.ts"
 import { Mail } from "./mail/Thread.ts"
 import { Todos } from "./todos/Todos.ts"
-import { TodoState, TodoStore } from "./todos/TodoStore.ts"
+import { TodoStore } from "./todos/TodoStore.ts"
 
 export const Root = View.connect(
   Effect.fnUntraced(function* () {
@@ -23,7 +23,7 @@ export const Root = View.connect(
 
 export const layer = Layer.mergeAll(
   CounterStore.layer(),
-  TodoStore.layerDurable({ state: TodoState }),
+  TodoStore.layerDurable(),
   MailStoreLive,
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(MailApi.layer, Outbox.Outbox.layer, Devtools.layer)),

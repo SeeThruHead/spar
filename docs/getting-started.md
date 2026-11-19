@@ -27,18 +27,21 @@ export default defineConfig({
 
 ## A store
 
-App state lives in stores. A store is an initial state, pure actions with a Schema for each
-payload, and named selectors.
+App state lives in stores. A store is a Schema for its state, an initial state, pure actions
+with a Schema for each payload, and named selectors with a Schema for what each gives.
 
 ```ts
 import { Schema } from "effect"
 import { Store } from "spar"
 
-type State = { readonly count: number }
+const State = Schema.Struct({ count: Schema.Finite })
+
+type State = typeof State.Type
 
 const initialState: State = { count: 0 }
 
 export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/CounterStore", {
+  state: State,
   initialState,
   actions: {
     incremented: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
@@ -47,8 +50,8 @@ export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/Counte
     reset: Store.action(Schema.Void, (): State => initialState),
   },
   selectors: {
-    count: (state) => state.count,
-    doubled: (state) => state.count * 2,
+    count: Store.selector(Schema.Finite, (state: State) => state.count),
+    doubled: Store.selector(Schema.Finite, (state: State) => state.count * 2),
   },
 }) {}
 ```

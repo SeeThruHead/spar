@@ -13,13 +13,19 @@ import {
   LoadedView,
   LoadingView,
 } from "./views.tsx"
-import type { Item } from "./views.tsx"
 
-type State = { readonly items: ReadonlyArray<Item> }
+const Item = Schema.Struct({ id: Schema.String, label: Schema.String })
+
+type Item = typeof Item.Type
+
+const State = Schema.Struct({ items: Schema.Array(Item) })
+
+type State = typeof State.Type
 
 const initialState: State = { items: [] }
 
 class Board extends Store.Tag<Board>()("test/Board", {
+  state: State,
   initialState,
   actions: {
     added: Store.action(Schema.Struct({ label: Schema.String }), (state: State, { label }) => ({
@@ -37,8 +43,8 @@ class Board extends Store.Tag<Board>()("test/Board", {
     })),
   },
   selectors: {
-    items: (state) => state.items,
-    total: (state) => state.items.length,
+    items: Store.selector(Schema.Array(Item), (state: State) => state.items),
+    total: Store.selector(Schema.Int, (state: State) => state.items.length),
   },
 }) {}
 

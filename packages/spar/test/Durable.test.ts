@@ -15,6 +15,7 @@ type State = typeof State.Type
 const initialState: State = { total: 0, notes: [] }
 
 class Journal extends Store.Tag<Journal>()("test/Journal", {
+  state: State,
   initialState,
   actions: {
     added: Store.action(Schema.Struct({ amount: Schema.Finite }), (state: State, { amount }) => ({
@@ -26,7 +27,7 @@ class Journal extends Store.Tag<Journal>()("test/Journal", {
       notes: [...state.notes, text],
     })),
   },
-  selectors: { total: (state) => state.total },
+  selectors: { total: Store.selector(Schema.Finite, (state: State) => state.total) },
 }) {}
 
 const Amount = Schema.Int.check(Schema.isBetween({ minimum: -50, maximum: 50 }))
@@ -38,7 +39,7 @@ const session = Effect.fnUntraced(function* <A, E>(
 
   return yield* Journal.use(use).pipe(
     Effect.provide(
-      Journal.layerDurable({ state: State, compactAfter: 3 }).pipe(
+      Journal.layerDurable({ compactAfter: 3 }).pipe(
         Layer.provide(SecureRandom.layerWebCrypto),
         Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, stored)),
       ),
@@ -192,7 +193,7 @@ describe("a store kept on the device", () => {
       Effect.gen(function* () {
         const stored = yield* KeyValueStore.KeyValueStore
         const sent = yield* Ref.make<ReadonlyArray<string>>([])
-        const withOutbox = Journal.layerDurable({ state: State }, [
+        const withOutbox = Journal.layerDurable({}, [
           Store.outbox(Journal.actions.noted, ({ text }) =>
             Ref.update(sent, (all) => [...all, text]),
           ),

@@ -26,6 +26,7 @@ type State = typeof State.Type
 const initialState: State = { total: 0, notes: [] }
 
 class Ledger extends Store.Tag<Ledger>()("test/Ledger", {
+  state: State,
   initialState,
   actions: {
     added: Store.action(Schema.Struct({ amount: Schema.Finite }), (state: State, { amount }) => ({
@@ -37,7 +38,7 @@ class Ledger extends Store.Tag<Ledger>()("test/Ledger", {
       notes: [...state.notes, text],
     })),
   },
-  selectors: { total: (state) => state.total },
+  selectors: { total: Store.selector(Schema.Finite, (state: State) => state.total) },
 }) {}
 
 type Told = { readonly from: string; readonly name: string }
@@ -71,7 +72,7 @@ const openTabIn = Effect.fnUntraced(function* (
 ) {
   const stored = yield* KeyValueStore.KeyValueStore
   const built = yield* Layer.buildWithScope(
-    Ledger.layerDurable({ state: State, compactAfter: 3 }, reactions).pipe(
+    Ledger.layerDurable({ compactAfter: 3 }, reactions).pipe(
       Layer.provide(SecureRandom.layerWebCrypto),
       Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, stored)),
       Layer.provide(Layer.succeed(Tabs.Tabs, tabs)),

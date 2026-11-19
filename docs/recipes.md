@@ -57,7 +57,7 @@ Declare it beside the store. The item is saved before the state changes, sent wi
 key, and retried until it lands.
 
 ```ts
-export const BoardStoreLive = BoardStore.layerDurable({ state: Board }, [
+export const BoardStoreLive = BoardStore.layerDurable({}, [
   Store.outbox(
     BoardStore.actions.started,
     Effect.fnUntraced(function* ({ name }, idempotencyKey) {

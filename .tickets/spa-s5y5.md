@@ -1,7 +1,7 @@
 ---
 id: spa-s5y5
-status: open
-deps: [spa-jfgv]
+status: in_progress
+deps: [spa-jfgv, spa-pa0r, spa-5unk, spa-qi3g]
 links: []
 created: 2026-11-19T03:26:28Z
 type: task

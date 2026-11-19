@@ -9,7 +9,7 @@ const Todo = Schema.Struct({
 
 export type Todo = typeof Todo.Type
 
-export const TodoState = Schema.Struct({
+const TodoState = Schema.Struct({
   nextId: Schema.Int,
   todos: Schema.Array(Todo),
 })
@@ -21,6 +21,7 @@ const initialState: State = { nextId: 1, todos: [] }
 const Target = Schema.Struct({ id: Schema.String })
 
 export class TodoStore extends Store.Tag<TodoStore>()("demo/todos/TodoStore", {
+  state: TodoState,
   initialState,
   actions: {
     added: Store.action(Schema.Struct({ title: Schema.String }), (state: State, { title }) => ({
@@ -41,7 +42,10 @@ export class TodoStore extends Store.Tag<TodoStore>()("demo/todos/TodoStore", {
     })),
   },
   selectors: {
-    todos: (state) => state.todos,
-    remaining: (state) => state.todos.filter((todo) => !todo.done).length,
+    todos: Store.selector(Schema.Array(Todo), (state: State) => state.todos),
+    remaining: Store.selector(
+      Schema.Int,
+      (state: State) => state.todos.filter((todo) => !todo.done).length,
+    ),
   },
 }) {}

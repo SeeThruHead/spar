@@ -3,16 +3,19 @@ import { Effect, Layer, Ref, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Store } from "spar"
 
-type State = { readonly visits: number }
+const State = Schema.Struct({ visits: Schema.Finite })
+
+type State = typeof State.Type
 
 const initialState: State = { visits: 0 }
 
 class Visits extends Store.Tag<Visits>()("test/Visits", {
+  state: State,
   initialState,
   actions: {
     visited: Store.action(Schema.Void, (state: State) => ({ visits: state.visits + 1 })),
   },
-  selectors: { visits: (state) => state.visits },
+  selectors: { visits: Store.selector(Schema.Finite, (state: State) => state.visits) },
 }) {}
 
 type Seen = { readonly name: string; readonly store: unknown; readonly action: unknown }

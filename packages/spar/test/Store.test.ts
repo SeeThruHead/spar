@@ -5,14 +5,14 @@ import { KeyValueStore } from "effect/persistence"
 import { TestClock } from "effect/testing"
 import { Outbox, Store } from "spar"
 
-type State = {
-  readonly count: number
-  readonly notes: ReadonlyArray<string>
-}
+const State = Schema.Struct({ count: Schema.Finite, notes: Schema.Array(Schema.String) })
+
+type State = typeof State.Type
 
 const initialState: State = { count: 0, notes: [] }
 
 class Ledger extends Store.Tag<Ledger>()("test/Ledger", {
+  state: State,
   initialState,
   actions: {
     incremented: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
@@ -25,8 +25,8 @@ class Ledger extends Store.Tag<Ledger>()("test/Ledger", {
     })),
   },
   selectors: {
-    count: (state) => state.count,
-    notes: (state) => state.notes,
+    count: Store.selector(Schema.Finite, (state: State) => state.count),
+    notes: Store.selector(Schema.Array(Schema.String), (state: State) => state.notes),
   },
 }) {}
 

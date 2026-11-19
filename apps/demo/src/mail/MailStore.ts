@@ -2,20 +2,22 @@ import { Effect, Schema } from "effect"
 import { Store } from "spar"
 import { MailApi } from "./MailApi.ts"
 
-export type Reply = {
-  readonly id: string
-  readonly threadId: string
-  readonly text: string
-}
+export const Reply = Schema.Struct({
+  id: Schema.String,
+  threadId: Schema.String,
+  text: Schema.String,
+})
 
-type State = {
-  readonly nextId: number
-  readonly replies: ReadonlyArray<Reply>
-}
+export type Reply = typeof Reply.Type
+
+const State = Schema.Struct({ nextId: Schema.Int, replies: Schema.Array(Reply) })
+
+type State = typeof State.Type
 
 const initialState: State = { nextId: 1, replies: [] }
 
 export class MailStore extends Store.Tag<MailStore>()("demo/mail/MailStore", {
+  state: State,
   initialState,
   actions: {
     replySent: Store.action(
@@ -27,7 +29,7 @@ export class MailStore extends Store.Tag<MailStore>()("demo/mail/MailStore", {
     ),
   },
   selectors: {
-    replies: (state) => state.replies,
+    replies: Store.selector(Schema.Array(Reply), (state: State) => state.replies),
   },
 }) {}
 

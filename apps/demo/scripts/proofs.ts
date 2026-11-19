@@ -101,6 +101,24 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "Reactive<number>' is not assignable to parameter of type 'number'",
   },
   {
+    file: "store-without-a-state-schema.ts",
+    rule: "Declaring a store whose state has no Schema",
+    by: "types",
+    expect: "Property 'state' is missing",
+  },
+  {
+    file: "selector-without-a-schema.ts",
+    rule: "Declaring a selector whose output has no Schema",
+    by: "types",
+    expect: "is not assignable to type 'Selector<",
+  },
+  {
+    file: "ui-state-without-a-schema.ts",
+    rule: "Declaring UI state without a Schema",
+    by: "types",
+    expect: "Expected 3 arguments, but got 2",
+  },
+  {
     file: "ui-state-written-from-a-stream.ts",
     rule: "Keeping UI state in sync with a store stream",
     by: "types",

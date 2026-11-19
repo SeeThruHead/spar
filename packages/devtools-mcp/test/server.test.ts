@@ -8,11 +8,14 @@ import { Devtools, Store } from "spar"
 import * as Page from "../src/client.ts"
 import { layer } from "../src/server.ts"
 
-type State = { readonly count: number }
+const State = Schema.Struct({ count: Schema.Finite })
+
+type State = typeof State.Type
 
 const initialState: State = { count: 0 }
 
 class Tally extends Store.Tag<Tally>()("test/Tally", {
+  state: State,
   initialState,
   actions: {
     added: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({

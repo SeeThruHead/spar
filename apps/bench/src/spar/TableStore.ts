@@ -1,13 +1,12 @@
 import { Schema } from "effect"
 import { Store } from "spar"
 import { exclaimEveryTenth, makeRows, swapSecondAndSecondLast } from "../shared/rows.ts"
-import type { Row } from "../shared/rows.ts"
 
-type State = {
-  readonly rows: ReadonlyArray<Row>
-  readonly selected: number
-  readonly nextId: number
-}
+const Rows = Schema.Array(Schema.Struct({ id: Schema.Int, label: Schema.String }))
+
+const State = Schema.Struct({ rows: Rows, selected: Schema.Int, nextId: Schema.Int })
+
+type State = typeof State.Type
 
 const initialState: State = { rows: [], selected: 0, nextId: 1 }
 
@@ -16,6 +15,7 @@ const Count = Schema.Struct({ count: Schema.Int })
 const Target = Schema.Struct({ id: Schema.Int })
 
 export class TableStore extends Store.Tag<TableStore>()("bench/TableStore", {
+  state: State,
   initialState,
   actions: {
     created: Store.action(Count, (state: State, { count }) => ({
@@ -44,7 +44,7 @@ export class TableStore extends Store.Tag<TableStore>()("bench/TableStore", {
     })),
   },
   selectors: {
-    rows: (state) => state.rows,
-    selected: (state) => state.selected,
+    rows: Store.selector(Rows, (state: State) => state.rows),
+    selected: Store.selector(Schema.Int, (state: State) => state.selected),
   },
 }) {}

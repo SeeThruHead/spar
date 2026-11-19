@@ -80,8 +80,9 @@ the server or saved.
 
 ## 7. App state changes only through named commands, and every one is logged
 
-A store is an initial state, pure actions `(state, payload) => state` with a Schema for each
-payload, and named selectors. Commands return an Effect. The state is always computed from the
+A store is a Schema for its state, an initial state, pure actions `(state, payload) => state` with a
+Schema for each payload, and named selectors with a Schema for what each gives. None of the three
+can be declared without its Schema. Commands return an Effect. The state is always computed from the
 encoded payload that went into the log, so replaying the log gives the same state. Every store can
 show any earlier state (`travelTo`), which is what the devtools use.
 

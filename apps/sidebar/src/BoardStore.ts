@@ -1,8 +1,10 @@
 import { Effect, Schema } from "effect"
 import { Store } from "spar"
 import {
+  Agent,
   AgentId,
   Board,
+  Space,
   SpaceId,
   agentNudged,
   agentPlaced,
@@ -11,7 +13,6 @@ import {
   spacePlacedBefore,
   toggled,
 } from "./domain.ts"
-import type { Agent } from "./domain.ts"
 import { Server } from "./Server.ts"
 
 const agent = (id: string, name: string, given: Partial<Agent>): Agent => ({
@@ -50,6 +51,7 @@ const withAgent = (board: Board, id: AgentId, change: (agent: Agent) => Agent): 
 })
 
 export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
+  state: Board,
   initialState,
   actions: {
     started: Store.action(Schema.Struct({ name: Schema.String }), (board: Board, { name }) => ({
@@ -101,13 +103,13 @@ export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
     ),
   },
   selectors: {
-    board: (board) => board,
-    spaces: (board) => board.spaces,
-    agents: (board) => board.agents,
+    board: Store.selector(Board, (board: Board) => board),
+    spaces: Store.selector(Schema.Array(Space), (board: Board) => board.spaces),
+    agents: Store.selector(Schema.Array(Agent), (board: Board) => board.agents),
   },
 }) {}
 
-export const BoardStoreLive = BoardStore.layerDurable({ state: Board }, [
+export const BoardStoreLive = BoardStore.layerDurable({}, [
   Store.outbox(
     BoardStore.actions.started,
     Effect.fnUntraced(function* ({ name }, idempotencyKey) {

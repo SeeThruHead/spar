@@ -38,13 +38,14 @@ import type {
   Entry,
   Open,
   Orphan,
+  Selector,
   Selectors,
   Step,
 } from "./internal/journal.ts"
 import { Outbox } from "./Outbox.ts"
 
 export { Entries, LogText, UnknownAction, Unreadable, replay }
-export type { Action, Definition, Durable, Entry }
+export type { Action, Definition, Durable, Entry, Selector }
 
 export type Reaction<State, R = never> = {
   readonly action: Action<State, unknown>
@@ -64,8 +65,8 @@ type PayloadOf<A> = A extends {
   : never
 
 interface ToReactive<State> extends Struct.Lambda {
-  (selector: (state: State) => unknown): Reactive<unknown>
-  readonly "~lambda.out": this["~lambda.in"] extends (state: never) => infer A ? Reactive<A> : never
+  (selector: Selector<State, unknown>): Reactive<unknown>
+  readonly "~lambda.out": this["~lambda.in"] extends Selector<never, infer A> ? Reactive<A> : never
 }
 
 type Past<State> = {
@@ -148,6 +149,11 @@ export const action = <Payload, Encoded, State>(
       Effect.map(decode(payload), (decoded) => (state) => reduce(state, decoded)),
   }
 }
+
+export const selector = <A, State>(
+  schema: Schema.Codec<A, unknown>,
+  select: (state: State) => NoInfer<A>,
+): Selector<State, A> => ({ schema, select })
 
 const channelOf = (key: string, name: string): string => `${key}/${name}`
 
@@ -394,7 +400,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         travelTo,
         select: Struct.map(
           selectors,
-          Struct.lambda<ToReactive<State>>((selector) => map(state, selector)),
+          Struct.lambda<ToReactive<State>>((chosen) => map(state, chosen.select)),
         ),
         commands,
       }
@@ -419,8 +425,8 @@ export const Tag =
       static readonly actions = definition.actions
       static readonly layer = <R = never>(reactions: ReadonlyArray<Reaction<State, R>> = []) =>
         makeLayer(service, key, definition, reactions, inMemory(definition.initialState))
-      static readonly layerDurable = <Encoded, R = never>(
-        durable: Durable<State, Encoded>,
+      static readonly layerDurable = <R = never>(
+        durable: Durable = {},
         reactions: ReadonlyArray<Reaction<State, R>> = [],
       ) => makeLayer(service, key, definition, reactions, onDevice(key, definition, durable))
     }

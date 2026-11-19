@@ -33,18 +33,21 @@ export type Action<State, Payload> = {
   ) => Effect.Effect<(state: State) => State, Schema.SchemaError>
 }
 
-export type Durable<State, Encoded> = {
-  readonly state: Schema.Codec<State, Encoded>
-  readonly compactAfter?: number
-}
+export type Durable = { readonly compactAfter?: number }
 
 export type Actions<State> = Readonly<Record<string, Action<State, unknown>>>
 
-export type Selectors<State> = Readonly<Record<string, (state: State) => unknown>>
+export type Selector<State, A> = {
+  readonly schema: Schema.Codec<A, unknown>
+  readonly select: (state: State) => A
+}
+
+export type Selectors<State> = Readonly<Record<string, Selector<State, unknown>>>
 
 export type Step<State> = { readonly seq: number; readonly state: State }
 
 export type Definition<State, A extends Actions<State>, S extends Selectors<State>> = {
+  readonly state: Schema.Codec<State, unknown>
   readonly initialState: State
   readonly actions: A
   readonly selectors: S
@@ -173,10 +176,10 @@ export const inMemory =
       orphans: Effect.succeed([]),
     })
 
-export const onDevice = <State, Encoded, A extends Actions<State>, S extends Selectors<State>>(
+export const onDevice = <State, A extends Actions<State>, S extends Selectors<State>>(
   key: string,
   definition: Definition<State, A, S>,
-  durable: Durable<State, Encoded>,
+  durable: Durable,
 ): Open<State, Unreadable, KeyValueStore.KeyValueStore | SecureRandom.SecureRandom | Scope.Scope> =>
   Effect.fnUntraced(
     function* (leftovers: ReadonlyArray<Entry>) {
@@ -223,7 +226,7 @@ export const onDevice = <State, Encoded, A extends Actions<State>, S extends Sel
 
         return found.flatMap(Option.toArray)
       }).pipe(Effect.orDie)
-      const stateJson = Schema.toCodecJson(durable.state)
+      const stateJson = Schema.toCodecJson(definition.state)
       const decodeState = Schema.decodeEffect(stateJson)
       const compactAfter = durable.compactAfter ?? compactAfterDefault
 

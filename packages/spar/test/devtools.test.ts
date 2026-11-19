@@ -7,18 +7,21 @@ import { Devtools, Outbox, Store, View } from "spar"
 import * as Testing from "spar/testing"
 import { jsx } from "spar/jsx-runtime"
 
-type State = { readonly count: number }
+const State = Schema.Struct({ count: Schema.Finite })
+
+type State = typeof State.Type
 
 const initialState: State = { count: 0 }
 
 class Tally extends Store.Tag<Tally>()("test/Tally", {
+  state: State,
   initialState,
   actions: {
     added: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
       count: state.count + by,
     })),
   },
-  selectors: { count: (state) => state.count },
+  selectors: { count: Store.selector(Schema.Finite, (state: State) => state.count) },
 }) {}
 
 const layer = Tally.layer().pipe(
@@ -166,7 +169,7 @@ describe("devtools", () => {
   it.effect("actions restored from the device can be stepped to as well", () =>
     Effect.gen(function* () {
       const stored = yield* KeyValueStore.KeyValueStore
-      const kept = Tally.layerDurable({ state: Schema.Struct({ count: Schema.Finite }) }).pipe(
+      const kept = Tally.layerDurable().pipe(
         Layer.provideMerge(Devtools.layer),
         Layer.provide(SecureRandom.layerWebCrypto),
         Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, stored)),

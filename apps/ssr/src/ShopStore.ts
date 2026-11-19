@@ -5,7 +5,9 @@ export const Item = Schema.Struct({ id: Schema.String, name: Schema.String })
 
 export type Item = typeof Item.Type
 
-type State = { readonly items: ReadonlyArray<Item> }
+const State = Schema.Struct({ items: Schema.Array(Item) })
+
+type State = typeof State.Type
 
 const initialState: State = {
   items: [
@@ -16,6 +18,7 @@ const initialState: State = {
 }
 
 export class ShopStore extends Store.Tag<ShopStore>()("ssr/ShopStore", {
+  state: State,
   initialState,
   actions: {
     stocked: Store.action(Item, (state: State, item) => ({
@@ -26,7 +29,7 @@ export class ShopStore extends Store.Tag<ShopStore>()("ssr/ShopStore", {
     })),
   },
   selectors: {
-    items: (state) => state.items,
-    count: (state) => state.items.length,
+    items: Store.selector(Schema.Array(Item), (state: State) => state.items),
+    count: Store.selector(Schema.Int, (state: State) => state.items.length),
   },
 }) {}

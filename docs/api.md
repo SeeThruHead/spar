@@ -76,15 +76,16 @@ on screen until they mount. Give an app its own tree with
 
 ## Store
 
-| Function                                                       | What it does                                                                                                           |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `Store.Tag<Self>()(key, { initialState, actions, selectors })` | Defines a store as a service class.                                                                                    |
-| `Store.action(Schema, reduce)`                                 | One action: a payload Schema and a pure reducer.                                                                       |
-| `Self.layer(reactions?)`                                       | The store in memory.                                                                                                   |
-| `Self.layerDurable({ state, compactAfter? }, reactions?)`      | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes. |
-| `Store.after(action, effect)`                                  | Runs an Effect after an action.                                                                                        |
-| `Store.outbox(action, send)`                                   | Sends the action's payload through the outbox.                                                                         |
-| `Store.replay(definition, entries)`                            | Rebuilds state from a log.                                                                                             |
+| Function                                                              | What it does                                                                                                           |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                    |
+| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                  |
+| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                       |
+| `Self.layer(reactions?)`                                              | The store in memory.                                                                                                   |
+| `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes. |
+| `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                        |
+| `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                         |
+| `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                             |
 
 A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`, `viewing` and
 `travelTo(seq | null)`.
