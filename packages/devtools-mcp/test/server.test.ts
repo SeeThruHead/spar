@@ -111,6 +111,10 @@ const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boo
 
 const stateOf = (text: unknown): unknown => (typeof text === "string" ? JSON.parse(text) : text)
 
+const pagesOf = Schema.decodeUnknownSync(
+  Schema.Array(Schema.Struct({ id: Schema.String, current: Schema.Boolean })),
+)
+
 describe("the devtools server for agents", () => {
   it.live("an agent can read an open app's stores and their logs", () =>
     Effect.gen(function* () {
@@ -139,6 +143,8 @@ describe("the devtools server for agents", () => {
         "diff_states",
         "get_actions",
         "run_actions",
+        "list_pages",
+        "use_page",
       ])
 
       yield* tally.commands.added({ by: 1 })
@@ -362,6 +368,51 @@ describe("the devtools server for agents", () => {
       const present = yield* mcp.call("step", { by: 1 })
 
       expect(present.said).toEqual({ moment: null, spans: [] })
+    }).pipe(Effect.scoped, Effect.provide(Served)),
+  )
+
+  it.live("with two pages open an agent can see both and choose which one it speaks to", () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("location", { href: "http://app.test/people" })
+
+      const first = yield* openPage()
+      const second = yield* openPage()
+      const mcp = yield* agent()
+
+      yield* first.commands.added({ by: 1 })
+      yield* second.commands.added({ by: 20 })
+
+      const listed = yield* until(mcp.call("list_pages", {}), (got) =>
+        Bun.inspect(got.said).includes("current: true"),
+      )
+      const pages = pagesOf(listed.said)
+
+      vi.unstubAllGlobals()
+      expect(Bun.inspect(listed.said)).toContain("http://app.test/people")
+
+      expect(pages).toHaveLength(2)
+
+      const readings = yield* Effect.forEach(pages, (page) =>
+        Effect.andThen(
+          mcp.call("use_page", { page: page.id }),
+          Effect.map(mcp.call("get_state", { store: "test/Tally" }), (got) => stateOf(got.said)),
+        ),
+      )
+
+      expect(
+        readings.toSorted((left, right) => Bun.inspect(left).localeCompare(Bun.inspect(right))),
+      ).toEqual([{ count: 1 }, { count: 20 }])
+
+      const [chosen] = pages
+
+      yield* mcp.call("use_page", { page: chosen?.id ?? "" })
+      yield* mcp.call("run_action", { store: "test/Tally", action: "added", payload: { by: 300 } })
+      expect((yield* first.state.get).count + (yield* second.state.get).count).toBe(321)
+      expect((yield* mcp.call("use_page", { page: "nobody" })).failed).toBe(true)
+
+      const after = yield* mcp.call("list_pages", {})
+
+      expect(pagesOf(after.said).filter((page) => page.current)).toHaveLength(1)
     }).pipe(Effect.scoped, Effect.provide(Served)),
   )
 

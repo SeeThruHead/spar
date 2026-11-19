@@ -15,6 +15,8 @@ export const Snapshot = Schema.Struct({
 export type Snapshot = typeof Snapshot.Type
 
 export const Page = Schema.Struct({
+  id: Schema.String,
+  address: Schema.String,
   stores: Schema.Array(Snapshot),
   ui: UiState.Snapshot,
   moments: Schema.Array(Timeline.Moment),
@@ -53,6 +55,6 @@ export type Command = typeof Command.Type
 
 export class PageRpcs extends RpcGroup.make(
   Rpc.make("Report", { payload: { page: Page } }),
-  Rpc.make("Commands", { success: Command, stream: true }),
+  Rpc.make("Commands", { payload: { page: Schema.String }, success: Command, stream: true }),
   Rpc.make("Outcome", { payload: { id: Schema.String, problem: Schema.NullOr(Schema.String) } }),
 ) {}

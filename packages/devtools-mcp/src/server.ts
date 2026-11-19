@@ -26,32 +26,64 @@ import type { Ask, Command, Page, Snapshot } from "./protocol.ts"
 
 const noPage = "No page answered. Open the app with the devtools link turned on."
 
+const nothingOpen: Page = {
+  id: "",
+  address: "",
+  stores: [],
+  ui: [],
+  moments: [],
+  viewing: null,
+  branches: [],
+  components: [],
+  spans: [],
+}
+
+type Listed = { readonly id: string; readonly address: string; readonly current: boolean }
+
 export class Pages extends Context.Service<
   Pages,
   {
     readonly report: (page: Page) => Effect.Effect<void>
     readonly page: Effect.Effect<Page>
-    readonly commands: Stream.Stream<Command>
+    readonly commands: (page: string) => Stream.Stream<Command>
     readonly settle: (id: string, problem: string | null) => Effect.Effect<void>
     readonly stores: Effect.Effect<ReadonlyArray<Snapshot>>
     readonly ask: (ask: Ask) => Effect.Effect<void, string>
+    readonly listed: Effect.Effect<ReadonlyArray<Listed>>
+    readonly choose: (page: string) => Effect.Effect<void, string>
   }
 >()("@spar/devtools-mcp/Pages") {
   static readonly layer = Layer.effect(
     Pages,
     Effect.gen(function* () {
-      const latest = yield* Ref.make<Page>({
-        stores: [],
-        ui: [],
-        moments: [],
-        viewing: null,
-        branches: [],
-        components: [],
-        spans: [],
-      })
-      const asked = yield* Queue.unbounded<Command>()
+      const reports = yield* Ref.make(HashMap.empty<string, Page>())
+      const chosen = yield* Ref.make(Option.none<string>())
+      const last = yield* Ref.make("")
+      const queues = yield* Ref.make(HashMap.empty<string, Queue.Queue<Command>>())
       const count = yield* Ref.make(0)
       const waiting = yield* Ref.make(HashMap.empty<string, Deferred.Deferred<void, string>>())
+
+      const current = Effect.gen(function* () {
+        const all = yield* Ref.get(reports)
+        const picked = yield* Ref.get(chosen)
+        const latest = yield* Ref.get(last)
+
+        return Option.getOrElse(
+          Option.filter(picked, (id) => HashMap.has(all, id)),
+          () => latest,
+        )
+      })
+
+      const queueOf = Effect.fnUntraced(function* (page: string) {
+        const fresh = yield* Queue.unbounded<Command>()
+
+        return yield* Ref.modify(queues, (all) =>
+          Option.match(HashMap.get(all, page), {
+            onNone: () => [fresh, HashMap.set(all, page, fresh)] as const,
+            onSome: (known) => [known, all] as const,
+          }),
+        )
+      })
 
       const settle = Effect.fn("Pages.settle")(function* (id: string, problem: string | null) {
         const all = yield* Ref.getAndUpdate(waiting, HashMap.remove(id))
@@ -62,11 +94,13 @@ export class Pages extends Context.Service<
       })
 
       const ask = Effect.fn("Pages.ask")(function* (wanted: Ask) {
-        const id = `${yield* Ref.updateAndGet(count, (last) => last + 1)}`
+        const id = `${yield* Ref.updateAndGet(count, (seen) => seen + 1)}`
         const answer = yield* Deferred.make<void, string>()
+        const page = yield* current
+        const queue = yield* queueOf(page)
 
         yield* Ref.update(waiting, HashMap.set(id, answer))
-        yield* Queue.offer(asked, { id, ask: wanted })
+        yield* Queue.offer(queue, { id, ask: wanted })
         yield* Deferred.await(answer).pipe(
           Effect.timeoutOrElse({
             duration: "5 seconds",
@@ -75,13 +109,43 @@ export class Pages extends Context.Service<
         )
       })
 
+      const page = Effect.flatMap(current, (id) =>
+        Effect.map(Ref.get(reports), (all) =>
+          Option.getOrElse(HashMap.get(all, id), () => nothingOpen),
+        ),
+      )
+
       return {
-        report: (page) => Ref.set(latest, page),
-        page: Ref.get(latest),
-        commands: Stream.fromQueue(asked),
+        report: (reported) =>
+          Effect.andThen(
+            Ref.update(reports, HashMap.set(reported.id, reported)),
+            Ref.set(last, reported.id),
+          ),
+        page,
+        commands: (id) =>
+          Stream.unwrap(
+            Effect.map(Effect.all([queueOf(""), queueOf(id)]), ([unaddressed, own]) =>
+              Stream.merge(Stream.fromQueue(unaddressed), Stream.fromQueue(own)),
+            ),
+          ),
         settle,
-        stores: Effect.map(Ref.get(latest), (page) => page.stores),
+        stores: Effect.map(page, (now) => now.stores),
         ask,
+        listed: Effect.flatMap(current, (id) =>
+          Effect.map(Ref.get(reports), (all) =>
+            [...HashMap.values(all)].map((each) => ({
+              id: each.id,
+              address: each.address,
+              current: each.id === id,
+            })),
+          ),
+        ),
+        choose: (id) =>
+          Effect.flatMap(Ref.get(reports), (all) =>
+            HashMap.has(all, id)
+              ? Ref.set(chosen, Option.some(id))
+              : Effect.fail(`There is no page called ${id}. list_pages gives the ones there are.`),
+          ),
       }
     }),
   )
@@ -93,7 +157,7 @@ const PageHandlers = PageRpcs.toLayer(
 
     return {
       Report: ({ page }) => pages.report(page),
-      Commands: () => pages.commands,
+      Commands: ({ page }) => pages.commands(page),
       Outcome: ({ id, problem }) => pages.settle(id, problem),
     }
   }),
@@ -142,6 +206,25 @@ const RunAction = Tool.make("run_action", {
     "Carry out one of a store's actions with a payload, exactly as the app would. Returns the new state.",
   parameters: Schema.Struct({ store, action: Schema.String, payload: Schema.Json }),
   success: Schema.String,
+  failure: Schema.String,
+})
+
+const ListPages = Tool.make("list_pages", {
+  description:
+    "The pages linked to this server: each one's id, its address, and whether it is the one the other tools speak for. That is the one chosen with use_page, or else the one that reported last.",
+  parameters: Tool.EmptyParams,
+  success: Schema.Array(
+    Schema.Struct({ id: Schema.String, address: Schema.String, current: Schema.Boolean }),
+  ),
+})
+
+const UsePage = Tool.make("use_page", {
+  description:
+    "Make one linked page, by its id as list_pages gives it, the one every other tool speaks for. Returns the pages.",
+  parameters: Schema.Struct({ page: Schema.String }),
+  success: Schema.Array(
+    Schema.Struct({ id: Schema.String, address: Schema.String, current: Schema.Boolean }),
+  ),
   failure: Schema.String,
 })
 
@@ -356,6 +439,8 @@ export const Tools = Toolkit.make(
   DiffStates,
   GetActions,
   RunActions,
+  ListPages,
+  UsePage,
 )
 
 const ToolHandlers = Tools.toLayer(
@@ -425,6 +510,8 @@ const ToolHandlers = Tools.toLayer(
             (span) => span.traceId === traceId && Spans.inLens(lens ?? "all", span, "page"),
           ),
         ),
+      list_pages: () => pages.listed,
+      use_page: ({ page }) => Effect.andThen(pages.choose(page), pages.listed),
       get_actions: ({ store: key }) => Effect.map(found(key), (now) => now.actions),
       run_actions: ({ store: key, actions }) =>
         Effect.andThen(

@@ -1,4 +1,5 @@
-import { Effect, Formatter, Function, Layer, Option, Schedule, Stream } from "effect"
+import { Effect, Formatter, Function, Layer, Option, Schedule, Schema, Stream } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import * as Devtools from "spar/devtools"
@@ -37,6 +38,8 @@ const refused = (name: string) => ({
   message: `There is no UI state called ${name} there, or the value does not fit its Schema.`,
 })
 
+const Located = Schema.Struct({ href: Schema.String })
+
 const keptUp = <A, E, R>(what: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   work.pipe(
     Effect.tapError((cause) => Effect.logDebug(`The devtools link stopped ${what}`, cause)),
@@ -47,12 +50,23 @@ const link = Effect.gen(function* () {
   const registry = yield* Devtools.Registry
   const server = yield* RpcClient.make(PageRpcs)
   const spans = yield* Effect.serviceOption(Spans.SpanBuffer)
+  const random = yield* SecureRandom.SecureRandom
+  const pageId = yield* random.uuidV7()
+  const address = Option.getOrElse(
+    Option.map(
+      Schema.decodeOption(Located)(Reflect.get(globalThis, "location")),
+      (found) => found.href,
+    ),
+    () => "",
+  )
   const report = Effect.gen(function* () {
     const stores = yield* Effect.flatMap(registry.stores.get, Effect.forEach(snapshotOf))
     const ui = registry.uiState()
 
     yield* server.Report({
       page: {
+        id: pageId,
+        address,
         stores,
         ui,
         moments: yield* registry.moments.get,
@@ -110,7 +124,7 @@ const link = Effect.gen(function* () {
 
   yield* Effect.forkScoped(keptUp("reporting", reporting), { startImmediately: true })
   yield* Effect.forkScoped(
-    keptUp("taking commands", Stream.runForEach(server.Commands(), carryOut)),
+    keptUp("taking commands", Stream.runForEach(server.Commands({ page: pageId }), carryOut)),
     { startImmediately: true },
   )
 })
@@ -122,4 +136,5 @@ export const layer = (options: {
     Layer.provide(RpcClient.layerProtocolHttp({ url: `${options.url}/page` })),
     Layer.provide(RpcSerialization.layerNdjson),
     Layer.provide(FetchHttpClient.layer),
+    Layer.provide(SecureRandom.layerWebCrypto),
   )

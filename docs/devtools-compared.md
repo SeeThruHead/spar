@@ -37,12 +37,12 @@ are served over MCP and answer from a shell through the CLI.
 | `CountMessagesByTag`                 | `count_moments`                                                             | Same |
 | `DiffModels`                         | `diff_states`: the paths that differ between two of a store's actions       | Same |
 | `DispatchMessage`                    | `run_action`; `set_ui_state` for UI state                                   | Same |
-| `DispatchMessages` (several at once) | One `run_action` call for each                                              | Less |
-| `GetMessageSchema`                   | Not there: an action's payload Schema is not reported to agents             | Less |
+| `DispatchMessages` (several at once) | `run_actions`                                                               | Same |
+| `GetMessageSchema`                   | `get_actions`: each action's name and the JSON Schema of its payload        | Same |
 | `ListKeyframes`, `ReplayToKeyframe`  | `get_timeline` and `rewind`; every moment can be returned to, not only some | Same |
 | `Resume`                             | `rewind` with null                                                          | Same |
 | `GetRuntimeState`                    | `get_timeline` gives the moment being shown; `list_branches` the branch     | Same |
-| `ListRuntimes` (several open tabs)   | Not there: the tools speak for the page that reported last                  | Less |
+| `ListRuntimes` (several open tabs)   | `list_pages` and `use_page`                                                 | Same |
 | No request for it                    | `step`: one moment earlier or later, with every span of that moment's trace | More |
 | No request for it                    | `fork`, `list_branches`, `switch_branch`                                    | More |
 | No request for it                    | `get_trace`: the spans of a trace                                           | More |
@@ -52,10 +52,6 @@ are served over MCP and answer from a shell through the CLI.
 
 ## Where Spar is behind
 
-1. An agent cannot ask for the Schema of an action's payload. It can read past payloads in the
-   log, and a payload that does not fit is refused with the reason.
-2. An agent cannot send several actions in one call.
-3. With several tabs open the tools answer for one of them and cannot list or choose.
-
-Each is small and none needs a design change: the store keeps the Schema it was given, the
-protocol grows a list, and the server keeps one report for each page.
+Nothing in Foldkit's protocol is without a Spar tool now. The three that were missing (an action's
+payload Schema, several actions in one call, choosing between open pages) are `get_actions`,
+`run_actions`, and `list_pages` with `use_page`.

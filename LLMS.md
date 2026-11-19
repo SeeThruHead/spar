@@ -1614,6 +1614,18 @@ export const people: ReadonlyArray<User> = [
   { id: 124, name: "Edsger Dijkstra", email: "edsger@example.com" },
 ]
 
+export const Found = Schema.Struct({
+  label: Schema.String,
+  authorId: Schema.NullOr(Schema.String),
+})
+
+export type Found = typeof Found.Type
+
+export const found = (kind: string, id: string): Found => ({
+  label: `${kind} ${id}`,
+  authorId: kind === "report" ? `author-of-${id}` : null,
+})
+
 export class Agents extends RpcGroup.make(
   Rpc.make("Describe", {
     payload: { name: Schema.String },
@@ -1626,6 +1638,7 @@ export class Agents extends RpcGroup.make(
   }),
   Rpc.make("Started", { success: Schema.Array(Schema.String) }),
   Rpc.make("Users", { success: Schema.Array(User) }),
+  Rpc.make("Lookup", { payload: { kind: Schema.String, id: Schema.String }, success: Found }),
 ) {}
 ```
 
@@ -1635,7 +1648,7 @@ The backend's handlers for that contract.
 
 ```ts
 import { Effect, Ref } from "effect"
-import { Agents, NoRecord, ServerUnreachable, people } from "../src/api.ts"
+import { Agents, NoRecord, ServerUnreachable, found, people } from "../src/api.ts"
 import type { Started } from "../src/api.ts"
 
 export const AgentsLive = Agents.toLayer(
@@ -1670,6 +1683,10 @@ export const AgentsLive = Agents.toLayer(
       Start: ({ name, idempotencyKey }) => start(name, idempotencyKey),
       Describe: ({ name }) => describe(name),
       Started: () => Effect.map(Ref.get(seen), (all) => all.map((known) => known.key)),
+      Lookup: ({ kind, id }) =>
+        Effect.as(Effect.sleep("150 millis"), found(kind, id)).pipe(
+          Effect.withSpan(`Agents.lookup ${kind}`),
+        ),
       Users: () =>
         Effect.as(Effect.sleep("40 millis"), people).pipe(Effect.withSpan("Agents.users")),
     }
@@ -1685,8 +1702,8 @@ The page's side of the backend: a service whose remote layer is a `Backend.rpc` 
 import { Context, Effect, Layer, Ref } from "effect"
 import type { HttpClient } from "effect/http"
 import { Backend } from "spar"
-import { Agents, NoRecord, ServerUnreachable, people } from "../api.ts"
-import type { Started, User } from "../api.ts"
+import { Agents, NoRecord, ServerUnreachable, found, people } from "../api.ts"
+import type { Found, Started, User } from "../api.ts"
 
 export { NoRecord, ServerUnreachable }
 
@@ -1697,6 +1714,7 @@ export class Server extends Context.Service<
     readonly started: Effect.Effect<ReadonlyArray<string>>
     readonly describe: (name: string) => Effect.Effect<Started, NoRecord | ServerUnreachable>
     readonly users: Effect.Effect<ReadonlyArray<User>, ServerUnreachable>
+    readonly lookup: (kind: string, id: string) => Effect.Effect<Found, ServerUnreachable>
   }
 >()("sidebar/Server") {
   static readonly layer = Layer.effect(
@@ -1733,6 +1751,7 @@ export class Server extends Context.Service<
         started: Effect.map(Ref.get(seen), (all) => all.map((known) => known.key)),
         describe,
         users: Effect.as(Effect.sleep("40 millis"), people),
+        lookup: (kind, id) => Effect.as(Effect.sleep("150 millis"), found(kind, id)),
       })
     }),
   )
@@ -1756,6 +1775,10 @@ export class Server extends Context.Service<
           users: Effect.catchTag(agents.Users(), "RpcClientError", () =>
             Effect.fail(new ServerUnreachable()),
           ),
+          lookup: (kind, id) =>
+            Effect.catchTag(agents.Lookup({ kind, id }), "RpcClientError", () =>
+              Effect.fail(new ServerUnreachable()),
+            ),
         })
       }),
     )
@@ -3214,6 +3237,7 @@ import { Effect } from "effect"
 import { Handle, Router, View } from "spar"
 import { Toast } from "@spar/ui"
 import { AgentPage } from "./AgentPage.ts"
+import { OrgSegment, deepExample, orgRoute, reportRoute } from "./Deep.ts"
 import { Notes } from "./Notes.ts"
 import { People } from "./People.ts"
 import { ResetCounter } from "./ResetCounter.ts"
@@ -3224,17 +3248,23 @@ import { EmptyPageView, MissingPageView, ShellView } from "./SidebarView.tsx"
 export const Shell = View.connect(
   Effect.fnUntraced(function* () {
     const main = yield* Handle.make
+    const router = yield* Router.Router
 
     yield* Router.focusOnChange(main)
 
     return {
       main,
       sidebar: yield* View.child(Sidebar, {}),
+      deep: router.link(reportRoute, deepExample),
       scratch: yield* View.child(Notes, { id: "scratch-note", title: "Scratchpad" }),
       counter: yield* View.child(ResetCounter, {}),
       people: yield* View.child(People, {}),
       page: yield* Router.outlet({
-        routes: [Router.on(home, EmptyPageView), Router.on(agentRoute, AgentPage)],
+        routes: [
+          Router.on(home, EmptyPageView),
+          Router.on(agentRoute, AgentPage),
+          Router.live(orgRoute, OrgSegment),
+        ],
         otherwise: MissingPageView,
       }),
       toasts: yield* View.child(Toast.Viewport, {}),
@@ -3257,6 +3287,7 @@ import { KeyValueStore } from "effect/persistence"
 import { App, Backend, Outbox, Router, Tabs } from "spar"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "./BoardStore.ts"
+import { deepQueries } from "./Deep.ts"
 import { Server } from "./server/Server.ts"
 import { Shell } from "./Shell.ts"
 
@@ -3277,7 +3308,7 @@ const server = Option.match(
   },
 )
 
-const layer = BoardStoreLive.pipe(
+const layer = Layer.merge(BoardStoreLive, deepQueries).pipe(
   Layer.provideMerge(
     Layer.mergeAll(server, Outbox.Outbox.layer, Router.Router.layerBrowser, Toast.Toasts.layer),
   ),
@@ -3347,6 +3378,7 @@ import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "../src/BoardStore.ts"
+import { deepQueries } from "../src/Deep.ts"
 import { Server } from "../src/server/Server.ts"
 import { Shell } from "../src/Shell.ts"
 
@@ -3406,7 +3438,7 @@ const backend = Effect.gen(function* () {
 })
 
 const app = (origin: string) =>
-  BoardStoreLive.pipe(
+  Layer.merge(BoardStoreLive, deepQueries).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.provide(Server.layerRemote(`${origin}/rpc`), FetchHttpClient.layer),
