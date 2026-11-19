@@ -1,6 +1,6 @@
 ---
 id: spa-wacb
-status: open
+status: in_progress
 deps: []
 links: []
 created: 2026-11-19T13:35:01Z

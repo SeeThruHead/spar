@@ -131,7 +131,8 @@ export const check = (file: string, source: string): ReadonlyArray<Violation> =>
     ...locate(source, offset),
   }))
 
-const outside = /\/(node_modules|packages\/(spar|ui|browsers|lint)|server|test|scripts)\//
+const outside =
+  /\/(node_modules|packages\/(spar|ui|browsers|lint|devtools-mcp)|server|test|scripts)\//
 
 export const isAppFile = (path: string): boolean => {
   if (!/\.tsx?(\?|$)/.test(path)) return false

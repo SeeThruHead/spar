@@ -1,15 +1,18 @@
-import { BunHttpServer } from "@effect/platform-bun"
+import { BunHttpServer, BunServices } from "@effect/platform-bun"
 import { describe, expect, it } from "@effect/vitest"
+import { vi } from "vitest"
 import { Effect, Layer, Logger, Queue, References, Schedule, Schema } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
+import { Command } from "effect/cli"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
 import { Props, Store, Timeline, UiState, View } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import { jsx } from "spar/jsx-runtime"
+import { command } from "../src/cli.ts"
 import * as Page from "../src/client.ts"
-import { layer } from "../src/server.ts"
+import { changesBetween, layer } from "../src/server.ts"
 
 const State = Schema.Struct({ count: Schema.Finite })
 
@@ -128,6 +131,12 @@ describe("the devtools server for agents", () => {
         "list_components",
         "get_component",
         "get_trace",
+        "list_branches",
+        "fork",
+        "switch_branch",
+        "step",
+        "count_moments",
+        "diff_states",
       ])
 
       yield* tally.commands.added({ by: 1 })
@@ -277,6 +286,109 @@ describe("the devtools server for agents", () => {
 
       expect(stateOf(live.said)).toEqual({ count: 6 })
     }).pipe(Effect.scoped, Effect.provide(Served)),
+  )
+
+  it.live("an agent can step with the trace, fork, switch branches, count and diff", () =>
+    Effect.gen(function* () {
+      const built = yield* openInspected()
+      const tally = yield* Effect.provide(Tally, built)
+      const mcp = yield* agent()
+
+      yield* tally.commands.added({ by: 1 })
+      yield* tally.commands.added({ by: 2 })
+      yield* tally.commands.added({ by: 4 })
+      yield* Effect.provide(
+        Timeline.note("data", "loaded", () => 1),
+        built,
+      )
+
+      const counted = yield* until(mcp.call("count_moments", {}), (got) =>
+        Bun.inspect(got.said).includes("loaded"),
+      )
+
+      expect(counted.said).toEqual([
+        { kind: "command", name: "test/Tally/added", count: 3 },
+        { kind: "data", name: "loaded", count: 1 },
+      ])
+
+      yield* mcp.call("step", { by: -1 })
+      yield* mcp.call("step", { by: -1 })
+
+      const stepped = yield* mcp.call("step", { by: -1 })
+
+      expect(stepped.said).toMatchObject({ moment: { seq: 2, name: "test/Tally/added" } })
+      expect(Bun.inspect(stepped.said)).toContain("test/Tally/added")
+      expect(yield* tally.state.get).toEqual({ count: 3 })
+
+      const forked = yield* mcp.call("fork", {})
+
+      expect(forked.said).toEqual([
+        { id: 0, name: "Main", from: null, moments: 4, current: false },
+        { id: 1, name: "Fork 1", from: 2, moments: 2, current: true },
+      ])
+
+      yield* tally.commands.added({ by: 10 })
+      expect(yield* tally.state.get).toEqual({ count: 13 })
+
+      const back = yield* mcp.call("switch_branch", { branch: 0 })
+
+      expect(back.said).toMatchObject([{ current: true }, { current: false, moments: 3 }])
+      expect(yield* tally.state.get).toEqual({ count: 7 })
+      expect((yield* mcp.call("list_branches", {})).said).toEqual(back.said)
+
+      const changed = yield* mcp.call("diff_states", { store: "test/Tally", from: 1, to: 3 })
+
+      expect(changed.said).toEqual([{ path: "count", before: 1, after: 7 }])
+      expect(yield* tally.viewing.get).toBeNull()
+
+      const present = yield* mcp.call("step", { by: 1 })
+
+      expect(present.said).toEqual({ moment: null, spans: [] })
+    }).pipe(Effect.scoped, Effect.provide(Served)),
+  )
+
+  it("the difference between two states is one row for each path that changed", () => {
+    const before = { a: 1, b: { c: [1], gone: true }, same: [1, { x: 2 }] }
+    const after = { a: 1, b: { c: [1, 2] }, same: [1, { x: 2 }], d: null }
+
+    expect(changesBetween(before, after)).toEqual([
+      { path: "b.c", before: [1], after: [1, 2] },
+      { path: "b.gone", before: true },
+      { path: "d", after: null },
+    ])
+    expect(changesBetween(1, 2)).toEqual([{ path: "", before: 1, after: 2 }])
+  })
+
+  it.live("the same tools answer from a shell", () =>
+    Effect.gen(function* () {
+      const tally = yield* openPage()
+      const url = yield* origin
+      const printed = vi.spyOn(console, "log").mockImplementation(() => undefined)
+      const last = () => String(printed.mock.calls.at(-1)?.[0])
+      const run = Command.runWith(command, { version: "0.0.0" })
+
+      yield* tally.commands.added({ by: 2 })
+      yield* run(["tools", "--url", url])
+      expect(last()).toContain("list_stores\n  The stores of the open app")
+
+      yield* until(
+        Effect.exit(run(["call", "get_state", '{"store":"test/Tally"}', "--url", url])),
+        (exit) => exit._tag === "Success",
+      )
+      expect(stateOf(last())).toEqual({ count: 2 })
+
+      yield* run(["call", "list_branches", "--url", url])
+      expect(last()).toContain("Main")
+
+      const missing = yield* Effect.flip(run(["call", "nope", "--url", url]))
+      const refused = yield* Effect.flip(
+        run(["call", "get_state", '{"store":"none"}', "--url", url]),
+      )
+
+      expect(String(missing)).toContain("There is no tool called nope")
+      expect(String(refused)).toContain("There is no store called none")
+      printed.mockRestore()
+    }).pipe(Effect.scoped, Effect.provide(Layer.merge(Served, BunServices.layer))),
   )
 
   it.live("what an agent asks for that cannot be done comes back as a plain reason", () =>

@@ -1,11 +1,15 @@
 import {
+  Array,
   Context,
   Deferred,
   Effect,
+  Equal,
   Exit,
   HashMap,
   Layer,
   Option,
+  Order,
+  Predicate,
   Queue,
   Ref,
   Schema,
@@ -41,6 +45,7 @@ export class Pages extends Context.Service<
         ui: [],
         moments: [],
         viewing: null,
+        branches: [],
         components: [],
         spans: [],
       })
@@ -185,6 +190,65 @@ const Rewind = Tool.make("rewind", {
   failure: Schema.String,
 })
 
+const Branches = Schema.Array(Devtools.Branch)
+
+const ListBranches = Tool.make("list_branches", {
+  description:
+    "The branches of the running program: Main, and one for each fork. Each has its id, the moment it was forked at, how many moments it holds, and whether it is the one running now.",
+  parameters: Tool.EmptyParams,
+  success: Branches,
+})
+
+const Fork = Tool.make("fork", {
+  description:
+    "Fork the running program at the moment being shown (rewind or step first), or at the last moment when it is live. The app carries on from there in a new branch and the original is kept. Returns the branches.",
+  parameters: Tool.EmptyParams,
+  success: Branches,
+  failure: Schema.String,
+})
+
+const SwitchBranch = Tool.make("switch_branch", {
+  description:
+    "Make another branch the running one, by its id as list_branches gives it. The branch left is kept as it was. Returns the branches.",
+  parameters: Schema.Struct({ branch: Schema.Int }),
+  success: Branches,
+  failure: Schema.String,
+})
+
+const Step = Tool.make("step", {
+  description:
+    "Move one moment earlier (-1) or later (1) in the log and show the whole app as it was then. Returns the moment now shown (null when back at the present) and every span of the trace that moment belongs to, from the page and, when the page has joined them, the backend.",
+  parameters: Schema.Struct({ by: Schema.Literals([-1, 1]) }),
+  success: Schema.Struct({
+    moment: Schema.NullOr(Timeline.Moment),
+    spans: Schema.Array(Spans.Recorded),
+  }),
+  failure: Schema.String,
+})
+
+const CountMoments = Tool.make("count_moments", {
+  description:
+    "How many times each thing happened in the log, most frequent first: one row per kind and name (a store action, a piece of UI state, a route, a backend call).",
+  parameters: Tool.EmptyParams,
+  success: Schema.Array(
+    Schema.Struct({ kind: Timeline.Kind, name: Schema.String, count: Schema.Int }),
+  ),
+})
+
+const Changed = Schema.Struct({
+  path: Schema.String,
+  before: Schema.optional(Schema.Json),
+  after: Schema.optional(Schema.Json),
+})
+
+const DiffStates = Tool.make("diff_states", {
+  description:
+    "What changed in one store between two of its actions, by seq as get_log gives them: one row for each path whose value differs, with the value before and after (missing when the path did not exist on that side). The page is left showing what it showed before.",
+  parameters: Schema.Struct({ store, from: Schema.Int, to: Schema.Int }),
+  success: Schema.Array(Changed),
+  failure: Schema.String,
+})
+
 const ListComponents = Tool.make("list_components", {
   description:
     "The components mounted in the open app: each one's view name and where it is in the tree. Give `name` to keep only those whose view name contains it.",
@@ -207,6 +271,50 @@ const GetTrace = Tool.make("get_trace", {
   success: Schema.Array(Spans.Recorded),
 })
 
+const steppedTo = (page: Page) => {
+  const moment = page.moments.find((each) => each.seq === page.viewing) ?? null
+
+  return {
+    moment,
+    spans: page.spans.filter((span) => moment !== null && span.traceId === moment.traceId),
+  }
+}
+
+const countsOf = (moments: ReadonlyArray<Timeline.Moment>) =>
+  Array.sort(
+    Object.values(Array.groupBy(moments, (moment) => `${moment.kind} ${moment.name}`)).map(
+      (same) => ({ kind: same[0].kind, name: same[0].name, count: same.length }),
+    ),
+    Order.mapInput(Order.flip(Order.Number), (row: { readonly count: number }) => row.count),
+  )
+
+const read = (state: string) =>
+  Effect.orDie(Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(state))
+
+const isRecord = (value: Schema.Json | undefined): value is Schema.JsonObject =>
+  Predicate.isObject(value) && !globalThis.Array.isArray(value)
+
+export const changesBetween = (
+  before: Schema.Json | undefined,
+  after: Schema.Json | undefined,
+  path = "",
+): ReadonlyArray<typeof Changed.Type> => {
+  if (isRecord(before) && isRecord(after)) {
+    return Array.dedupe([...Object.keys(before), ...Object.keys(after)]).flatMap((key) =>
+      changesBetween(before[key], after[key], path === "" ? key : `${path}.${key}`),
+    )
+  }
+  if (Equal.equals(before, after)) return []
+
+  return [
+    {
+      path,
+      ...(before === undefined ? {} : { before }),
+      ...(after === undefined ? {} : { after }),
+    },
+  ]
+}
+
 export const Tools = Toolkit.make(
   ListStores,
   GetState,
@@ -221,6 +329,12 @@ export const Tools = Toolkit.make(
   ListComponents,
   GetComponent,
   GetTrace,
+  ListBranches,
+  Fork,
+  SwitchBranch,
+  Step,
+  CountMoments,
+  DiffStates,
 )
 
 const ToolHandlers = Tools.toLayer(
@@ -286,6 +400,32 @@ const ToolHandlers = Tools.toLayer(
         ),
       get_trace: ({ traceId }) =>
         Effect.map(pages.page, (page) => page.spans.filter((span) => span.traceId === traceId)),
+      list_branches: () => Effect.map(pages.page, (page) => page.branches),
+      fork: () =>
+        Effect.andThen(
+          pages.ask({ _tag: "Fork" }),
+          Effect.map(pages.page, (page) => page.branches),
+        ),
+      switch_branch: ({ branch }) =>
+        Effect.andThen(
+          pages.ask({ _tag: "SwitchTo", branch }),
+          Effect.map(pages.page, (page) => page.branches),
+        ),
+      step: ({ by }) =>
+        Effect.andThen(pages.ask({ _tag: "Step", by }), Effect.map(pages.page, steppedTo)),
+      count_moments: () => Effect.map(pages.page, (page) => countsOf(page.moments)),
+      diff_states: Effect.fnUntraced(function* ({ store: key, from, to }) {
+        const showing = yield* found(key)
+        const before = yield* after({ _tag: "TravelTo", store: key, seq: from })
+        const later = yield* after({ _tag: "TravelTo", store: key, seq: to })
+
+        yield* pages.ask({ _tag: "TravelTo", store: key, seq: showing.viewing })
+
+        const first = yield* read(before)
+        const second = yield* read(later)
+
+        return changesBetween(first, second)
+      }),
     }
   }),
 )

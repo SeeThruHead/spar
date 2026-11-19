@@ -13,6 +13,7 @@
     "lint": "effect-tsgo --tsrs-lint oxlint -c ../lint/oxlintrc.json src test",
     "test": "bun --bun vitest run",
     "start": "bun src/main.ts",
+    "cli": "bun scripts/cli.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },

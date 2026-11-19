@@ -56,6 +56,7 @@ const link = Effect.gen(function* () {
         ui,
         moments: yield* registry.moments.get,
         viewing: yield* registry.viewing.get,
+        branches: yield* registry.branches.get,
         components: Devtools.components(ui).slice(-200),
         spans: Option.toArray(spans).flatMap((buffer) => buffer.recent().slice(-500)),
       },
@@ -70,6 +71,9 @@ const link = Effect.gen(function* () {
     )
   const carried = (ask: Ask): Effect.Effect<void, { readonly message: string }> => {
     if (ask._tag === "Rewind") return registry.travelTo(ask.seq)
+    if (ask._tag === "Fork") return registry.fork
+    if (ask._tag === "SwitchTo") return registry.switchTo(ask.branch)
+    if (ask._tag === "Step") return registry.step(ask.by)
     if (ask._tag !== "SetUi") return onStore(ask)
 
     return registry.setUi(ask.path, ask.name, ask.value)
@@ -94,6 +98,7 @@ const link = Effect.gen(function* () {
           ...stores.map(changesOf),
           Stream.map(registry.moments.changes, Function.constVoid),
           Stream.map(registry.viewing.changes, Function.constVoid),
+          Stream.map(registry.branches.changes, Function.constVoid),
         ],
         { concurrency: "unbounded" },
       ),

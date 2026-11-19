@@ -18,6 +18,7 @@ export const Page = Schema.Struct({
   ui: UiState.Snapshot,
   moments: Schema.Array(Timeline.Moment),
   viewing: Schema.NullOr(Schema.Int),
+  branches: Schema.Array(Devtools.Branch),
   components: Schema.Array(Devtools.Component),
   spans: Schema.Array(Spans.Recorded),
 })
@@ -26,6 +27,9 @@ export type Page = typeof Page.Type
 
 export const Ask = Schema.Union([
   Schema.TaggedStruct("Rewind", { seq: Schema.NullOr(Schema.Int) }),
+  Schema.TaggedStruct("Fork", {}),
+  Schema.TaggedStruct("SwitchTo", { branch: Schema.Int }),
+  Schema.TaggedStruct("Step", { by: Schema.Literals([-1, 1]) }),
   Schema.TaggedStruct("SetUi", {
     path: Schema.Array(Schema.String),
     name: Schema.String,
