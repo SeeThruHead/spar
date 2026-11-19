@@ -105,6 +105,13 @@
     "reportedBy": "A store, as the reason a command was refused. It is in the log and on the command's span."
   },
   {
+    "code": "SPAR_IN_USE_AGAIN",
+    "kind": "refusal",
+    "what": "It is in use again",
+    "fix": "Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.",
+    "reportedBy": "A store, as the reason a command was refused. It is in the log and on the command's span."
+  },
+  {
     "code": "SPAR_ROUTE_UNDER_CLOSED",
     "kind": "types",
     "what": "A route was declared under a route that does not end with /*.",

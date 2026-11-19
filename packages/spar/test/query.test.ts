@@ -89,6 +89,16 @@ class Orders extends Query.Tag<Orders>()("test/Orders", {
   staleAfter: "1 minute",
 }) {}
 
+class Few extends Query.Tag<Few>()("test/Few", {
+  input: Schema.Int,
+  success: Schema.Array(Schema.String),
+  failure: Schema.String,
+  load: (userId: number) => Effect.flatMap(directory, (found) => found.orders(userId)),
+  staleAfter: "1 minute",
+  keepAtMost: 1,
+  dropAfter: "1 hour",
+}) {}
+
 class Patient extends Query.Tag<Patient>()("test/Patient", {
   input: Schema.Void,
   success: Schema.Finite,
@@ -135,7 +145,7 @@ const opened = Effect.gen(function* () {
         (_stock, { to }) => to,
       ),
     ]).pipe(
-      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live)),
+      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live)),
       Layer.provideMerge(Directory.layer),
       Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
     ),
@@ -384,6 +394,7 @@ describe("server data in a store", () => {
           input: null,
           traceId: "",
           spanId: "",
+          unusedSince: null,
         },
       ])
       expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name])).toEqual([
@@ -550,6 +561,90 @@ describe("server data in a store", () => {
         yield* during("third", Orders.ask(5))
         expect(linksOf("test/Orders/served")).toEqual([])
       }),
+  )
+
+  it.effect("data nobody is using is released, and dropped after a while", () =>
+    Effect.gen(function* () {
+      const { built, noted, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const keys = Effect.map(orders.state.get, (now) => Object.keys(now.entries))
+      const said = Effect.map(Ref.get(noted), (all) =>
+        all.filter((seen) => seen.kind !== "data").map((seen) => seen.name.split("/").at(-1)),
+      )
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Effect.provide(Orders.ask(1), built)
+          yield* Effect.provide(Orders.ask(1), built)
+          yield* Effect.yieldNow
+          yield* answer("orders 1", ["tea"])
+        }),
+      )
+      yield* Effect.yieldNow
+      expect(yield* keys).toEqual(["1"])
+      expect(yield* said).toEqual(["requested", "loaded", "released"])
+
+      yield* TestClock.adjust("5 minutes")
+      expect(yield* keys).toEqual([])
+      expect(yield* said).toEqual(["requested", "loaded", "released", "dropped"])
+    }),
+  )
+
+  it.effect("data that is asked for again before it is dropped is kept", () =>
+    Effect.gen(function* () {
+      const { built, noted, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const selected = yield* SubscriptionRef.make(1)
+
+      yield* Effect.scoped(Effect.provide(Orders.ask(1), built))
+      yield* Effect.yieldNow
+      yield* answer("orders 1", ["tea"])
+      yield* TestClock.adjust("1 minute")
+      yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
+      yield* TestClock.adjust("5 minutes")
+      expect(Object.keys((yield* orders.state.get).entries)).toEqual(["1"])
+      expect(Option.map(yield* orders.refused.get, (refusal) => refusal.reason)).toEqual(
+        Option.some("[SPAR_IN_USE_AGAIN] It is in use again"),
+      )
+      expect(
+        (yield* Ref.get(noted)).filter((seen) => seen.name === "test/Orders/held").length,
+      ).toBe(1)
+
+      yield* SubscriptionRef.set(selected, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(
+        Object.values((yield* orders.state.get).entries).map((entry) => entry.unusedSince === null),
+      ).toEqual([false, true])
+    }),
+  )
+
+  it.effect("over its size, a cache drops what has been unused the longest at once", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const few = yield* Effect.provide(Effect.service(Few), built)
+      const once = (id: number) =>
+        Effect.andThen(
+          Effect.scoped(
+            Effect.andThen(
+              Effect.andThen(Effect.provide(Few.ask(id), built), Effect.yieldNow),
+              answer(`orders ${id}`, ["x"]),
+            ),
+          ),
+          Effect.andThen(TestClock.adjust("1 second"), Effect.yieldNow),
+        )
+
+      yield* once(1)
+      yield* once(2)
+      yield* once(3)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["3"])
+
+      yield* Effect.provide(Few.ask(9), built)
+      yield* Effect.yieldNow
+      yield* answer("orders 9", ["x"])
+      yield* once(4)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["9"])
+    }),
   )
 
   it.effect("an input that is set again to what it already was is not looked at again", () =>

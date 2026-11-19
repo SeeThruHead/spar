@@ -82,6 +82,11 @@ export const all = {
     what: "This answers an earlier request",
     fix: "Nothing: a newer request was made for the same input, and its answer is the one kept.",
   },
+  SPAR_IN_USE_AGAIN: {
+    kind: "refusal",
+    what: "It is in use again",
+    fix: "Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.",
+  },
   SPAR_ROUTE_UNDER_CLOSED: {
     kind: "types",
     what: "A route was declared under a route that does not end with /*.",

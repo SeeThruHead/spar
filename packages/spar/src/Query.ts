@@ -4,6 +4,7 @@ import {
   Effect,
   Formatter,
   Option,
+  Predicate,
   Record,
   Schedule,
   Schema,
@@ -35,6 +36,7 @@ export type Entry<A, E> = {
   readonly input: Schema.Json
   readonly traceId: string
   readonly spanId: string
+  readonly unusedSince: number | null
 }
 
 export type State<A, E> = { readonly entries: Readonly<Record<string, Entry<A, E>>> }
@@ -65,6 +67,42 @@ const stands = <A, E>(
   staleAfter: number,
   onServer: boolean,
 ): boolean => onServer || isFresh(entry, now, staleAfter)
+
+const oldestUnused = <A, E>(state: State<A, E>): ReadonlyArray<readonly [string, number]> =>
+  Record.toEntries(state.entries)
+    .flatMap(([name, held]) =>
+      held.unusedSince === null ? [] : [[name, held.unusedSince] as const],
+    )
+    .toSorted(([, left], [, right]) => left - right)
+
+const isBack = <A, E>(users: number, entry: Entry<A, E> | undefined): boolean => {
+  if (users !== 1) return false
+
+  return Predicate.isNotNullish(entry?.unusedSince)
+}
+
+type Users = Cell.Cell<ReadonlyMap<string, number>>
+
+const usersBy = new WeakMap<object, Users>()
+
+const usersOf = (store: object): Users => {
+  const known = usersBy.get(store)
+  if (known !== undefined) return known
+
+  const made: Users = Cell.make<ReadonlyMap<string, number>>(new Map())
+
+  usersBy.set(store, made)
+
+  return made
+}
+
+const counted = (users: Users, name: string, by: number): number => {
+  const next = (users.read().get(name) ?? 0) + by
+
+  users.write(new Map([...users.read(), [name, next]]))
+
+  return next
+}
 
 const answersAnother = <A, E>(
   state: State<A, E>,
@@ -125,8 +163,12 @@ export const Tag =
       readonly load: (input: I) => Effect.Effect<A, E, R>
       readonly staleAfter?: Duration.Input
       readonly retry?: Schedule.Schedule<unknown, E>
+      readonly dropAfter?: Duration.Input
+      readonly keepAtMost?: number
     },
   ) => {
+    const dropAfter = Duration.fromInputUnsafe(options.dropAfter ?? "5 minutes")
+    const keepAtMost = options.keepAtMost ?? 100
     const staleAfter = Duration.toMillis(Duration.fromInputUnsafe(options.staleAfter ?? 0))
     const inputJson = Schema.toCodecJson(options.input)
     const entry: Schema.Codec<Entry<A, E>, unknown> = Schema.Struct({
@@ -138,6 +180,7 @@ export const Tag =
       input: Schema.Json,
       traceId: Schema.String,
       spanId: Schema.String,
+      unusedSince: Schema.NullOr(Schema.Finite),
     })
     const state: Schema.Codec<State<A, E>, unknown> = Schema.Struct({
       entries: Schema.Record(Schema.String, entry),
@@ -167,6 +210,7 @@ export const Tag =
                 input: asked.input,
                 traceId: asked.traceId,
                 spanId: asked.spanId,
+                unusedSince: before.entries[asked.key]?.unusedSince ?? null,
               },
             },
           }),
@@ -207,6 +251,26 @@ export const Tag =
           (before: State<A, E>, { key: name, value }): State<A, E> =>
             settled(before, name, (held) => ({ ...held, value })),
         ),
+        released: Store.action(
+          Schema.Struct({ key: Schema.String, at: Schema.Finite }),
+          (before: State<A, E>, { key: name, at }): State<A, E> =>
+            settled(before, name, (held) => ({ ...held, unusedSince: at })),
+        ),
+        held: Store.action(
+          Schema.Struct({ key: Schema.String }),
+          (before: State<A, E>, { key: name }): State<A, E> =>
+            settled(before, name, (entryNow) => ({ ...entryNow, unusedSince: null })),
+        ),
+        dropped: Store.action(
+          Schema.Struct({ key: Schema.String, since: Schema.Finite }),
+          (before: State<A, E>, { key: name }): State<A, E> => ({
+            entries: Record.remove(before.entries, name),
+          }),
+          (before, { key: name, since }) =>
+            before.entries[name]?.unusedSince === since
+              ? null
+              : Diagnostics.brief("SPAR_IN_USE_AGAIN"),
+        ),
         invalidated: Store.action(Schema.Void, (before: State<A, E>): State<A, E> => ({
           entries: Record.map(before.entries, (held) => ({ ...held, loadedAt: null })),
         })),
@@ -222,6 +286,16 @@ export const Tag =
       Effect.forEach(
         Option.toArray(Option.fromNullishOr(now.entries[asked.key])),
         ({ request }) => Effect.annotateSpans(answered(asked, request, send), "spar.kind", "data"),
+        { discard: true },
+      ),
+    )
+    const drops = Store.after(base.actions.released, ({ key: name, at }, _now, send) =>
+      Effect.andThen(Effect.sleep(dropAfter), send(base.actions.dropped, { key: name, since: at })),
+    )
+    const trims = Store.after(base.actions.released, (_released, now: State<A, E>, send) =>
+      Effect.forEach(
+        oldestUnused(now).slice(0, Math.max(Object.keys(now.entries).length - keepAtMost, 0)),
+        ([name, since]) => send(base.actions.dropped, { key: name, since }),
         { discard: true },
       ),
     )
@@ -298,7 +372,41 @@ export const Tag =
       const context = yield* Effect.context<Self>()
 
       const first = yield* wanted.get
+      const users = usersOf(store)
+      const current = Cell.make(first)
+      const taken = (asked: Option.Option<Asked>) =>
+        Effect.forEach(
+          Option.toArray(asked),
+          (target) =>
+            Effect.flatMap(store.state.get, (now) =>
+              isBack(counted(users, target.key, 1), now.entries[target.key])
+                ? store.commands.held({ key: target.key })
+                : Effect.void,
+            ),
+          { discard: true },
+        )
+      const given = (asked: Option.Option<Asked>) =>
+        Effect.forEach(
+          Option.toArray(asked),
+          (target) =>
+            counted(users, target.key, -1) === 0
+              ? Effect.flatMap(Clock.currentTimeMillis, (at) =>
+                  store.commands.released({ key: target.key, at }),
+                )
+              : Effect.void,
+          { discard: true },
+        )
+      const moved = (next: Option.Option<Asked>) =>
+        Effect.suspend(() => {
+          const before = current.read()
 
+          current.write(next)
+
+          return Effect.andThen(given(before), taken(next))
+        })
+
+      yield* taken(first)
+      yield* Effect.addFinalizer(() => Effect.suspend(() => given(current.read())))
       yield* ensured(first, after)
       yield* Effect.forkScoped(
         Stream.runForEach(
@@ -306,7 +414,7 @@ export const Tag =
             Stream.changesWith(Stream.concat(Stream.succeed(first), wanted.changes), sameKey),
             1,
           ),
-          (next) => Effect.provide(ensured(next, after), context),
+          (next) => Effect.provide(Effect.andThen(moved(next), ensured(next, after)), context),
         ),
         { startImmediately: true },
       )
@@ -393,7 +501,7 @@ export const Tag =
 
     return class extends base {
       static readonly loads = loads
-      static readonly live = base.layer([loads])
+      static readonly live = base.layer([loads, drops, trims])
       static readonly beside = <Props, EC = never, RC = never, ViewProps = never>(
         self: Mountable<Props, EC, RC, ViewProps>,
       ) => base.with(self, [loads])

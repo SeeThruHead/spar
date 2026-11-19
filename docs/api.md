@@ -340,8 +340,9 @@ nothing awaits in a component's Effect, every query declared in a tree starts in
 and a query whose input comes from another query's value waits only for that value.
 While a component is using it, a query asks again for what has gone stale when the tab is shown
 again or the connection comes back. Data already there is served with a short span that links to
-the trace that loaded it. Not built: dropping unused data, and a pagination helper (a page is an
-input). (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
+the trace that loaded it. An entry no component is using is released, then dropped after `dropAfter` (5 minutes unless
+set); over `keepAtMost` entries (100 unless set) the longest unused are dropped at once. An entry
+in use is never dropped. Not built: a pagination helper (a page is an input). (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ## Backend
 

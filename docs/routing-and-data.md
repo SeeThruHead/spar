@@ -233,7 +233,6 @@ second kind of component.
 
 - Sending a page in pieces as each query answers, or holding a slow query back so it does not
   delay the first draw.
-- Dropping cached entries nobody is using: a query's cache only grows.
 - A dedicated pagination or infinite-list helper. A page is an input, so each page is its own
   cache entry, and `handle.latest` keeps the last loaded value on screen while the next page
   loads. An infinite list is a list of page components that each ask for their page; no example

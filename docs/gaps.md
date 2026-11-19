@@ -40,7 +40,7 @@ Built since, and smaller than they sound, but not done:
   kept on the device, so the server cannot know what the browser will show, and taking over a
   server-drawn page whose data then changes under it needs a rule Spar does not have yet (which
   wins, and when the swap is shown).
-- **Queries:** the cache only grows, since unused entries are never dropped. There is no
+- **Queries:** there is no
   pagination or infinite-list helper (a page is an input). An optimistic change stays shown if its
   send fails for good, until something invalidates the query.
 - **Server rendering sends the page whole.** The head goes first, then the page once every query

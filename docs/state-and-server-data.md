@@ -172,24 +172,24 @@ an input, but it cannot change and it does not know where it came from.
 
 Each of these is an entry in the log and a span in the trace.
 
-| React Query                                | Spar                                                                                                                                                |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                              |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                       |
-| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                   |
-| `staleTime`                                | `staleAfter`                                                                                                                                        |
-| `refetch()`                                | The handle's `refetch`                                                                                                                              |
-| Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                    |
-| A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                     |
-| `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                         |
-| Keeps old data while loading               | Yes: `value` stays while `status` is `loading`                                                                                                      |
-| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                   |
-| Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate` |
-| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                  |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                               |
-| Pagination and infinite lists              | No helper: a page is an input, so each page is its own entry                                                                                        |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                   |
-| Dropping unused data                       | Not built                                                                                                                                           |
+| React Query                                | Spar                                                                                                                                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                            |
+| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                     |
+| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                 |
+| `staleTime`                                | `staleAfter`                                                                                                                                                                                      |
+| `refetch()`                                | The handle's `refetch`                                                                                                                                                                            |
+| Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                                                                  |
+| A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                                                                   |
+| `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                                                                       |
+| Keeps old data while loading               | Yes: `value` stays while `status` is `loading`                                                                                                                                                    |
+| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                 |
+| Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`                                               |
+| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                |
+| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                             |
+| Pagination and infinite lists              | No helper: a page is an input, so each page is its own entry                                                                                                                                      |
+| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                 |
+| Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log |
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.

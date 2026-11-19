@@ -133,6 +133,14 @@ Fix: Nothing: a newer request was made for the same input, and its answer is the
 
 Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
 
+### SPAR_IN_USE_AGAIN
+
+It is in use again
+
+Fix: Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.
+
+Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
+
 ### SPAR_ROUTE_UNDER_CLOSED
 
 A route was declared under a route that does not end with /*.
