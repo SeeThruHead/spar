@@ -11,6 +11,7 @@
     "setup": "lefthook install",
     "moon": "moon",
     "check": "moon run :check",
+    "showcase": "bun run --filter @spar/sidebar showcase",
     "check:affected": "moon run :check --affected",
     "format": "oxfmt",
     "format:check": "oxfmt --check"

@@ -173,12 +173,19 @@ export const NameFormView = View.make(
 
 export const ShellView = View.make(
   "ShellView",
-  { main: Props.Handle, sidebar: Props.Element, page: Props.Element, toasts: Props.Element },
-  ({ main, sidebar, page, toasts }) => (
+  {
+    main: Props.Handle,
+    sidebar: Props.Element,
+    page: Props.Element,
+    scratch: Props.Element,
+    toasts: Props.Element,
+  },
+  ({ main, sidebar, page, scratch, toasts }) => (
     <div class="shell">
       {sidebar}
       <main ref={main} tabIndex={-1}>
         {page}
+        {scratch}
       </main>
       {toasts}
     </div>
@@ -219,6 +226,7 @@ export const AgentPageView = View.make(
   "AgentPageView",
   {
     record: Props.Element,
+    notes: Props.Element,
     name: Props.Reactive(Schema.String),
     status: Props.Reactive(Schema.String),
     project: Props.Reactive(Schema.String),
@@ -245,6 +253,7 @@ export const AgentPageView = View.make(
         <dd>{props.tags}</dd>
       </dl>
       {props.record}
+      {props.notes}
       <button
         type="button"
         class="spar-button spar-quiet"

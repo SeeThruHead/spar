@@ -53,6 +53,17 @@
 - main:
   - heading "Agents" [level=1]
   - paragraph: Pick an agent from the list to see what it is doing.
+  - region "Scratchpad":
+    - heading "Scratchpad" [level=2]
+    - paragraph:
+      - status "Scratchpad count": 0 notes
+    - list
+    - form "Add to Scratchpad":
+      - text: Note
+      - textbox "Note"
+      - paragraph: Kept in Scratchpad
+      - paragraph
+      - button "Add note"
 - status "Notifications":
   - list
 - dialog "Start an agent":

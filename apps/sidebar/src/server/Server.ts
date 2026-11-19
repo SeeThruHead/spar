@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Ref } from "effect"
 import type { HttpClient } from "effect/http"
-import { RpcClient, RpcSerialization } from "effect/rpc"
+import { Backend } from "spar"
 import { Agents, NoRecord, ServerUnreachable } from "../api.ts"
 import type { Started } from "../api.ts"
 
@@ -55,7 +55,7 @@ export class Server extends Context.Service<
     Layer.effect(
       Server,
       Effect.gen(function* () {
-        const agents = yield* RpcClient.make(Agents)
+        const agents = yield* Backend.rpc(Agents, url)
 
         return Server.of({
           start: (name, idempotencyKey) =>
@@ -69,8 +69,5 @@ export class Server extends Context.Service<
             ),
         })
       }),
-    ).pipe(
-      Layer.provide(RpcClient.layerProtocolHttp({ url })),
-      Layer.provide(RpcSerialization.layerNdjson),
     )
 }

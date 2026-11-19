@@ -120,7 +120,48 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   await page.screenshot({ path: `${root}artifacts/devtools-trace.png` })
 
+  const scratch = page.getByRole("region", { name: "Scratchpad" })
+  const noted = async (text: string) => {
+    await scratch.getByRole("textbox", { name: "Note" }).fill(text)
+    await scratch.getByRole("button", { name: "Add note" }).click()
+    await scratch.getByRole("listitem").filter({ hasText: text }).waitFor({ timeout: 5000 })
+  }
+
+  await noted("first")
+  await noted("second")
+  await log
+    .locator("ol li", { hasText: 'added "first"' })
+    .getByRole("button", { name: /^Jump to / })
+    .click()
+
+  const rewoundNotes = (await scratch.getByLabel("Scratchpad count").textContent()) ?? ""
+
+  await log.getByRole("button", { name: "Fork from here" }).click()
+  await noted("other")
+
+  const forkedNotes = await scratch.getByRole("list").innerText()
+  const branches = await page.getByLabel("Branches").innerText()
+
+  await page.getByLabel("Branches").scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${root}artifacts/devtools-fork.png` })
+  await page.getByLabel("Branches").getByRole("button", { name: "Main" }).click()
+  await scratch.getByRole("listitem").filter({ hasText: "second" }).waitFor({ timeout: 5000 })
+
+  const mainNotes = await scratch.getByRole("list").innerText()
+
   return [
+    ...(rewoundNotes === "1 note"
+      ? []
+      : [`rewound to the first note, the count was "${rewoundNotes}"`]),
+    ...(forkedNotes.includes("other") && !forkedNotes.includes("second")
+      ? []
+      : [`the fork's notes were: ${forkedNotes}`]),
+    ...(branches.includes("Main") && branches.includes("Fork 1")
+      ? []
+      : [`the branches were: ${branches}`]),
+    ...(mainNotes.includes("second") && !mainNotes.includes("other")
+      ? []
+      : [`back on the original the notes were: ${mainNotes}`]),
     ...(sides.some((side) => side.startsWith("page on "))
       ? []
       : [`the waterfall had no page event: ${sides.join(" | ")}`]),
@@ -154,6 +195,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, and draw one trace across the page and the backend",
+  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, draw one trace across the page and the backend, and fork the program and go back",
 )
 process.exit(0)

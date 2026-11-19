@@ -8,6 +8,7 @@
     "test": "bun --bun vitest run",
     "build": "vite build",
     "dev": "vite",
+    "showcase": "bun run build && bun scripts/showcase.ts",
     "backend": "bun run build && bun scripts/backend.ts",
     "traced": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/traced.ts",
     "production": "bun run build && bun scripts/production.ts",

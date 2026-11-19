@@ -2,6 +2,7 @@ import { Effect, Option, Schema, pipe } from "effect"
 import { Reactive, Router, View } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
+import { Notes } from "./Notes.ts"
 import { home } from "./routes.ts"
 import { NoRecord, Server, ServerUnreachable } from "./server/Server.ts"
 import {
@@ -66,6 +67,7 @@ export const AgentPage = pipe(
 
       return {
         record: yield* View.child(ServerRecord, { name: found.name }),
+        notes: yield* View.child(Notes, { id: "agent-note", title: "Notes on this agent" }),
         name: Reactive.map(agent, (now) => now.name),
         status: Reactive.map(agent, (now) => now.status),
         tags: Reactive.map(agent, (now) => (now.tags.length === 0 ? "None" : now.tags.join(", "))),
