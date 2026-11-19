@@ -4,7 +4,6 @@ import * as Dom from "../internal/dom.ts"
 import { Frame } from "../internal/frame.ts"
 import { installed } from "../internal/hook.ts"
 import type { Hook } from "../internal/hook.ts"
-import { Inspecting, inspecting } from "../internal/inspect.ts"
 import { renderInto } from "../internal/render.ts"
 import * as Timeline from "../Timeline.ts"
 import * as UiState from "../UiState.ts"
@@ -58,11 +57,11 @@ const hook: Hook = {
 }
 
 export const install = (): void => {
-  inspecting.write(Option.some(new Inspecting()))
+  Devtools.startInspecting()
   installed.write(Option.some(hook))
 }
 
 export const uninstall = (): void => {
-  inspecting.write(Option.none())
+  Devtools.stopInspecting()
   installed.write(Option.none())
 }

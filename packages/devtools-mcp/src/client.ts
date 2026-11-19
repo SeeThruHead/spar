@@ -1,7 +1,8 @@
-import { Effect, Formatter, Function, Layer, Schedule, Stream } from "effect"
+import { Effect, Formatter, Function, Layer, Option, Schedule, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import * as Devtools from "spar/devtools"
+import * as Spans from "spar/devtools/spans"
 import type { Store } from "spar"
 import { PageRpcs } from "./protocol.ts"
 import type { Ask, Command, Snapshot } from "./protocol.ts"
@@ -19,15 +20,21 @@ const changesOf = (store: Store.Inspected): Stream.Stream<void> =>
     concurrency: "unbounded",
   }).pipe(Stream.map(Function.constVoid))
 
+type OfStore = Extract<Ask, { readonly store: string }>
+
 const done = (
   store: Store.Inspected,
-  ask: Ask,
+  ask: OfStore,
 ): Effect.Effect<void, { readonly message: string }> => {
   if (ask._tag === "TravelTo") return store.travelTo(ask.seq)
   if (ask._tag === "Run") return store.run(ask.action, ask.payload)
 
   return store.load(ask.entries)
 }
+
+const refused = (name: string) => ({
+  message: `There is no UI state called ${name} there, or the value does not fit its Schema.`,
+})
 
 const keptUp = <A, E, R>(what: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   work.pipe(
@@ -38,16 +45,40 @@ const keptUp = <A, E, R>(what: string, work: Effect.Effect<A, E, R>): Effect.Eff
 const link = Effect.gen(function* () {
   const registry = yield* Devtools.Registry
   const server = yield* RpcClient.make(PageRpcs)
-  const report = registry.stores.get.pipe(
-    Effect.flatMap(Effect.forEach(snapshotOf)),
-    Effect.flatMap((stores) => server.Report({ stores })),
-  )
+  const spans = yield* Effect.serviceOption(Spans.SpanBuffer)
+  const report = Effect.gen(function* () {
+    const stores = yield* Effect.flatMap(registry.stores.get, Effect.forEach(snapshotOf))
+    const ui = registry.uiState()
+
+    yield* server.Report({
+      page: {
+        stores,
+        ui,
+        moments: yield* registry.moments.get,
+        viewing: yield* registry.viewing.get,
+        components: Devtools.components(ui).slice(-200),
+        spans: Option.toArray(spans).flatMap((buffer) => buffer.recent().slice(-500)),
+      },
+    })
+  })
+  const onStore = (ask: OfStore) =>
+    Effect.flatMap(registry.stores.get, (stores) =>
+      Effect.fromNullishOr(stores.find((each) => each.key === ask.store)).pipe(
+        Effect.mapError(() => ({ message: `There is no store called ${ask.store}.` })),
+        Effect.flatMap((store) => done(store, ask)),
+      ),
+    )
+  const carried = (ask: Ask): Effect.Effect<void, { readonly message: string }> => {
+    if (ask._tag === "Rewind") return registry.travelTo(ask.seq)
+    if (ask._tag !== "SetUi") return onStore(ask)
+
+    return registry.setUi(ask.path, ask.name, ask.value)
+      ? Effect.void
+      : Effect.fail(refused(ask.name))
+  }
 
   const carryOut = Effect.fnUntraced(function* ({ id, ask }: Command) {
-    const stores = yield* registry.stores.get
-    const problem = yield* Effect.fromNullishOr(stores.find((each) => each.key === ask.store)).pipe(
-      Effect.mapError(() => ({ message: `There is no store called ${ask.store}.` })),
-      Effect.flatMap((store) => done(store, ask)),
+    const problem = yield* carried(ask).pipe(
       Effect.as(null),
       Effect.catch((failed) => Effect.succeed(failed.message)),
     )
@@ -58,7 +89,14 @@ const link = Effect.gen(function* () {
 
   const reporting = registry.stores.changes.pipe(
     Stream.switchMap((stores) =>
-      Stream.mergeAll(stores.map(changesOf), { concurrency: "unbounded" }),
+      Stream.mergeAll(
+        [
+          ...stores.map(changesOf),
+          Stream.map(registry.moments.changes, Function.constVoid),
+          Stream.map(registry.viewing.changes, Function.constVoid),
+        ],
+        { concurrency: "unbounded" },
+      ),
     ),
     Stream.debounce("20 millis"),
     Stream.runForEach(() => report),

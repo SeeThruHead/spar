@@ -1,6 +1,8 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
-import { Store } from "spar"
+import { Store, Timeline, UiState } from "spar"
+import * as Devtools from "spar/devtools"
+import * as Spans from "spar/devtools/spans"
 
 export const Snapshot = Schema.Struct({
   store: Schema.String,
@@ -11,7 +13,24 @@ export const Snapshot = Schema.Struct({
 
 export type Snapshot = typeof Snapshot.Type
 
+export const Page = Schema.Struct({
+  stores: Schema.Array(Snapshot),
+  ui: UiState.Snapshot,
+  moments: Schema.Array(Timeline.Moment),
+  viewing: Schema.NullOr(Schema.Int),
+  components: Schema.Array(Devtools.Component),
+  spans: Schema.Array(Spans.Recorded),
+})
+
+export type Page = typeof Page.Type
+
 export const Ask = Schema.Union([
+  Schema.TaggedStruct("Rewind", { seq: Schema.NullOr(Schema.Int) }),
+  Schema.TaggedStruct("SetUi", {
+    path: Schema.Array(Schema.String),
+    name: Schema.String,
+    value: Schema.Json,
+  }),
   Schema.TaggedStruct("TravelTo", { store: Schema.String, seq: Schema.NullOr(Schema.Int) }),
   Schema.TaggedStruct("Run", {
     store: Schema.String,
@@ -28,7 +47,7 @@ export const Command = Schema.Struct({ id: Schema.String, ask: Ask })
 export type Command = typeof Command.Type
 
 export class PageRpcs extends RpcGroup.make(
-  Rpc.make("Report", { payload: { stores: Schema.Array(Snapshot) } }),
+  Rpc.make("Report", { payload: { page: Page } }),
   Rpc.make("Commands", { success: Command, stream: true }),
   Rpc.make("Outcome", { payload: { id: Schema.String, problem: Schema.NullOr(Schema.String) } }),
 ) {}

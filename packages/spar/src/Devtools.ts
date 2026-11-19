@@ -36,8 +36,8 @@ import * as Spans from "./devtools/spans.ts"
 import { backendPath } from "./devtools/paths.ts"
 import * as Dom from "./internal/dom.ts"
 import { starter } from "./internal/listen.ts"
-import { inspecting, mark, sourceOf } from "./internal/inspect.ts"
-import type { Seen } from "./internal/inspect.ts"
+import { Inspecting, inspecting, mark, sourceOf } from "./internal/inspect.ts"
+import type { Placed, Seen } from "./internal/inspect.ts"
 import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
@@ -66,6 +66,7 @@ export class Registry extends Context.Service<
     readonly viewing: Reactive.Reactive<number | null>
     readonly travelTo: (seq: number | null) => Effect.Effect<void>
     readonly uiState: () => UiState.Snapshot
+    readonly setUi: (path: UiState.Path, name: string, value: Schema.Json) => boolean
     readonly follow: (tree: ReturnType<typeof UiState.makeTree>) => void
   }
 >()("spar/Devtools/Registry") {}
@@ -164,6 +165,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
       travelTo,
       uiState: () => trees.read().snapshot(),
+      setUi: (path, name, value) => trees.read().put(path, name, value),
       follow: (tree) => trees.write(tree),
     }).pipe(
       Context.add(Store.Inspector, {
@@ -353,6 +355,41 @@ export const TimelinePanel = View.taking(
     }
   }),
 )(TimelineView)
+
+export const Component = Schema.Struct({
+  name: Schema.String,
+  place: Schema.String,
+  services: Schema.Array(Schema.String),
+  recovers: Schema.Array(Schema.String),
+  props: Schema.Record(Schema.String, Schema.Json),
+  state: Schema.Record(Schema.String, Schema.Json),
+})
+
+export type Component = typeof Component.Type
+
+const componentOf = (seen: Seen, placed: Placed, snapshot: UiState.Snapshot): Component => ({
+  name: seen.name,
+  place: placed.path.join(" / "),
+  services: placed.services,
+  recovers: seen.recovers,
+  props: Props.allShown(seen.fields, seen.props),
+  state: Object.fromEntries(
+    snapshot
+      .filter((entry) => samePath(entry.path, placed.path))
+      .map((entry) => [entry.name, entry.value] as const),
+  ),
+})
+
+export const components = (snapshot: UiState.Snapshot): ReadonlyArray<Component> =>
+  Option.toArray(inspecting.read()).flatMap((inspector) =>
+    [...inspector.seen.values()].flatMap((seen) =>
+      Option.toArray(seen.placed).map((placed) => componentOf(seen, placed, snapshot)),
+    ),
+  )
+
+export const startInspecting = (): void => inspecting.write(Option.some(new Inspecting()))
+
+export const stopInspecting = (): void => inspecting.write(Option.none())
 
 type Fact = { readonly name: string; readonly value: string; readonly from: string }
 

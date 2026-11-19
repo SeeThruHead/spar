@@ -88,6 +88,38 @@ describe("one log of everything that happened", () => {
     }).pipe(Effect.provide(layer)),
   )
 
+  it.live("an agent can set a piece of UI state and read every component as plain data", () =>
+    Effect.gen(function* () {
+      const registry = yield* Devtools.Registry
+
+      yield* Effect.acquireRelease(Effect.sync(Devtools.startInspecting), () =>
+        Effect.sync(Devtools.stopInspecting),
+      )
+      expect(Devtools.components(registry.uiState())).toEqual([])
+      yield* Testing.mount(Desk)
+      yield* Testing.fill("textbox", "Draft", "hi")
+      yield* shows("0", "hi")
+
+      expect(registry.setUi(["DeskView"], "draft", "set from outside")).toBe(true)
+      expect(registry.setUi(["DeskView"], "draft", 7)).toBe(false)
+      yield* shows("0", "set from outside")
+      expect(Devtools.components(registry.uiState())).toEqual([
+        {
+          name: "DeskView",
+          place: "DeskView",
+          services: [],
+          recovers: [],
+          props: { count: 0, draft: "set from outside", onAdd: "action", onGo: "action" },
+          state: { draft: "set from outside" },
+        },
+      ])
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it("with inspection off there are no components to read", () => {
+    expect(Devtools.components([])).toEqual([])
+  })
+
   it.live("going back to a moment shows the stores and the UI state as they were then", () =>
     Effect.gen(function* () {
       const registry = yield* Devtools.Registry

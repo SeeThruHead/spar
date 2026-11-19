@@ -4,8 +4,10 @@ import { Effect, Layer, Logger, Queue, References, Schedule, Schema } from "effe
 import { McpClient, McpProtocol } from "effect/ai"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
-import { Store } from "spar"
+import { Props, Store, Timeline, UiState, View } from "spar"
 import * as Devtools from "spar/devtools"
+import * as Spans from "spar/devtools/spans"
+import { jsx } from "spar/jsx-runtime"
 import * as Page from "../src/client.ts"
 import { layer } from "../src/server.ts"
 
@@ -23,7 +25,7 @@ class Tally extends Store.Tag<Tally>()("test/Tally", {
       count: state.count + by,
     })),
   },
-  selectors: {},
+  selectors: { count: Store.selector(Schema.Finite, (state: State) => state.count) },
 }) {}
 
 const Served = HttpRouter.serve(layer, { disableLogger: true }).pipe(
@@ -74,6 +76,33 @@ const openPage = Effect.fnUntraced(function* () {
   return yield* Effect.provide(Tally, built)
 })
 
+const openInspected = Effect.fnUntraced(function* () {
+  const url = yield* origin
+
+  return yield* Layer.build(
+    Layer.merge(Tally.layer(), Page.layer({ url })).pipe(
+      Layer.provideMerge(Devtools.layer),
+      Layer.provideMerge(Spans.layer()),
+      Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+      Layer.provide(SecureRandom.layerWebCrypto),
+    ),
+  )
+})
+
+const NoteView = View.make(
+  "NoteView",
+  { text: Props.State(Schema.String), count: Props.Reactive(Schema.Finite) },
+  ({ text, count }) => jsx("p", { children: [text, count] }),
+)
+
+const Note = View.described(["Tally"]).connect(
+  Effect.fnUntraced(function* () {
+    const tally = yield* Tally
+
+    return { text: yield* UiState.make("text", Schema.String, "draft"), count: tally.select.count }
+  }),
+)(NoteView)
+
 const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boolean) =>
   Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("20 millis") })
 
@@ -92,6 +121,13 @@ describe("the devtools server for agents", () => {
         "travel_to",
         "run_action",
         "load_log",
+        "get_ui_state",
+        "set_ui_state",
+        "get_timeline",
+        "rewind",
+        "list_components",
+        "get_component",
+        "get_trace",
       ])
 
       yield* tally.commands.added({ by: 1 })
@@ -113,6 +149,100 @@ describe("the devtools server for agents", () => {
       expect(JSON.stringify(newest.said)).not.toContain('"seq":1')
       expect(JSON.stringify(newest.said)).toContain('"seq":2')
     }).pipe(Effect.scoped, Effect.provide(Served)),
+  )
+
+  it.live(
+    "an agent can read and set UI state, read a component, follow a trace and rewind the app",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.acquireRelease(Effect.sync(Devtools.startInspecting), () =>
+          Effect.sync(Devtools.stopInspecting),
+        )
+
+        const page = yield* openInspected()
+        const mcp = yield* agent()
+
+        yield* Effect.provide(Note.mount({}), page)
+        yield* Effect.provide(
+          Effect.withSpan(
+            Tally.use((tally) => tally.commands.added({ by: 2 })),
+            "on click",
+          ),
+          page,
+        )
+        yield* Effect.provide(
+          Tally.use((tally) => tally.commands.added({ by: 5 })),
+          page,
+        )
+
+        const timeline = yield* until(mcp.call("get_timeline", {}), (answer) =>
+          JSON.stringify(answer.said).includes('"seq":2'),
+        )
+        const moments = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ moments: Schema.Array(Timeline.Moment) }),
+        )(timeline.said)
+        const first = moments.moments[0]
+
+        expect(moments.moments.map((moment) => [moment.seq, moment.kind, moment.name])).toEqual([
+          [1, "command", "test/Tally/added"],
+          [2, "command", "test/Tally/added"],
+        ])
+        expect((yield* mcp.call("get_timeline", { last: 1 })).said).toMatchObject({
+          viewing: null,
+          moments: [{ seq: 2 }],
+        })
+        expect((yield* mcp.call("get_ui_state", {})).said).toEqual([
+          { path: ["NoteView"], name: "text", value: "draft" },
+        ])
+        expect(
+          (yield* mcp.call("set_ui_state", { path: ["NoteView"], name: "text", value: "typed" }))
+            .said,
+        ).toEqual([{ path: ["NoteView"], name: "text", value: "typed" }])
+
+        const refused = yield* mcp.call("set_ui_state", {
+          path: ["NoteView"],
+          name: "text",
+          value: 5,
+        })
+
+        expect([refused.failed, refused.said]).toEqual([
+          true,
+          "There is no UI state called text there, or the value does not fit its Schema.",
+        ])
+        expect((yield* mcp.call("list_components", {})).said).toEqual([
+          { name: "NoteView", place: "NoteView" },
+        ])
+        expect((yield* mcp.call("list_components", { name: "Other" })).said).toEqual([])
+        expect((yield* mcp.call("get_component", { place: "NoteView" })).said).toEqual({
+          name: "NoteView",
+          place: "NoteView",
+          services: ["Tally"],
+          recovers: [],
+          props: { text: "typed", count: 7 },
+          state: { text: "typed" },
+        })
+
+        const nowhere = yield* mcp.call("get_component", { place: "Nowhere" })
+
+        expect([nowhere.failed, nowhere.said]).toEqual([
+          true,
+          "There is no component at Nowhere. list_components gives the ones there are.",
+        ])
+
+        const trace = yield* mcp.call("get_trace", { traceId: first?.traceId ?? "" })
+
+        expect(JSON.stringify(trace.said)).toContain('"name":"on click"')
+        expect(JSON.stringify(trace.said)).toContain('"name":"test/Tally/added"')
+        expect((yield* mcp.call("get_trace", { traceId: "none" })).said).toEqual([])
+        expect((yield* mcp.call("rewind", { seq: 1 })).said).toBe(1)
+        expect(stateOf((yield* mcp.call("get_state", { store: "test/Tally" })).said)).toEqual({
+          count: 2,
+        })
+        expect((yield* mcp.call("rewind", { seq: null })).said).toBeNull()
+        expect(stateOf((yield* mcp.call("get_state", { store: "test/Tally" })).said)).toEqual({
+          count: 7,
+        })
+      }).pipe(Effect.scoped, Effect.provide(Served)),
   )
 
   it.live("an agent can run an action, step back through the log, and load another log", () =>
