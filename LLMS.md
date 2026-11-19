@@ -429,10 +429,6 @@ second kind of component.
 
 - Sending a page in pieces as each query answers, or holding a slow query back so it does not
   delay the first draw.
-- A dedicated pagination or infinite-list helper. A page is an input, so each page is its own
-  cache entry, and `handle.latest` keeps the last loaded value on screen while the next page
-  loads. An infinite list is a list of page components that each ask for their page; no example
-  of that is built.
 - A span for the code of a split page arriving.
 
 
@@ -1014,7 +1010,8 @@ While a component is using it, a query asks again for what has gone stale when t
 again or the connection comes back. Data already there is served with a short span that links to
 the trace that loaded it. An entry no component is using is released, then dropped after `dropAfter` (5 minutes unless
 set); over `keepAtMost` entries (100 unless set) the longest unused are dropped at once. An entry
-in use is never dropped. Not built: a pagination helper (a page is an input). (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
+in use is never dropped. `Self.pages({ first, next })` reads a list a page at a time: `pages`,
+`loading`, `failed`, `more` and `loadMore`. (`apps/sidebar/src/People.ts`, `docs/state-and-server-data.md`)
 
 ### Backend
 
@@ -1343,9 +1340,38 @@ Each of these is an entry in the log and a span in the trace.
 | Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`                                               |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                |
 | Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                             |
-| Pagination and infinite lists              | No helper: a page is an input, so each page is its own entry                                                                                                                                      |
+| Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                              |
 | Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                 |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log |
+
+#### A list read a page at a time
+
+A page is an input, so each page is its own entry in the cache. `pages` keeps the list of pages a
+component has opened, as that component's UI state, and asks for each:
+
+```ts
+const Feed = View.connect(
+  Effect.fnUntraced(function* () {
+    const feed = yield* PostsQuery.pages({
+      first: { after: null },
+      next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
+    })
+
+    return {
+      posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
+      loading: feed.loading,
+      more: feed.more,
+      onMore: feed.loadMore,
+    }
+  }),
+)(FeedView)
+```
+
+`next` is given a loaded page and its input and says what the following input is, or none at
+the end. `loadMore` does nothing while the last page is still loading or when there is no more.
+`failed` says a page failed. Going back to the list later finds its pages in the cache, by each
+page's `staleAfter`. For numbered pages where only one shows at a time, pass the page number as
+the input of an ordinary `ask` and show `latest` while the next one loads.
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.
@@ -2274,8 +2300,7 @@ Built since, and smaller than they sound, but not done:
   kept on the device, so the server cannot know what the browser will show, and taking over a
   server-drawn page whose data then changes under it needs a rule Spar does not have yet (which
   wins, and when the swap is shown).
-- **Queries:** there is no
-  pagination or infinite-list helper (a page is an input). An optimistic change stays shown if its
+- **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
 - **Server rendering sends the page whole.** The head goes first, then the page once every query
   has answered. There is no sending in pieces and no way to hold a slow query back.
@@ -3357,7 +3382,7 @@ import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, Store, Timeline, View } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
-import { OrdersView, ShelfView } from "./units.tsx"
+import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
 
@@ -3516,6 +3541,14 @@ const opened = Effect.gen(function* () {
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
   Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
 
+const feedSays = (label: string) =>
+  document.querySelector(`[aria-label="Feed ${label}"]`)?.textContent
+
+const shows = (items: string, state: string, more: string) =>
+  Testing.eventually(() =>
+    expect([feedSays("items"), feedSays("state"), feedSays("more")]).toEqual([items, state, more]),
+  )
+
 const hidden = (state: string) =>
   Effect.sync(() => {
     Object.defineProperty(document, "visibilityState", { value: state, configurable: true })
@@ -3656,6 +3689,63 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* answer("orders 7", ["pen"])
       expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
     }),
+  )
+
+  it.live("a list read a page at a time: the pages so far, whether there is more, and more", () =>
+    Effect.gen(function* () {
+      const Feed = View.connect(
+        Effect.fnUntraced(function* () {
+          const feed = yield* Orders.pages({
+            first: 1,
+            next: (_page, input) => (input < 3 ? Option.some(input + 1) : Option.none()),
+          })
+          const state = yield* Reactive.zip(feed.loading, feed.failed)
+
+          return {
+            items: Reactive.map(feed.pages, (all) => all.flat().join(",")),
+            state: Reactive.map(state, ([loading, failed]) => `${loading} ${failed}`),
+            more: Reactive.map(feed.more, String),
+            onMore: feed.loadMore,
+          }
+        }),
+      )(FeedView)
+      const found = yield* directory
+      const answered = (count: number, exit: (waiting: Asked) => Effect.Effect<boolean>) =>
+        Effect.flatMap(
+          Effect.repeat(Ref.get(found.asked), {
+            until: (all) => all.length === count,
+            schedule: Schedule.spaced("5 millis"),
+          }),
+          (all) => Effect.forEach(all.slice(-1), exit),
+        )
+      yield* Testing.mount(Feed)
+      yield* shows("", "true false", "false")
+      yield* Testing.click("button", "More")
+      yield* answered(1, (waiting) => Deferred.succeed(waiting.answer, ["a", "b"]))
+      yield* shows("a,b", "false false", "true")
+
+      yield* Testing.click("button", "More")
+      yield* shows("a,b", "true false", "false")
+      yield* answered(2, (waiting) => Deferred.succeed(waiting.answer, ["c"]))
+      yield* shows("a,b,c", "false false", "true")
+
+      yield* Testing.click("button", "More")
+      yield* answered(3, (waiting) => Deferred.fail(waiting.answer, "down"))
+      yield* shows("a,b,c", "false true", "false")
+      yield* Testing.click("button", "More")
+      expect((yield* Ref.get(found.asked)).map((each) => each.what)).toEqual([
+        "orders 1",
+        "orders 2",
+        "orders 3",
+      ])
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
   )
 
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>

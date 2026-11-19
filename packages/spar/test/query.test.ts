@@ -17,7 +17,7 @@ import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, Store, Timeline, View } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
-import { OrdersView, ShelfView } from "./units.tsx"
+import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
 
@@ -176,6 +176,14 @@ const opened = Effect.gen(function* () {
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
   Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
 
+const feedSays = (label: string) =>
+  document.querySelector(`[aria-label="Feed ${label}"]`)?.textContent
+
+const shows = (items: string, state: string, more: string) =>
+  Testing.eventually(() =>
+    expect([feedSays("items"), feedSays("state"), feedSays("more")]).toEqual([items, state, more]),
+  )
+
 const hidden = (state: string) =>
   Effect.sync(() => {
     Object.defineProperty(document, "visibilityState", { value: state, configurable: true })
@@ -316,6 +324,63 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* answer("orders 7", ["pen"])
       expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
     }),
+  )
+
+  it.live("a list read a page at a time: the pages so far, whether there is more, and more", () =>
+    Effect.gen(function* () {
+      const Feed = View.connect(
+        Effect.fnUntraced(function* () {
+          const feed = yield* Orders.pages({
+            first: 1,
+            next: (_page, input) => (input < 3 ? Option.some(input + 1) : Option.none()),
+          })
+          const state = yield* Reactive.zip(feed.loading, feed.failed)
+
+          return {
+            items: Reactive.map(feed.pages, (all) => all.flat().join(",")),
+            state: Reactive.map(state, ([loading, failed]) => `${loading} ${failed}`),
+            more: Reactive.map(feed.more, String),
+            onMore: feed.loadMore,
+          }
+        }),
+      )(FeedView)
+      const found = yield* directory
+      const answered = (count: number, exit: (waiting: Asked) => Effect.Effect<boolean>) =>
+        Effect.flatMap(
+          Effect.repeat(Ref.get(found.asked), {
+            until: (all) => all.length === count,
+            schedule: Schedule.spaced("5 millis"),
+          }),
+          (all) => Effect.forEach(all.slice(-1), exit),
+        )
+      yield* Testing.mount(Feed)
+      yield* shows("", "true false", "false")
+      yield* Testing.click("button", "More")
+      yield* answered(1, (waiting) => Deferred.succeed(waiting.answer, ["a", "b"]))
+      yield* shows("a,b", "false false", "true")
+
+      yield* Testing.click("button", "More")
+      yield* shows("a,b", "true false", "false")
+      yield* answered(2, (waiting) => Deferred.succeed(waiting.answer, ["c"]))
+      yield* shows("a,b,c", "false false", "true")
+
+      yield* Testing.click("button", "More")
+      yield* answered(3, (waiting) => Deferred.fail(waiting.answer, "down"))
+      yield* shows("a,b,c", "false true", "false")
+      yield* Testing.click("button", "More")
+      expect((yield* Ref.get(found.asked)).map((each) => each.what)).toEqual([
+        "orders 1",
+        "orders 2",
+        "orders 3",
+      ])
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
   )
 
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>

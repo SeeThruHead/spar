@@ -187,9 +187,38 @@ Each of these is an entry in the log and a span in the trace.
 | Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`                                               |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                |
 | Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                             |
-| Pagination and infinite lists              | No helper: a page is an input, so each page is its own entry                                                                                                                                      |
+| Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                              |
 | Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                 |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log |
+
+### A list read a page at a time
+
+A page is an input, so each page is its own entry in the cache. `pages` keeps the list of pages a
+component has opened, as that component's UI state, and asks for each:
+
+```ts
+const Feed = View.connect(
+  Effect.fnUntraced(function* () {
+    const feed = yield* PostsQuery.pages({
+      first: { after: null },
+      next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
+    })
+
+    return {
+      posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
+      loading: feed.loading,
+      more: feed.more,
+      onMore: feed.loadMore,
+    }
+  }),
+)(FeedView)
+```
+
+`next` is given a loaded page and its input and says what the following input is, or none at
+the end. `loadMore` does nothing while the last page is still loading or when there is no more.
+`failed` says a page failed. Going back to the list later finds its pages in the cache, by each
+page's `staleAfter`. For numbered pages where only one shows at a time, pass the page number as
+the input of an ordinary `ask` and show `latest` while the next one loads.
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.

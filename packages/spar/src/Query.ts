@@ -3,11 +3,13 @@ import {
   Duration,
   Effect,
   Formatter,
+  Array,
   Option,
   Predicate,
   Record,
   Schedule,
   Schema,
+  Scope,
   Stream,
   Tracer,
 } from "effect"
@@ -20,6 +22,7 @@ import type { Reactive } from "./internal/reactive.ts"
 import * as Events from "./Events.ts"
 import * as Store from "./Store.ts"
 import * as Timeline from "./Timeline.ts"
+import * as UiState from "./UiState.ts"
 import type { Mountable } from "./View.ts"
 import * as Diagnostics from "./Diagnostics.ts"
 
@@ -481,6 +484,63 @@ export const Tag =
 
       yield* Effect.forEach(Option.toArray(changed), store.commands.patched, { discard: true })
     })
+    const pages = Effect.fnUntraced(function* (paging: {
+      readonly first: I
+      readonly next: (page: A, input: I) => Option.Option<I>
+    }) {
+      const store = yield* Effect.service(base)
+      const scope = yield* Effect.scope
+      const context = yield* Effect.context<Self>()
+      const inputs = yield* UiState.make(`${key} pages`, Schema.Array(options.input), [
+        paging.first,
+      ])
+      const started = Cell.make<ReadonlySet<string>>(new Set())
+      const nameOf = (input: I): string => Option.getOrThrow(askedFor(Option.some(input))).key
+      const begin = (input: I) =>
+        Effect.suspend(() => {
+          if (started.read().has(nameOf(input))) return Effect.void
+
+          started.write(new Set([...started.read(), nameOf(input)]))
+
+          return Effect.asVoid(
+            Effect.provide(Effect.provideService(ask(input), Scope.Scope, scope), context),
+          )
+        })
+      const beginAll = (all: ReadonlyArray<I>) => Effect.forEach(all, begin, { discard: true })
+      const opened = yield* inputs.get
+
+      yield* beginAll(opened)
+      yield* Effect.forkScoped(Stream.runForEach(inputs.changes, beginAll), {
+        startImmediately: true,
+      })
+
+      const both = yield* zip(store.state, inputs)
+      const entriesOf = ([now, all]: readonly [State<A, E>, ReadonlyArray<I>]) =>
+        all.map((input) => [input, now.entries[nameOf(input)]] as const)
+      const following = (seen: readonly [State<A, E>, ReadonlyArray<I>]): Option.Option<I> =>
+        Option.filter(
+          Option.flatMap(Array.last(entriesOf(seen)), ([input, held]) =>
+            Option.flatMap(Option.fromNullishOr(held?.value), (page) => paging.next(page, input)),
+          ),
+          (input) => !seen[1].some((had) => nameOf(had) === nameOf(input)),
+        )
+      const seenFirst = yield* both.get
+      const upcoming = Cell.make<Option.Option<I>>(following(seenFirst))
+
+      yield* observed(both, (seen) => upcoming.write(following(seen)))
+
+      return {
+        pages: map(both, (seen) =>
+          entriesOf(seen).flatMap(([, held]) => Option.toArray(Option.fromNullishOr(held?.value))),
+        ),
+        loading: map(both, (seen) =>
+          entriesOf(seen).some(([, held]) => held === undefined || held.status === "loading"),
+        ),
+        failed: map(both, (seen) => entriesOf(seen).some(([, held]) => held?.status === "failed")),
+        more: map(fromCell(upcoming), Option.isSome),
+        loadMore: UiState.update(inputs, (all) => [...all, ...Option.toArray(upcoming.read())]),
+      }
+    })
     const invalidate = Effect.gen(function* () {
       const store = yield* Effect.service(base)
       const before = yield* store.state.get
@@ -509,6 +569,7 @@ export const Tag =
       static readonly ask = ask
       static readonly read = read
       static readonly invalidate = invalidate
+      static readonly pages = pages
       static readonly invalidatedBy = <Other, Payload>(action: Action<Other, Payload>) =>
         Store.after(action, () => invalidate)
       static readonly patchedBy = <Other, Payload>(

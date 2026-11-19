@@ -36,6 +36,26 @@ export const OrdersView = View.make(
   ),
 )
 
+export const FeedView = View.make(
+  "Feed",
+  {
+    items: Props.Reactive(Schema.String),
+    state: Props.Reactive(Schema.String),
+    more: Props.Reactive(Schema.String),
+    onMore: Props.Action,
+  },
+  ({ items, state, more, onMore }) => (
+    <p>
+      <output aria-label="Feed items">{items}</output>
+      <output aria-label="Feed state">{state}</output>
+      <output aria-label="Feed more">{more}</output>
+      <button type="button" onClick={onMore}>
+        More
+      </button>
+    </p>
+  ),
+)
+
 export const ShelfView = View.make("Shelf", { orders: Props.Element }, ({ orders }) => (
   <section>{orders}</section>
 ))
