@@ -1,6 +1,6 @@
 ---
 id: spa-3w48
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T19:56:57Z
