@@ -1,6 +1,6 @@
 ---
 id: spa-plbm
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T23:41:08Z

@@ -24,7 +24,7 @@ const cycle = async (page: Page): Promise<void> => {
   await page.click("#go")
   await page.waitForFunction(() => (document.querySelector("#author")?.textContent ?? "") !== "")
   await page.goBack()
-  await page.waitForSelector("#go")
+  await page.locator("#go").waitFor()
 }
 
 const repeat = (times: number, page: Page): Promise<void> =>
@@ -48,7 +48,7 @@ const session = await page.context().newCDPSession(page)
 
 await session.send("Performance.enable")
 await page.goto(`http://127.0.0.1:${server.port}/`)
-await page.waitForSelector("#go")
+await page.locator("#go").waitFor()
 await repeat(warmups, page)
 
 const before = await nodes(session)
