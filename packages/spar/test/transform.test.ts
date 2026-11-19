@@ -4,9 +4,9 @@ import { sparJsx as bunPlugin } from "spar/transform/bun"
 import { check, format } from "spar/transform/check"
 import { sparJsx as vitePlugin } from "spar/transform/vite"
 
-const mapped = `export const List = ({ items }) => <ul>{items.map((item) => <li>{item}</li>)}</ul>`
+const mapped = `export const List = View.make("List", {}, ({ items }) => <ul>{items.map((item) => <li>{item}</li>)}</ul>)`
 
-const clean = `export const Title = ({ title }) => <h1>{title}</h1>`
+const clean = `export const Title = View.make("Title", {}, ({ title }) => <h1>{title}</h1>)`
 
 const fixture = (name: string): string => `${process.cwd()}/test/fixtures/${name}`
 

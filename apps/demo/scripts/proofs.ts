@@ -101,6 +101,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "Reactive<number>' is not assignable to parameter of type 'number'",
   },
   {
+    file: "view-without-a-schema.tsx",
+    rule: "Writing a view as a plain function, with no Schema for its props",
+    by: "build",
+    expect: "views-need-a-schema",
+  },
+  {
     file: "store-without-a-state-schema.ts",
     rule: "Declaring a store whose state has no Schema",
     by: "types",

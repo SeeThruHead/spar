@@ -27,3 +27,7 @@ Step 1 done: Props module (Reactive, State, Action, Element, Handle, Callback ki
 **2026-11-19T03:46:28Z**
 
 Step 2 done: every view in ui, demo, sidebar, stories, ssr, bench, the devtools panel and the framework's tests is View.make with a props Schema. Props.Handler(event, tag?) types currentTarget when the element is named. Memory gate unchanged (1.22 times Solid). Left: connect takes the outer props Schema; the build rule that rejects a plain function view; the two proofs; docs.
+
+**2026-11-19T03:47:41Z**
+
+Step 4 done: the build check rejects JSX outside View.make (rule views-need-a-schema), proof view-without-a-schema.tsx. Left: connect takes the outer props Schema (with a types proof); docs samples still show plain function views (docs/*.md) and must be rewritten.

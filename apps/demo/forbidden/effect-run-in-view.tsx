@@ -1,6 +1,8 @@
-import { Effect } from "effect"
-import type { Reactive } from "spar"
+import { Effect, Schema } from "effect"
+import { Props, View } from "spar"
 
-export const CountView = ({ count }: { readonly count: Reactive.Reactive<number> }) => (
-  <output>{Effect.runSync(count.get)}</output>
+export const CountView = View.make(
+  "CountView",
+  { count: Props.Reactive(Schema.Finite) },
+  ({ count }) => <output>{Effect.runSync(count.get)}</output>,
 )

@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { View } from "spar"
 import { CounterStore } from "../src/counter/CounterStore.ts"
 
 const increment = Effect.gen(function* () {
@@ -7,4 +8,6 @@ const increment = Effect.gen(function* () {
   yield* store.commands.incremented({ by: 1 })
 })
 
-export const ButtonView = () => <button onClick={increment}>Add one</button>
+export const ButtonView = View.make("ButtonView", {}, () => (
+  <button onClick={increment}>Add one</button>
+))
