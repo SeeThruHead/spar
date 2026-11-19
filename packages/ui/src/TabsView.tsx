@@ -1,4 +1,6 @@
-import type { Element, Handle, Handler, Reactive } from "spar"
+import { Schema } from "effect"
+import { Handle, Props, View } from "spar"
+import type { Handler, Reactive } from "spar"
 
 type TabProps = {
   readonly id: string
@@ -26,35 +28,31 @@ export const TabView = (props: TabProps) => (
   </button>
 )
 
-type PanelProps = {
-  readonly id: string
-  readonly hidden: Reactive.Reactive<boolean>
-  readonly content: Element
-}
-
-export const TabPanelView = ({ id, hidden, content }: PanelProps) => (
-  <div
-    role="tabpanel"
-    id={`${id}-panel`}
-    aria-labelledby={`${id}-tab`}
-    hidden={hidden}
-    tabIndex={0}
-  >
-    {content}
-  </div>
+export const TabPanelView = View.make(
+  "TabPanelView",
+  { id: Schema.String, hidden: Props.Reactive(Schema.Boolean), content: Props.Element },
+  ({ id, hidden, content }) => (
+    <div
+      role="tabpanel"
+      id={`${id}-panel`}
+      aria-labelledby={`${id}-tab`}
+      hidden={hidden}
+      tabIndex={0}
+    >
+      {content}
+    </div>
+  ),
 )
 
-type TabsProps = {
-  readonly label: string
-  readonly tabs: ReadonlyArray<Element>
-  readonly panels: ReadonlyArray<Element>
-}
-
-export const TabsView = ({ label, tabs, panels }: TabsProps) => (
-  <div class="spar-tabs">
-    <div role="tablist" aria-label={label}>
-      {tabs}
+export const TabsView = View.make(
+  "TabsView",
+  { label: Schema.String, tabs: Schema.Array(Props.Element), panels: Schema.Array(Props.Element) },
+  ({ label, tabs, panels }) => (
+    <div class="spar-tabs">
+      <div role="tablist" aria-label={label}>
+        {tabs}
+      </div>
+      {panels}
     </div>
-    {panels}
-  </div>
+  ),
 )

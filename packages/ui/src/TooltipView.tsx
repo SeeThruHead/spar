@@ -1,13 +1,12 @@
-import type { Overlay } from "spar"
+import { Schema } from "effect"
+import { Overlay, View } from "spar"
 
-type BubbleProps = {
-  readonly id: string
-  readonly text: string
-  readonly place: Overlay.Placement
-}
-
-export const TooltipBubbleView = ({ id, text, place }: BubbleProps) => (
-  <div id={id} role="tooltip" class="spar-tooltip" style={place}>
-    {text}
-  </div>
+export const TooltipBubbleView = View.make(
+  "TooltipBubbleView",
+  { id: Schema.String, text: Schema.String, place: Overlay.Placement },
+  ({ id, text, place }) => (
+    <div id={id} role="tooltip" class="spar-tooltip" style={place}>
+      {text}
+    </div>
+  ),
 )

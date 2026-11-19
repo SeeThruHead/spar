@@ -32,7 +32,9 @@ export const named =
 const encoded =
   (schema: Field): Show =>
   (value) =>
-    Schema.encodeUnknownOption(Schema.toCodecJson(schema))(value)
+    Option.flatten(
+      Option.liftThrowable(() => Schema.encodeUnknownOption(Schema.toCodecJson(schema))(value))(),
+    )
 
 const current =
   (inner: Field): Show =>

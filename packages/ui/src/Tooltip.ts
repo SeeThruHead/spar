@@ -1,6 +1,5 @@
 import { Effect, pipe, Schema } from "effect"
-import { Handle, Overlay, Reactive, UiState, View } from "spar"
-import type { Action, Element, Handler } from "spar"
+import { Handle, Overlay, Props, Reactive, UiState, View } from "spar"
 import { Ids } from "./ids.ts"
 import { TooltipBubbleView } from "./TooltipView.tsx"
 
@@ -17,18 +16,20 @@ const Bubble = pipe(
   View.portal,
 )
 
-export type Tooltip = {
-  readonly trigger: {
-    readonly ref: Handle.Handle
-    readonly "aria-describedby": string
-    readonly onPointerenter: Action
-    readonly onPointerleave: Action
-    readonly onFocus: Action
-    readonly onBlur: Action
-    readonly onKeydown: Handler<KeyboardEvent>
-  }
-  readonly bubble: Element
-}
+export const Tooltip = Schema.Struct({
+  trigger: Schema.Struct({
+    ref: Props.Handle,
+    "aria-describedby": Schema.String,
+    onPointerenter: Props.Action,
+    onPointerleave: Props.Action,
+    onFocus: Props.Action,
+    onBlur: Props.Action,
+    onKeydown: Props.Handler("keydown"),
+  }),
+  bubble: Props.Element,
+})
+
+export type Tooltip = typeof Tooltip.Type
 
 export const make = Effect.fnUntraced(function* (text: string) {
   const ids = yield* Ids

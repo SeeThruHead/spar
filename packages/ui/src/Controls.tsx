@@ -1,112 +1,118 @@
-import { Form } from "spar"
-import type { Action, Element, Reactive } from "spar"
+import { Schema } from "effect"
+import { Form, Props, View } from "spar"
 
-export type Tone = "primary" | "quiet" | "danger"
+export const Tone = Schema.Literals(["primary", "quiet", "danger"])
 
-type ButtonProps = {
-  readonly label: string
-  readonly tone: Tone
-  readonly disabled: Reactive.Reactive<boolean>
-  readonly onPress: Action
-}
+export type Tone = typeof Tone.Type
 
-export const Button = ({ label, tone, disabled, onPress }: ButtonProps) => (
-  <button type="button" class={`spar-button spar-${tone}`} disabled={disabled} onClick={onPress}>
-    {label}
-  </button>
-)
-
-type SubmitProps = {
-  readonly label: string
-  readonly busy: Reactive.Reactive<boolean>
-}
-
-export const SubmitButton = ({ label, busy }: SubmitProps) => (
-  <button type="submit" class="spar-button spar-primary" disabled={busy} aria-busy={busy}>
-    {label}
-  </button>
-)
-
-type TextFieldProps = {
-  readonly id: string
-  readonly label: string
-  readonly hint: string
-  readonly type: "text" | "email" | "password" | "search" | "number" | "tel" | "url"
-  readonly field: Form.Field<string>
-}
-
-export const TextField = ({ id, label, hint, type, field }: TextFieldProps) => (
-  <div class="spar-field">
-    <label for={id}>{label}</label>
-    <input
-      id={id}
-      type={type}
-      aria-describedby={`${id}-hint ${id}-problem`}
-      {...Form.text(field)}
-    />
-    <p id={`${id}-hint`} class="spar-hint">
-      {hint}
-    </p>
-    <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
-      {field.error}
-    </p>
-  </div>
-)
-
-type SelectViewProps = {
-  readonly id: string
-  readonly label: string
-  readonly field: Form.Field<string>
-  readonly options: ReadonlyArray<Element>
-}
-
-export const OptionView = ({
-  value,
-  label,
-}: {
-  readonly value: string
-  readonly label: string
-}) => <option value={value}>{label}</option>
-
-export const SelectView = ({ id, label, field, options }: SelectViewProps) => (
-  <div class="spar-field">
-    <label for={id}>{label}</label>
-    <select id={id} aria-describedby={`${id}-problem`} {...Form.text(field)}>
-      {options}
-    </select>
-    <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
-      {field.error}
-    </p>
-  </div>
-)
-
-type CheckboxProps = {
-  readonly id: string
-  readonly label: string
-  readonly field: Form.Field<boolean>
-}
-
-export const Checkbox = ({ id, label, field }: CheckboxProps) => (
-  <div class="spar-field">
-    <label class="spar-check" for={id}>
-      <input id={id} type="checkbox" aria-describedby={`${id}-problem`} {...Form.checkbox(field)} />
+export const Button = View.make(
+  "Button",
+  {
+    label: Schema.String,
+    tone: Tone,
+    disabled: Props.Reactive(Schema.Boolean),
+    onPress: Props.Action,
+  },
+  ({ label, tone, disabled, onPress }) => (
+    <button type="button" class={`spar-button spar-${tone}`} disabled={disabled} onClick={onPress}>
       {label}
-    </label>
-    <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
-      {field.error}
-    </p>
-  </div>
+    </button>
+  ),
 )
 
-type SwitchProps = {
-  readonly label: string
-  readonly on: Reactive.Reactive<boolean>
-  readonly onToggle: Action
-}
+export const SubmitButton = View.make(
+  "SubmitButton",
+  { label: Schema.String, busy: Props.Reactive(Schema.Boolean) },
+  ({ label, busy }) => (
+    <button type="submit" class="spar-button spar-primary" disabled={busy} aria-busy={busy}>
+      {label}
+    </button>
+  ),
+)
 
-export const Switch = ({ label, on, onToggle }: SwitchProps) => (
-  <button type="button" role="switch" class="spar-switch" aria-checked={on} onClick={onToggle}>
-    <span class="spar-switch-thumb" />
-    {label}
-  </button>
+export const TextField = View.make(
+  "TextField",
+  {
+    id: Schema.String,
+    label: Schema.String,
+    hint: Schema.String,
+    type: Schema.Literals(["text", "email", "password", "search", "number", "tel", "url"]),
+    field: Form.Field(Schema.String),
+  },
+  ({ id, label, hint, type, field }) => (
+    <div class="spar-field">
+      <label for={id}>{label}</label>
+      <input
+        id={id}
+        type={type}
+        aria-describedby={`${id}-hint ${id}-problem`}
+        {...Form.text(field)}
+      />
+      <p id={`${id}-hint`} class="spar-hint">
+        {hint}
+      </p>
+      <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
+        {field.error}
+      </p>
+    </div>
+  ),
+)
+
+export const OptionView = View.make(
+  "OptionView",
+  { value: Schema.String, label: Schema.String },
+  ({ value, label }) => <option value={value}>{label}</option>,
+)
+
+export const SelectView = View.make(
+  "SelectView",
+  {
+    id: Schema.String,
+    label: Schema.String,
+    field: Form.Field(Schema.String),
+    options: Schema.Array(Props.Element),
+  },
+  ({ id, label, field, options }) => (
+    <div class="spar-field">
+      <label for={id}>{label}</label>
+      <select id={id} aria-describedby={`${id}-problem`} {...Form.text(field)}>
+        {options}
+      </select>
+      <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
+        {field.error}
+      </p>
+    </div>
+  ),
+)
+
+export const Checkbox = View.make(
+  "Checkbox",
+  { id: Schema.String, label: Schema.String, field: Form.Field(Schema.Boolean) },
+  ({ id, label, field }) => (
+    <div class="spar-field">
+      <label class="spar-check" for={id}>
+        <input
+          id={id}
+          type="checkbox"
+          aria-describedby={`${id}-problem`}
+          {...Form.checkbox(field)}
+        />
+        {label}
+      </label>
+      <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
+        {field.error}
+      </p>
+    </div>
+  ),
+)
+
+export const Switch = View.make(
+  "Switch",
+  { label: Schema.String, on: Props.Reactive(Schema.Boolean), onToggle: Props.Action },
+  ({ label, on, onToggle }) => (
+    <button type="button" role="switch" class="spar-switch" aria-checked={on} onClick={onToggle}>
+      <span class="spar-switch-thumb" />
+      {label}
+    </button>
+  ),
 )

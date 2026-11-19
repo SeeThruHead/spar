@@ -1,4 +1,5 @@
-import { Events } from "spar"
+import { Schema } from "effect"
+import { Events, View } from "spar"
 import type { Action, Element, Form, Reactive } from "spar"
 import { Button, Checkbox, SubmitButton, Switch, TextField } from "../src/index.ts"
 
@@ -39,4 +40,4 @@ export const KitView = (props: KitProps) => (
   </main>
 )
 
-export const TextView = ({ text }: { readonly text: string }) => <p>{text}</p>
+export const TextView = View.make("TextView", { text: Schema.String }, ({ text }) => <p>{text}</p>)
