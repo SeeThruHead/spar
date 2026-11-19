@@ -375,6 +375,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           state: next,
           log: [...before.log, entry].slice(-logLimit),
           trail: lastOf([...before.trail, { seq, state: next }], inspector.keepStates),
+          refused: Option.none(),
         })
         yield* journal.tell
         yield* Timeline.note("command", channelOf(key, name), () => payload)

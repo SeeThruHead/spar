@@ -107,6 +107,7 @@ describe("a store that is a state machine", () => {
         ["command", "test/Counter/resetCompleted", null],
       ])
 
+      expect(Option.isNone(yield* counter.refused.get)).toBe(true)
       yield* counter.commands.incremented()
       expect(yield* counter.select.count.get).toBe(1)
     }),

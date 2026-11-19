@@ -23,6 +23,21 @@ export const Started = Schema.Struct({ name: Schema.String, key: Schema.String }
 
 export type Started = typeof Started.Type
 
+export const User = Schema.Struct({
+  id: Schema.Int,
+  name: Schema.String,
+  email: Schema.String,
+})
+
+export type User = typeof User.Type
+
+export const people: ReadonlyArray<User> = [
+  { id: 121, name: "Ada Lovelace", email: "ada@example.com" },
+  { id: 122, name: "Grace Hopper", email: "grace@example.com" },
+  { id: 123, name: "Alan Turing", email: "alan@example.com" },
+  { id: 124, name: "Edsger Dijkstra", email: "edsger@example.com" },
+]
+
 export class Agents extends RpcGroup.make(
   Rpc.make("Describe", {
     payload: { name: Schema.String },
@@ -34,4 +49,5 @@ export class Agents extends RpcGroup.make(
     error: ServerUnreachable,
   }),
   Rpc.make("Started", { success: Schema.Array(Schema.String) }),
+  Rpc.make("Users", { success: Schema.Array(User) }),
 ) {}

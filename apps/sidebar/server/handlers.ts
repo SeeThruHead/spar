@@ -1,5 +1,5 @@
 import { Effect, Ref } from "effect"
-import { Agents, NoRecord, ServerUnreachable } from "../src/api.ts"
+import { Agents, NoRecord, ServerUnreachable, people } from "../src/api.ts"
 import type { Started } from "../src/api.ts"
 
 export const AgentsLive = Agents.toLayer(
@@ -34,6 +34,8 @@ export const AgentsLive = Agents.toLayer(
       Start: ({ name, idempotencyKey }) => start(name, idempotencyKey),
       Describe: ({ name }) => describe(name),
       Started: () => Effect.map(Ref.get(seen), (all) => all.map((known) => known.key)),
+      Users: () =>
+        Effect.as(Effect.sleep("40 millis"), people).pipe(Effect.withSpan("Agents.users")),
     }
   }),
 )

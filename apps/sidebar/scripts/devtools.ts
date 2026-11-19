@@ -52,10 +52,11 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   await log.getByText("filter").first().waitFor({ timeout: 5000 })
 
-  const first = (await log.locator("li code").first().textContent()) ?? ""
+  const typed = log.locator("ol li", { hasText: 'filter "notes"' })
+  const first = (await typed.locator("code").first().textContent()) ?? ""
 
   await page.getByRole("searchbox").first().fill("")
-  await log.getByRole("button", { name: "Jump to 1" }).click()
+  await typed.getByRole("button", { name: /^Jump to / }).click()
 
   const rewound = await page.getByRole("searchbox").first().inputValue()
   const position = (await page.getByLabel("Timeline position").textContent()) ?? ""
@@ -120,6 +121,28 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   await page.screenshot({ path: `${root}artifacts/devtools-trace.png` })
 
+  const peopleShown = page.getByRole("region", { name: "People" })
+
+  await peopleShown.getByLabel("People status").filter({ hasText: "Loaded" }).waitFor()
+  await peopleShown.getByRole("button", { name: "Export CSV" }).click()
+  await peopleShown.getByLabel("Export problem").filter({ hasText: "Select at least" }).waitFor()
+  await peopleShown.getByRole("checkbox", { name: "Alan Turing" }).check()
+  await peopleShown.getByRole("checkbox", { name: "Ada Lovelace" }).check()
+  await peopleShown.getByRole("button", { name: "Export CSV" }).click()
+  await peopleShown.getByLabel("Exported CSV").filter({ hasText: "alan@example.com" }).waitFor()
+
+  const exportedCsv = await peopleShown.getByLabel("Exported CSV").innerText()
+  const loadedBy = await log.locator("ol li", { hasText: "sidebar/Users" }).allInnerTexts()
+
+  await log
+    .locator("ol li", { hasText: "exportRequested" })
+    .last()
+    .getByRole("button", { name: /^Trace / })
+    .click()
+  await page.getByLabel("Spans").locator("li", { hasText: "exported" }).first().waitFor()
+  await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${root}artifacts/devtools-export.png` })
+
   const counter = page.getByRole("region", { name: "Counter", exact: true })
 
   await counter.getByRole("button", { name: "Add 1" }).click()
@@ -174,6 +197,12 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const mainNotes = await scratch.getByRole("list").innerText()
 
   return [
+    ...(exportedCsv === "name,email\nAda Lovelace,ada@example.com\nAlan Turing,alan@example.com"
+      ? []
+      : [`the exported file was: ${exportedCsv}`]),
+    ...(["requested", "loaded"].every((word) => loadedBy.some((line) => line.includes(word)))
+      ? []
+      : [`the users query was logged as: ${loadedBy.join(" | ")}`]),
     ...(duringReset === "2" ? [] : [`during the reset the count was "${duringReset}"`]),
     ...(lastRefusal.includes("A reset is in progress")
       ? []
@@ -201,7 +230,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
       ? []
       : [`the log began with: ${first}`]),
     ...(rewound === "notes" ? [] : [`after jumping back the filter was "${rewound}"`]),
-    ...(position === "At 1" ? [] : [`the timeline said "${position}"`]),
+    ...(/^At \d+$/.test(position) ? [] : [`the timeline said "${position}"`]),
     ...(live === "" ? [] : [`back at now the filter was "${live}"`]),
     ...(highlighted === "SidebarView" ? [] : [`hovering highlighted "${highlighted}"`]),
     ...(picked === "SidebarView" ? [] : [`picking gave "${picked}"`]),
@@ -224,6 +253,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, draw one trace across the page and the backend, refuse Add 1 during a reset from a button and from the keyboard, and fork the program and go back",
+  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component, show what changed in it, draw one trace across the page and the backend, load people into a store and export the selected ones' emails from it, refuse Add 1 during a reset from a button and from the keyboard, and fork the program and go back",
 )
 process.exit(0)

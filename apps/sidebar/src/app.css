@@ -207,3 +207,39 @@ body {
   min-height: 2.75rem;
   font: inherit;
 }
+
+.people {
+  margin-block: 1.5rem;
+  min-inline-size: 0;
+}
+
+.people table {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.people th,
+.people td {
+  padding: 0.5rem 0.25rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+  border-block-end: 1px solid var(--spar-line);
+}
+
+.people th:first-child,
+.people td:first-child {
+  inline-size: 3rem;
+}
+
+.people input[type="checkbox"] {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+}
+
+.people .csv {
+  display: block;
+  font-family: ui-monospace, monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

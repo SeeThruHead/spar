@@ -81,6 +81,48 @@
     - paragraph:
       - status "Last refusal": Nothing has been refused
     - paragraph: Both buttons stay enabled, and the + key adds 1 too. The store decides.
+  - region "People":
+    - heading "People" [level=2]
+    - paragraph:
+      - status "People status": Loaded
+      - text: ","
+      - status "People selected": 0 selected
+    - table:
+      - rowgroup:
+        - row "Pick Name Email":
+          - columnheader "Pick"
+          - columnheader "Name"
+          - columnheader "Email"
+      - rowgroup:
+        - row "Ada Lovelace ada@example.com":
+          - cell "Ada Lovelace":
+            - checkbox "Ada Lovelace"
+          - cell "Ada Lovelace"
+          - cell "ada@example.com"
+        - row "Grace Hopper grace@example.com":
+          - cell "Grace Hopper":
+            - checkbox "Grace Hopper"
+          - cell "Grace Hopper"
+          - cell "grace@example.com"
+        - row "Alan Turing alan@example.com":
+          - cell "Alan Turing":
+            - checkbox "Alan Turing"
+          - cell "Alan Turing"
+          - cell "alan@example.com"
+        - row "Edsger Dijkstra edsger@example.com":
+          - cell "Edsger Dijkstra":
+            - checkbox "Edsger Dijkstra"
+          - cell "Edsger Dijkstra"
+          - cell "edsger@example.com"
+    - paragraph:
+      - button "Export CSV"
+      - button "Load again"
+    - paragraph:
+      - status "Export problem"
+    - status "Exported CSV"
+    - paragraph:
+      - link "Download people.csv":
+        - /url: ""
 - status "Notifications":
   - list:
     - listitem:
