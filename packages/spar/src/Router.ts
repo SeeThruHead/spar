@@ -5,6 +5,7 @@ import {
   Function,
   Layer,
   Option,
+  Predicate,
   Ref,
   Schedule,
   Schema,
@@ -22,6 +23,7 @@ import type { Element } from "./internal/element.ts"
 import { events, on as onTarget } from "./internal/listen.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
+import * as Props from "./Props.ts"
 import { child } from "./View.ts"
 import type { Mountable } from "./View.ts"
 
@@ -60,6 +62,13 @@ export type Link = {
   readonly href: string
   readonly onClick: Modified<MouseEvent>
 }
+
+const isLink = (value: unknown): value is Link =>
+  Predicate.hasProperty(value, "href") && Predicate.hasProperty(value, "onClick")
+
+export const Link: Schema.declare<Link> = Props.kind(isLink, (value) =>
+  Option.map(Option.liftPredicate(value, isLink), (link) => link.href),
+)
 
 const isParam = (segment: string): boolean => segment.startsWith(":")
 

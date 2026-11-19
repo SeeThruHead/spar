@@ -1,4 +1,5 @@
-import { Effect, Function, Option, Stream, SubscriptionRef } from "effect"
+import { Effect, Function, Option, Predicate, Stream, SubscriptionRef } from "effect"
+import type { Schema } from "effect"
 import * as Handle from "./Handle.ts"
 import type { Action } from "./internal/action.ts"
 import * as Dom from "./internal/dom.ts"
@@ -9,6 +10,7 @@ import type { Source } from "./internal/listen.ts"
 import { fromStream, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
+import * as Props from "./Props.ts"
 
 export type { OverlayLayer } from "./internal/frame.ts"
 
@@ -82,6 +84,12 @@ export type Placement = {
   readonly maxWidth: string
   readonly maxHeight: Reactive<string>
 }
+
+export const Placement: Schema.declare<Placement> = Props.kind(
+  (value): value is Placement =>
+    Predicate.hasProperty(value, "position") && Predicate.hasProperty(value, "maxHeight"),
+  Props.named("placement"),
+)
 
 const corner: Dom.Box = { x: 0, y: 0, width: 0, height: 0 }
 

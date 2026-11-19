@@ -14,6 +14,7 @@ import type { Action, UiWrite } from "./internal/action.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
+import * as Props from "./Props.ts"
 
 type Inputs = Readonly<Record<string, string | boolean>>
 
@@ -31,6 +32,24 @@ export type Field<Value> = {
   readonly invalid: Reactive<boolean>
   readonly change: (value: Value) => UiWrite
   readonly touch: UiWrite
+}
+
+const isField = <Value>(value: unknown): value is Field<Value> => {
+  if (!Predicate.hasProperty(value, "change")) return false
+
+  return Predicate.hasProperty(value, "touch") && Predicate.hasProperty(value, "value")
+}
+
+export const Field = <Value>(inner: Schema.Codec<Value, unknown>): Schema.declare<Field<Value>> => {
+  const reading = Props.Reactive(inner)
+
+  return Props.kind(
+    (value): value is Field<Value> => isField(value),
+    (value) =>
+      Option.flatMap(Option.liftPredicate(value, isField), (field) =>
+        Props.shown(reading, field.value),
+      ),
+  )
 }
 
 export type Form<Valid, Input extends Inputs> = {

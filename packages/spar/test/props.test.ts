@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef } from "effect"
-import { Handle, Props, Reactive, UiState, View } from "spar"
+import { Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
 import { BadgeView, CardView } from "./made.tsx"
@@ -21,6 +21,10 @@ const Card = (picked: SubscriptionRef.SubscriptionRef<string>) =>
       }
     }),
   )(CardView)
+
+const formField = { value: Reactive.succeed("typed"), change: () => [], touch: [] }
+
+const link = { href: "/people", onClick: [] }
 
 const fits = (field: Props.Field, value: unknown): boolean => Schema.is(field)(value)
 
@@ -91,6 +95,23 @@ describe("a view made from a Schema of its props", () => {
     expect(fits(Props.Handle, {})).toBe(false)
     expect(fits(Props.Callback(Schema.String), () => [])).toBe(true)
     expect(fits(Props.Callback(Schema.String), [])).toBe(false)
+    expect(fits(Props.Handler("keydown"), () => [])).toBe(true)
+    expect(fits(Props.Handler("keydown"), null)).toBe(false)
+    expect(Props.shown(Props.Handler("click"), [])).toEqual(Option.some("handler"))
+    expect(fits(Form.Field(Schema.String), formField)).toBe(true)
+    expect(fits(Form.Field(Schema.String), { change: 1 })).toBe(false)
+    expect(fits(Form.Field(Schema.String), { value: 1 })).toBe(false)
+    expect(Props.shown(Form.Field(Schema.String), formField)).toEqual(Option.some("typed"))
+    expect(Props.shown(Form.Field(Schema.String), "typed")).toEqual(Option.none())
+    expect(fits(Router.Link, link)).toBe(true)
+    expect(fits(Router.Link, { href: "/people" })).toBe(false)
+    expect(Props.shown(Router.Link, link)).toEqual(Option.some("/people"))
+    expect(Props.shown(Router.Link, "/people")).toEqual(Option.none())
+    expect(fits(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toBe(true)
+    expect(fits(Overlay.Placement, { position: "fixed" })).toBe(false)
+    expect(Props.shown(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toEqual(
+      Option.some("placement"),
+    )
   })
 
   it("the build check lets JSX be the body of View.make and nowhere else in a call", () => {

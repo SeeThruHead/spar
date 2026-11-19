@@ -1,6 +1,6 @@
 import { Effect, Option, Predicate, Schema } from "effect"
 import { WriteTypeId } from "./internal/action.ts"
-import type { Action as AnyAction } from "./internal/action.ts"
+import type { Action as AnyAction, Handler as AnyHandler } from "./internal/action.ts"
 import { isElement } from "./internal/element.ts"
 import type { Element as AnyElement } from "./internal/element.ts"
 import { isHandle } from "./internal/handle.ts"
@@ -16,7 +16,7 @@ type Show = (value: unknown) => Option.Option<Schema.Json>
 
 const shows = new WeakMap<object, Show>()
 
-const kind = <T>(is: (value: unknown) => value is T, show: Show): Schema.declare<T> => {
+export const kind = <T>(is: (value: unknown) => value is T, show: Show): Schema.declare<T> => {
   const schema = Schema.declare(is)
 
   shows.set(schema, (value) => (is(value) ? show(value) : Option.none()))
@@ -24,7 +24,7 @@ const kind = <T>(is: (value: unknown) => value is T, show: Show): Schema.declare
   return schema
 }
 
-const named =
+export const named =
   (name: string): Show =>
   () =>
     Option.some(name)
@@ -69,6 +69,14 @@ export const Callback = <A>(
   kind(
     (value): value is (argument: A) => AnyAction => Predicate.isFunction(value),
     named("callback"),
+  )
+
+export const Handler = <const Name extends keyof HTMLElementEventMap>(
+  _event: Name,
+): Schema.declare<AnyHandler<HTMLElementEventMap[Name]>> =>
+  kind(
+    (value): value is AnyHandler<HTMLElementEventMap[Name]> => Predicate.isNotNullish(value),
+    named("handler"),
   )
 
 export const shown = (field: Field, value: unknown): Option.Option<Schema.Json> =>
