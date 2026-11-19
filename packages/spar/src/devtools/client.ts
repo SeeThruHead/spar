@@ -4,6 +4,7 @@ import * as Dom from "../internal/dom.ts"
 import { Frame } from "../internal/frame.ts"
 import { installed } from "../internal/hook.ts"
 import type { Hook } from "../internal/hook.ts"
+import { Inspecting, inspecting } from "../internal/inspect.ts"
 import { renderInto } from "../internal/render.ts"
 import * as Timeline from "../Timeline.ts"
 import * as UiState from "../UiState.ts"
@@ -35,14 +36,29 @@ const apart = <A, E, R>(tools: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =
 const attach: Hook["attach"] = Effect.gen(function* () {
   const frame = yield* Frame
   const registry = yield* Effect.serviceOption(Devtools.Registry)
+  const tree = yield* UiState.Tree
 
-  yield* Effect.forEach(Option.toArray(registry), (found) => apart(shown(found, frame.overlays)), {
-    discard: true,
-  })
+  yield* Effect.forEach(
+    Option.toArray(registry),
+    (found) => {
+      found.follow(tree)
+
+      return apart(shown(found, frame.overlays))
+    },
+    {
+      discard: true,
+    },
+  )
 })
 
 const hook: Hook = { wrap: (app) => Effect.provide(app, Devtools.layer), attach }
 
-export const install = (): void => installed.write(Option.some(hook))
+export const install = (): void => {
+  inspecting.write(Option.some(new Inspecting()))
+  installed.write(Option.some(hook))
+}
 
-export const uninstall = (): void => installed.write(Option.none())
+export const uninstall = (): void => {
+  inspecting.write(Option.none())
+  installed.write(Option.none())
+}

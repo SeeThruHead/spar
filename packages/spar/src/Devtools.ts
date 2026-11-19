@@ -12,17 +12,26 @@ import {
 } from "effect"
 import { run } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
-import { fromCell } from "./internal/reactive.ts"
+import { fromCell, observed } from "./internal/reactive.ts"
 import {
+  ChangeView,
   DeadView,
   EntryView,
+  FactView,
+  InspectorView,
   MomentView,
   OutboxView,
+  OutlineView,
   PanelView,
   StoreView,
   TimelineView,
   ToolsView,
+  VeilView,
 } from "./devtools/PanelView.tsx"
+import * as Events from "./Events.ts"
+import * as Dom from "./internal/dom.ts"
+import { inspecting, mark } from "./internal/inspect.ts"
+import type { Seen } from "./internal/inspect.ts"
 import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
@@ -50,6 +59,8 @@ export class Registry extends Context.Service<
     readonly moments: Reactive.Reactive<ReadonlyArray<Timeline.Moment>>
     readonly viewing: Reactive.Reactive<number | null>
     readonly travelTo: (seq: number | null) => Effect.Effect<void>
+    readonly uiState: () => UiState.Snapshot
+    readonly follow: (tree: ReturnType<typeof UiState.makeTree>) => void
   }
 >()("spar/Devtools/Registry") {}
 
@@ -146,6 +157,8 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       moments: Reactive.map(fromCell(past), (now) => now.remembered.map((kept) => kept.moment)),
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
       travelTo,
+      uiState: () => trees.read().snapshot(),
+      follow: (tree) => trees.write(tree),
     }).pipe(
       Context.add(Store.Inspector, {
         keepStates: 1000,
@@ -333,10 +346,222 @@ export const TimelinePanel = View.connect(
   }),
 )(TimelineView)
 
+type Fact = { readonly name: string; readonly value: string }
+
+type Details = {
+  readonly id: number
+  readonly name: string
+  readonly place: string
+  readonly services: string
+  readonly props: ReadonlyArray<Fact>
+  readonly state: ReadonlyArray<Fact>
+  readonly when: string
+}
+
+type Changed = Fact & { readonly key: string; readonly from: string; readonly when: string }
+
+const factsOf = (shown: Readonly<Record<string, Schema.Json>>): ReadonlyArray<Fact> =>
+  Object.entries(shown).map(([name, value]) => ({ name, value: Formatter.formatJson(value) }))
+
+const samePath = (left: UiState.Path, right: UiState.Path): boolean =>
+  left.length === right.length && left.every((part, index) => part === right[index])
+
+const stateAt = (path: UiState.Path, snapshot: UiState.Snapshot): ReadonlyArray<Fact> =>
+  snapshot
+    .filter((entry) => samePath(entry.path, path))
+    .map((entry) => ({ name: entry.name, value: Formatter.formatJson(entry.value) }))
+
+const whenOf = (moments: ReadonlyArray<Timeline.Moment>): string =>
+  Option.match(Array.last(moments), {
+    onNone: () => "at the start",
+    onSome: (moment) => `after ${moment.seq}: ${moment.kind} ${moment.name}`,
+  })
+
+const detailsOf = (
+  seen: Seen,
+  snapshot: UiState.Snapshot,
+  moments: ReadonlyArray<Timeline.Moment>,
+): Details => ({
+  id: seen.id,
+  name: seen.name,
+  place: Option.match(seen.placed, {
+    onNone: () => "A view drawn by its parent",
+    onSome: (placed) => placed.path.join(" / "),
+  }),
+  services: Option.match(seen.placed, {
+    onNone: () => "None: a view cannot reach a service",
+    onSome: (placed) => placed.services.join(", "),
+  }),
+  props: factsOf(Props.allShown(seen.fields, seen.props)),
+  state: Option.match(seen.placed, {
+    onNone: () => [],
+    onSome: (placed) => stateAt(placed.path, snapshot),
+  }),
+  when: whenOf(moments),
+})
+
+const labelled = (kind: string, facts: ReadonlyArray<Fact>): ReadonlyArray<Fact> =>
+  facts.map((fact) => ({ name: `${kind} ${fact.name}`, value: fact.value }))
+
+const allFacts = (details: Details): ReadonlyArray<Fact> => [
+  ...labelled("prop", details.props),
+  ...labelled("state", details.state),
+]
+
+const changesBetween = (was: Details, now: Details): ReadonlyArray<Changed> => {
+  const earlier = new Map(allFacts(was).map((fact) => [fact.name, fact.value]))
+
+  return allFacts(now).flatMap((fact) =>
+    Option.toArray(
+      Option.filter(
+        Option.fromUndefinedOr(earlier.get(fact.name)),
+        (value) => value !== fact.value,
+      ),
+    ).map((from) => ({ ...fact, key: `${now.when} ${fact.name}`, from, when: now.when })),
+  )
+}
+
+const followed = (
+  history: ReadonlyArray<Changed>,
+  was: Option.Option<Details>,
+  now: Option.Option<Details>,
+): ReadonlyArray<Changed> =>
+  Option.match(Option.all([was, now]), {
+    onNone: () => [],
+    onSome: ([earlier, later]) =>
+      earlier.id === later.id ? [...history, ...changesBetween(earlier, later)].slice(-50) : [],
+  })
+
+const seenAs = (id: number | null): Option.Option<Seen> =>
+  Option.flatMap(Option.all([inspecting.read(), Option.fromNullOr(id)]), ([inspector, found]) =>
+    inspector.find(found),
+  )
+
+const outside = "[data-spar-devtools]"
+
+const px = (size: number): string => `${size}px`
+
+const Veil = View.taking(
+  { onMove: Props.Handler("pointermove"), onPick: Props.Handler("click") },
+  (handlers) => Effect.succeed(handlers),
+)(VeilView)
+
+type Outlined = { readonly name: string; readonly box: Dom.Box }
+
+const Outline = pipe(
+  View.taking(OutlineView.props, (box) => Effect.succeed(box))(OutlineView),
+  View.portal,
+)
+
+const facts = (rows: Reactive.Reactive<ReadonlyArray<Fact>>) =>
+  pipe(
+    rows,
+    Reactive.mapBy(
+      (fact: Fact) => fact.name,
+      FactView,
+      (fact) => ({
+        name: Reactive.map(fact, (now) => now.name),
+        value: Reactive.map(fact, (now) => now.value),
+      }),
+    ),
+  )
+
+export const Inspector = View.connect(
+  Effect.fnUntraced(function* () {
+    const registry = yield* Registry
+    const picking = yield* UiState.make("picking", Schema.Boolean, false)
+    const hovered = yield* UiState.make("hovered", Schema.NullOr(Schema.Int), null)
+    const picked = yield* UiState.make("picked", Schema.NullOr(Schema.Int), null)
+    const chosen = yield* Reactive.zip(picked, hovered)
+    const watched = yield* Reactive.zip(chosen, registry.moments)
+    const history = Cell.make<ReadonlyArray<Changed>>([])
+    const current = Cell.make(Option.none<Details>())
+    const details = fromCell(current)
+
+    yield* observed(watched, ([[pickedId], moments]) => {
+      const now = Option.map(seenAs(pickedId), (seen) =>
+        detailsOf(seen, registry.uiState(), moments),
+      )
+
+      history.write(followed(history.read(), current.read(), now))
+      current.write(now)
+    })
+    const shown = Reactive.map(watched, ([[pickedId, hoveredId]]) => hoveredId ?? pickedId)
+    const outlined = Reactive.map(shown, (id): ReadonlyArray<Outlined> =>
+      Option.toArray(
+        Option.flatMap(seenAs(id), (seen) =>
+          Option.map(Option.fromNullOr(Dom.boxAround(mark, seen.id)), (box) => ({
+            name: seen.name,
+            box,
+          })),
+        ),
+      ),
+    )
+    const about = <A>(pick: (found: Details) => A, otherwise: A) =>
+      Reactive.map(details, (found) =>
+        Option.match(found, { onNone: () => otherwise, onSome: pick }),
+      )
+
+    yield* Events.onDocument("keydown", (event) =>
+      event.key === "Escape" ? [UiState.set(picking, false), UiState.set(hovered, null)] : [],
+    )
+
+    return {
+      picking,
+      name: about((found) => found.name, "Nothing picked yet"),
+      place: about((found) => found.place, ""),
+      services: about((found) => found.services, ""),
+      props: yield* facts(about((found) => found.props, [])),
+      state: yield* facts(about((found) => found.state, [])),
+      changes: yield* pipe(
+        fromCell(history),
+        Reactive.mapBy(
+          (change: Changed) => change.key,
+          ChangeView,
+          (change) => ({
+            what: Reactive.map(change, (now) => now.name),
+            from: Reactive.map(change, (now) => now.from),
+            to: Reactive.map(change, (now) => now.value),
+            when: Reactive.map(change, (now) => now.when),
+          }),
+        ),
+      ),
+      veil: yield* pipe(
+        picking,
+        Reactive.when(Veil, {
+          onMove: (event) =>
+            UiState.set(hovered, Dom.markedAt(event.clientX, event.clientY, mark, outside)),
+          onPick: (event) => [
+            UiState.set(picked, Dom.markedAt(event.clientX, event.clientY, mark, outside)),
+            UiState.set(hovered, null),
+            UiState.set(picking, false),
+          ],
+        }),
+      ),
+      outline: yield* pipe(
+        outlined,
+        Reactive.mapBy(
+          () => "outline",
+          Outline,
+          (found) => ({
+            name: Reactive.map(found, (now) => now.name),
+            left: Reactive.map(found, (now) => px(now.box.x)),
+            top: Reactive.map(found, (now) => px(now.box.y)),
+            width: Reactive.map(found, (now) => px(now.box.width)),
+            height: Reactive.map(found, (now) => px(now.box.height)),
+          }),
+        ),
+      ),
+      onPick: UiState.update(picking, (on) => !on),
+    }
+  }),
+)(InspectorView)
+
 export const Tools = View.connect(
   Effect.fnUntraced(function* () {
     return {
       open: yield* UiState.make("open", Schema.Boolean, false),
+      inspector: yield* View.child(Inspector, {}),
       timeline: yield* View.child(TimelinePanel, {}),
       stores: yield* View.child(Panel, {}),
     }

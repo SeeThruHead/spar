@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { screen } from "@testing-library/dom"
+import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { App, Router, Store, UiState, View } from "spar"
@@ -25,7 +25,7 @@ class Tally extends Store.Tag<Tally>()("test/Tally", {
 
 const next = Router.route("/next")
 
-const Desk = View.connect(
+const Desk = View.described(["Tally", "Router.Router"]).connect(
   Effect.fnUntraced(function* () {
     const tally = yield* Tally
     const router = yield* Router.Router
@@ -73,6 +73,27 @@ const shown = (): ReadonlyArray<string | null> => {
 const shows = (count: string, draft: string, position: string) =>
   Testing.eventually(() => expect(shown()).toEqual([count, draft, position]))
 
+const under = (nodes: ReadonlyArray<Element>) =>
+  Effect.sync(() => {
+    Object.defineProperty(document, "elementsFromPoint", {
+      configurable: true,
+      value: () => [...nodes],
+    })
+  })
+
+const gone = (id: string | null): Element => {
+  const node = document.createElement("div")
+
+  node.setAttribute("data-spar-view", id ?? "")
+
+  return node
+}
+
+const facts = (table: string): ReadonlyArray<string> =>
+  [...screen.getByLabelText(table, { exact: true }).querySelectorAll("tr")].map(
+    (row) => `${row.querySelector("th")?.textContent} ${row.querySelector("td")?.textContent}`,
+  )
+
 const listed = (): ReadonlyArray<string | null | undefined> =>
   [...screen.getByLabelText("Everything that happened").querySelectorAll("li")].map(
     (item) => item.querySelector("code")?.textContent,
@@ -114,6 +135,97 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.click("button", "Later")
         yield* shows("1", "later", "Now")
         expect(screen.getByLabelText("test/Tally position").textContent).toBe("live")
+      }),
+    ),
+  )
+
+  it.live("a component picked on the page shows its data, and what each action changed", () =>
+    withTools(
+      Effect.gen(function* () {
+        yield* mounted
+        yield* Testing.click("button", "Devtools")
+        expect(screen.getByLabelText("Picked component").textContent).toBe("Nothing picked yet")
+
+        const draft = yield* Testing.find("textbox", "Draft")
+        const tools = yield* Testing.find("button", "Devtools")
+
+        yield* under([tools, document.body, draft])
+        yield* Testing.click("button", "Pick a component")
+
+        const veil = yield* Testing.find("button", "Pick a component on the page")
+        const veilId = veil.getAttribute("data-spar-view")
+
+        yield* Effect.sync(() => fireEvent.pointerMove(veil, { clientX: 10, clientY: 10 }))
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("Highlighted component").textContent).toBe("DeskView"),
+        )
+        yield* Effect.sync(() => fireEvent.click(veil, { clientX: 10, clientY: 10 }))
+        yield* Testing.gone("button", "Pick a component on the page")
+        yield* Testing.eventually(() => expect(facts("Props")).toContain('draft ""'))
+        expect(screen.getByLabelText("Picked component").textContent).toBe("DeskView")
+        expect(screen.getByLabelText("Where it is").textContent).toBe("DeskView")
+        expect(screen.getByLabelText("Services").textContent).toBe("Tally, Router.Router")
+        expect(facts("Props")).toEqual(["count 0", 'draft ""', 'onAdd "action"', 'onGo "action"'])
+        expect(facts("UI state")).toEqual(['draft ""'])
+
+        yield* Testing.fill("textbox", "Draft", "hi")
+        yield* Testing.click("button", "Add")
+        yield* Testing.eventually(() =>
+          expect(facts("Props").slice(0, 2)).toEqual(["count 1", 'draft "hi"']),
+        )
+        yield* Testing.eventually(() =>
+          expect(
+            [...screen.getByLabelText("What changed").querySelectorAll("li")].map(
+              (item) => item.textContent,
+            ),
+          ).toEqual([
+            'prop draft "" became "hi" after 1: ui DeskView . draft',
+            'state draft "" became "hi" after 1: ui DeskView . draft',
+            "prop count 0 became 1 after 2: command test/Tally/added",
+          ]),
+        )
+
+        yield* under([yield* Testing.findText("Type a note")])
+        yield* Testing.click("button", "Pick a component")
+        yield* Effect.flatMap(Testing.find("button", "Pick a component on the page"), (over) =>
+          Effect.sync(() => fireEvent.click(over, { clientX: 2, clientY: 2 })),
+        )
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("Picked component").textContent).toBe("HintView"),
+        )
+        expect(screen.getByLabelText("Where it is").textContent).toBe("A view drawn by its parent")
+        expect(screen.getByLabelText("Services").textContent).toBe(
+          "None: a view cannot reach a service",
+        )
+        expect(facts("Props")).toEqual(['text "Type a note"'])
+        expect(facts("UI state")).toEqual([])
+
+        yield* under([gone(veilId)])
+        yield* Testing.click("button", "Pick a component")
+        yield* Effect.flatMap(Testing.find("button", "Pick a component on the page"), (over) =>
+          Effect.sync(() => fireEvent.pointerMove(over, { clientX: 3, clientY: 3 })),
+        )
+        yield* Testing.eventually(() =>
+          expect(screen.queryByLabelText("Highlighted component")).toBeNull(),
+        )
+        yield* Testing.press("Escape")
+        yield* Testing.gone("button", "Pick a component on the page")
+
+        yield* under([])
+        yield* Testing.click("button", "Pick a component")
+        yield* Testing.press("Escape")
+        yield* Testing.gone("button", "Pick a component on the page")
+        yield* Testing.press("a")
+        yield* Testing.click("button", "Pick a component")
+        yield* Effect.flatMap(Testing.find("button", "Pick a component on the page"), (over) =>
+          Effect.sync(() => fireEvent.click(over, { clientX: 1, clientY: 1 })),
+        )
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("Picked component").textContent).toBe("Nothing picked yet"),
+        )
+        expect(facts("Props")).toEqual([])
+        expect(screen.getByLabelText("What changed").querySelectorAll("li")).toHaveLength(0)
+        expect(screen.queryByLabelText("Highlighted component")).toBeNull()
       }),
     ),
   )

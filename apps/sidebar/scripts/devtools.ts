@@ -35,6 +35,30 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   const live = await page.getByRole("searchbox").first().inputValue()
 
+  const search = page.getByRole("searchbox").first()
+  const spot = (await search.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 }
+
+  await page.getByRole("button", { name: "Pick a component" }).click()
+  await page.mouse.move(spot.x + spot.width / 2, spot.y + spot.height / 2)
+
+  const highlighted = (await page.getByLabel("Highlighted component").textContent()) ?? ""
+
+  await page.screenshot({ path: `${root}artifacts/devtools-picking.png` })
+  await page.mouse.click(spot.x + spot.width / 2, spot.y + spot.height / 2)
+
+  const picked = (await page.getByLabel("Picked component").textContent()) ?? ""
+  const where = (await page.getByLabel("Where it is").textContent()) ?? ""
+  const propsShown = await page.getByLabel("Props", { exact: true }).innerText()
+  const services = (await page.getByLabel("Services").textContent()) ?? ""
+
+  await page.screenshot({ path: `${root}artifacts/devtools-inspecting.png` })
+  await page.getByRole("searchbox").first().fill("triage")
+  await page.getByLabel("What changed").getByText("prop filter").waitFor({ timeout: 5000 })
+
+  const changed = await page.getByLabel("What changed").innerText()
+
+  await page.screenshot({ path: `${root}artifacts/devtools-changes.png` })
+
   return [
     ...(first.startsWith("ui ") && first.includes("filter")
       ? []
@@ -42,6 +66,12 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
     ...(rewound === "notes" ? [] : [`after jumping back the filter was "${rewound}"`]),
     ...(position === "At 1" ? [] : [`the timeline said "${position}"`]),
     ...(live === "" ? [] : [`back at now the filter was "${live}"`]),
+    ...(highlighted === "SidebarView" ? [] : [`hovering highlighted "${highlighted}"`]),
+    ...(picked === "SidebarView" ? [] : [`picking gave "${picked}"`]),
+    ...(where.endsWith("SidebarView") ? [] : [`the picked component was at "${where}"`]),
+    ...(propsShown.includes("filter") ? [] : [`its props were shown as: ${propsShown}`]),
+    ...(services.includes("BoardStore") ? [] : [`its services were shown as: ${services}`]),
+    ...(changed.includes('"triage"') ? [] : [`the change list said: ${changed}`]),
   ]
 }
 
@@ -55,5 +85,7 @@ if (problems.length > 0) {
   process.exit(1)
 }
 
-console.log("Devtools in the dev server: the tools load, log an action, rewind it and return")
+console.log(
+  "Devtools in the dev server: the tools load, log an action, rewind it, pick a component and show what changed in it",
+)
 process.exit(0)

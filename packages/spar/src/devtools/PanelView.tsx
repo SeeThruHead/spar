@@ -43,6 +43,150 @@ export const TimelineView = View.make(
   ),
 )
 
+const veil = {
+  position: "fixed",
+  inset: "0",
+  zIndex: "2147482000",
+  cursor: "crosshair",
+  background: "rgba(29, 78, 216, 0.04)",
+}
+
+export const VeilView = View.make(
+  "VeilView",
+  { onMove: Props.Handler("pointermove"), onPick: Props.Handler("click") },
+  ({ onMove, onPick }) => (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Pick a component on the page"
+      style={veil}
+      onPointermove={onMove}
+      onClick={onPick}
+    />
+  ),
+)
+
+export const OutlineView = View.make(
+  "OutlineView",
+  {
+    name: Props.Reactive(Schema.String),
+    left: Props.Reactive(Schema.String),
+    top: Props.Reactive(Schema.String),
+    width: Props.Reactive(Schema.String),
+    height: Props.Reactive(Schema.String),
+  },
+  ({ name, left, top, width, height }) => (
+    <div
+      aria-label="Highlighted component"
+      style={{
+        position: "absolute",
+        left,
+        top,
+        width,
+        height,
+        zIndex: "2147482500",
+        boxSizing: "border-box",
+        pointerEvents: "none",
+        border: "2px solid #1d4ed8",
+        borderRadius: "4px",
+        background: "rgba(29, 78, 216, 0.10)",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          left: "0",
+          top: "0",
+          padding: "1px 6px",
+          borderRadius: "2px 0 4px 0",
+          background: "#1d4ed8",
+          color: "#ffffff",
+          font: "600 11px/1.5 system-ui, sans-serif",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {name}
+      </span>
+    </div>
+  ),
+)
+
+const cell = { padding: "2px 10px 2px 0", verticalAlign: "top", textAlign: "left" }
+
+export const FactView = View.make(
+  "FactView",
+  { name: Props.Reactive(Schema.String), value: Props.Reactive(Schema.String) },
+  ({ name, value }) => (
+    <tr>
+      <th scope="row" style={{ ...cell, fontWeight: "600", whiteSpace: "nowrap" }}>
+        {name}
+      </th>
+      <td style={cell}>
+        <code>{value}</code>
+      </td>
+    </tr>
+  ),
+)
+
+export const ChangeView = View.make(
+  "ChangeView",
+  {
+    what: Props.Reactive(Schema.String),
+    from: Props.Reactive(Schema.String),
+    to: Props.Reactive(Schema.String),
+    when: Props.Reactive(Schema.String),
+  },
+  ({ what, from, to, when }) => (
+    <li>
+      <strong>{what}</strong> <code>{from}</code> became <code>{to}</code> <small>{when}</small>
+    </li>
+  ),
+)
+
+export const InspectorView = View.make(
+  "InspectorView",
+  {
+    picking: Props.Reactive(Schema.Boolean),
+    name: Props.Reactive(Schema.String),
+    place: Props.Reactive(Schema.String),
+    services: Props.Reactive(Schema.String),
+    props: Props.Element,
+    state: Props.Element,
+    changes: Props.Element,
+    veil: Props.Element,
+    outline: Props.Element,
+    onPick: Props.Action,
+  },
+  ({ picking, name, place, services, props, state, changes, veil: over, outline, onPick }) => (
+    <section aria-label="Component inspector">
+      <h2>Inspector</h2>
+      <p>
+        <button aria-pressed={picking} onClick={onPick}>
+          Pick a component
+        </button>{" "}
+        <output aria-label="Picked component">{name}</output>
+      </p>
+      <p>
+        <small aria-label="Where it is">{place}</small>
+      </p>
+      <h3>Props</h3>
+      <table aria-label="Props">
+        <tbody>{props}</tbody>
+      </table>
+      <h3>UI state</h3>
+      <table aria-label="UI state">
+        <tbody>{state}</tbody>
+      </table>
+      <h3>Services</h3>
+      <p aria-label="Services">{services}</p>
+      <h3>What changed</h3>
+      <ol aria-label="What changed">{changes}</ol>
+      {over}
+      {outline}
+    </section>
+  ),
+)
+
 const dock = {
   position: "fixed",
   right: "12px",
@@ -81,13 +225,19 @@ const sheet = {
 
 export const ToolsView = View.make(
   "ToolsView",
-  { open: Props.State(Schema.Boolean), timeline: Props.Element, stores: Props.Element },
-  ({ open, timeline, stores }) => (
+  {
+    open: Props.State(Schema.Boolean),
+    inspector: Props.Element,
+    timeline: Props.Element,
+    stores: Props.Element,
+  },
+  ({ open, inspector, timeline, stores }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
         Devtools
       </button>
       <div hidden={Reactive.map(open, (shown) => !shown)} style={sheet}>
+        {inspector}
         {timeline}
         {stores}
       </div>

@@ -422,3 +422,38 @@ export const dropRest = (cursor: Cursor, until: Node | null): void => {
 
 export const insertionPoint = (cursor: Cursor | undefined, before: Node | null): Node | null =>
   cursor === undefined ? before : cursor.next
+
+export const markedAt = (
+  x: number,
+  y: number,
+  attribute: string,
+  outside: string,
+): number | null => {
+  const under = document
+    .elementsFromPoint(x, y)
+    .filter((node) => node.closest(outside) === null)
+    .flatMap((node) => {
+      const owner = node.closest(`[${attribute}]`)
+
+      return owner === null ? [] : [Number(owner.getAttribute(attribute))]
+    })
+
+  return under[0] ?? null
+}
+
+export const boxAround = (attribute: string, id: number): Box | null => {
+  const boxes = [...document.querySelectorAll(`[${attribute}="${id}"]`)].map((node) =>
+    node.getBoundingClientRect(),
+  )
+  if (boxes.length === 0) return null
+
+  const left = Math.min(...boxes.map((box) => box.left))
+  const top = Math.min(...boxes.map((box) => box.top))
+
+  return {
+    x: left + window.scrollX,
+    y: top + window.scrollY,
+    width: Math.max(...boxes.map((box) => box.right)) - left,
+    height: Math.max(...boxes.map((box) => box.bottom)) - top,
+  }
+}

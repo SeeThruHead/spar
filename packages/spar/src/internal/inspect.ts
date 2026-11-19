@@ -3,6 +3,7 @@ import * as Cell from "./cell.ts"
 import { TypeId, fragment, intrinsic, isElement } from "./element.ts"
 import type { Element } from "./element.ts"
 import type { Path } from "./uiTree.ts"
+import type { Fields } from "../Props.ts"
 
 export const mark = "data-spar-view"
 
@@ -11,7 +12,7 @@ export type Placed = { readonly path: Path; readonly services: ReadonlyArray<str
 export type Seen = {
   readonly id: number
   readonly name: string
-  readonly fields: Readonly<Record<string, unknown>>
+  readonly fields: Fields
   readonly props: unknown
   readonly placed: Option.Option<Placed>
 }
@@ -32,12 +33,7 @@ export class Inspecting {
   readonly seen = new Map<number, Seen>()
   readonly last = Cell.make(0)
 
-  draw(
-    name: string,
-    fields: Readonly<Record<string, unknown>>,
-    props: unknown,
-    element: Element,
-  ): Element {
+  draw(name: string, fields: Fields, props: unknown, element: Element): Element {
     const id = this.last.read() + 1
 
     this.last.write(id)
@@ -63,12 +59,7 @@ export class Inspecting {
 
 export const inspecting = Cell.make<Option.Option<Inspecting>>(Option.none())
 
-export const drawn = (
-  name: string,
-  fields: Readonly<Record<string, unknown>>,
-  props: unknown,
-  element: Element,
-): Element =>
+export const drawn = (name: string, fields: Fields, props: unknown, element: Element): Element =>
   Option.match(inspecting.read(), {
     onNone: () => element,
     onSome: (inspector) => inspector.draw(name, fields, props, element),

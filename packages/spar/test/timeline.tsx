@@ -1,6 +1,8 @@
 import { Schema } from "effect"
 import { Props, UiState, View } from "spar"
 
+const HintView = View.make("HintView", { text: Schema.String }, ({ text }) => <p>{text}</p>)
+
 export const DeskView = View.make(
   "DeskView",
   {
@@ -11,6 +13,7 @@ export const DeskView = View.make(
   },
   ({ count, draft, onAdd, onGo }) => (
     <main>
+      <HintView text="Type a note" />
       <output aria-label="Count">{count}</output>
       <input
         aria-label="Draft"
