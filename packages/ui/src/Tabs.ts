@@ -1,4 +1,4 @@
-import { Array, Effect, Option } from "effect"
+import { Array, Effect, Option, Schema } from "effect"
 import { Handle, Reactive, UiState, View } from "spar"
 import type { Action, Element } from "spar"
 import { focusAt, target } from "./roving.ts"
@@ -15,7 +15,7 @@ export const Tabs = View.connect(
     readonly label: string
     readonly tabs: Array.NonEmptyReadonlyArray<Tab>
   }) {
-    const selected = yield* UiState.make(props.tabs[0].id)
+    const selected = yield* UiState.make("selected", Schema.String, props.tabs[0].id)
     const handles = yield* Effect.forEach(props.tabs, () => Handle.make)
     const ids = props.tabs.map((tab) => tab.id)
     const go = (index: number): Action => [

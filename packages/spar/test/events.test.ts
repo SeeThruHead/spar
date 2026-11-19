@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { vi } from "vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect, Predicate, Schedule, Stream, SubscriptionRef, pipe } from "effect"
+import { Effect, pipe, Predicate, Schedule, Schema, Stream, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
 import { Events, Reactive, UiState, View } from "spar"
 import { MenuItemsView, MenuView, SearchView, StatusView } from "./menus.tsx"
@@ -22,7 +22,7 @@ const narrowTo = (width: number) =>
 
 const Menu = View.connect(
   Effect.fnUntraced(function* () {
-    const open = yield* UiState.make(false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
 
     yield* Events.onDocument("pointerdown", UiState.set(open, false))
     yield* Events.onWindow("keydown", (event) =>

@@ -19,8 +19,8 @@ const Kit = View.connect(
   Effect.fnUntraced(function* () {
     const toasts = yield* Toast.Toasts
     const form = yield* Form.make(Profile, { name: "", plan: "team", news: false })
-    const dark = yield* UiState.make(false)
-    const open = yield* UiState.make(false)
+    const dark = yield* UiState.make("dark", Schema.Boolean, false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
     const saved = yield* SubscriptionRef.make("")
     const note = (text: string) => SubscriptionRef.set(saved, text)
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { vi } from "vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect, Layer, pipe } from "effect"
+import { Effect, Layer, pipe, Schema } from "effect"
 import { App, Handle, Overlay, Reactive, UiState, View } from "spar"
 import type { Action } from "spar"
 import * as Testing from "spar/testing"
@@ -22,7 +22,7 @@ const Dialog = pipe(
   View.connect(
     Effect.fnUntraced(function* ({ onClose }: { readonly onClose: Action }) {
       const close = yield* Handle.make
-      const confirming = yield* UiState.make(false)
+      const confirming = yield* UiState.make("confirming", Schema.Boolean, false)
 
       yield* Overlay.modal({ onDismiss: onClose, initialFocus: close })
 
@@ -70,8 +70,8 @@ const LooseMenu = pipe(
 
 const Page = View.connect(
   Effect.fnUntraced(function* () {
-    const dialogOpen = yield* UiState.make(false)
-    const menuOpen = yield* UiState.make(false)
+    const dialogOpen = yield* UiState.make("dialogOpen", Schema.Boolean, false)
+    const menuOpen = yield* UiState.make("menuOpen", Schema.Boolean, false)
     const more = yield* Handle.make
 
     return {

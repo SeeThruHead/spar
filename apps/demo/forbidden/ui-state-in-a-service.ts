@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { App, UiState } from "spar"
 import { Counter } from "../src/counter/Counter.ts"
@@ -10,7 +10,7 @@ class Sidebar extends Context.Service<Sidebar, { readonly open: UiState.UiState<
   static readonly layer = Layer.effect(
     Sidebar,
     Effect.gen(function* () {
-      return Sidebar.of({ open: yield* UiState.make(false) })
+      return Sidebar.of({ open: yield* UiState.make("open", Schema.Boolean, false) })
     }),
   )
 }

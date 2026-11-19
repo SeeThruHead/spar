@@ -4,6 +4,7 @@ import { inContext } from "./internal/context.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { map } from "./internal/reactive.ts"
+import { RowKey } from "./internal/uiTree.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { child } from "./View.ts"
 import type { Mountable } from "./View.ts"
@@ -32,7 +33,8 @@ export const mapBy = <A, Props, R = never>(
       kind: "mounted",
       items: list,
       key,
-      mount: (id, item) => inContext(child(component, toProps(item, id)), context),
+      mount: (id, item) =>
+        inContext(Effect.provideService(child(component, toProps(item, id)), RowKey, id), context),
     })
   })
 

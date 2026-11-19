@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect, Queue, Ref, Stream, SubscriptionRef, pipe } from "effect"
+import { Effect, pipe, Queue, Ref, Schema, Stream, SubscriptionRef } from "effect"
 import { Reactive, UiState, View } from "spar"
 import { jsx } from "spar/jsx-runtime"
 import { CountView, DraftView, EmptyView, SpanView } from "./forms.tsx"
@@ -11,8 +11,8 @@ import type { Item } from "./views.tsx"
 const Draft = (saved: Ref.Ref<ReadonlyArray<string>>) =>
   View.connect(
     Effect.fnUntraced(function* () {
-      const draft = yield* UiState.make("")
-      const urgent = yield* UiState.make(false)
+      const draft = yield* UiState.make("draft", Schema.String, "")
+      const urgent = yield* UiState.make("urgent", Schema.Boolean, false)
       const last = yield* SubscriptionRef.make("")
 
       return {

@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, pipe } from "effect"
+import { Context, Effect, Layer, pipe, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, UiState, View } from "spar"
 import { ShopStore } from "./ShopStore.ts"
@@ -29,7 +29,7 @@ const Stock = pipe(
 export const Shop = View.connect(
   Effect.fnUntraced(function* () {
     const store = yield* ShopStore
-    const basket = yield* UiState.make(0)
+    const basket = yield* UiState.make("basket", Schema.Finite, 0)
 
     return {
       count: store.select.count,

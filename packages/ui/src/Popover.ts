@@ -1,4 +1,4 @@
-import { Effect, pipe } from "effect"
+import { Effect, pipe, Schema } from "effect"
 import { Handle, Overlay, Reactive, UiState, View } from "spar"
 import type { Action, Element } from "spar"
 import { PopoverPanelView, PopoverView } from "./PopoverView.tsx"
@@ -31,7 +31,7 @@ export const Popover = View.connect(
     readonly text: string
     readonly content: Element
   }) {
-    const open = yield* UiState.make(false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make
     const panel = yield* pipe(
       open,

@@ -108,7 +108,7 @@ const Details = View.connect(
 
 const Disclosure = View.connect(
   Effect.fnUntraced(function* () {
-    const open = yield* UiState.make(false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
 
     return { open, details: yield* pipe(open, Reactive.when(Details, { note: "Now you see me" })) }
   }),

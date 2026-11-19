@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Reactive, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { Listbox, Popover, Tooltip } from "../src/index.ts"
@@ -15,7 +15,7 @@ const sizes = [
 
 const Kit = View.connect(
   Effect.fnUntraced(function* () {
-    const chosen = yield* UiState.make("m")
+    const chosen = yield* UiState.make("chosen", Schema.String, "m")
 
     return {
       remove: yield* Tooltip.make("Removes the project for everyone"),

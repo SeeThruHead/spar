@@ -1,4 +1,4 @@
-import { Effect, Predicate, Scope, SubscriptionRef } from "effect"
+import { Context, Effect, Predicate, Scope, SubscriptionRef } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -7,6 +7,7 @@ import type { Element } from "./internal/element.ts"
 import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { Hydrating, OnServer } from "./internal/server.ts"
+import { RowKey, UiTree } from "./internal/uiTree.ts"
 import { ViewScope } from "./internal/viewScope.ts"
 
 export type View<Props> = (props: Props) => Element
@@ -41,15 +42,27 @@ export const child = <Props, E = never, R = never, ViewProps = never>(
 
 type Outside<Requirements> = Exclude<Exclude<Requirements, ViewScope>, Scope.Scope>
 
+const labelled = (name: string, key: string | undefined): string =>
+  key === undefined ? name : `${name}[${key}]`
+
 const inViewScope = <A, E, Requirements>(
   effect: Effect.Effect<A, E, Requirements>,
+  name: string,
 ): Effect.Effect<A, E, Outside<Requirements> | Scope.Scope> =>
-  Effect.flatMap(Effect.scope, (scope) =>
-    effect.pipe(
-      Effect.provideService(ViewScope, { mounted: true }),
+  Effect.flatMap(Effect.context<Scope.Scope>(), (context) => {
+    const scope = Context.get(context, Scope.Scope)
+
+    return effect.pipe(
+      Effect.provideService(ViewScope, {
+        parent: Context.getOrUndefined(context, ViewScope),
+        label: labelled(name, Context.get(context, RowKey)),
+        scope,
+        tree: Context.get(context, UiTree),
+      }),
+      Effect.provideService(RowKey, undefined),
       Effect.provideService(Scope.Scope, scope),
-    ),
-  )
+    )
+  })
 
 const spanName = (view: { readonly name: string }): string =>
   view.name === "" ? "View (unnamed)" : view.name
@@ -68,7 +81,7 @@ export const connect =
     view: View<ViewProps> & View<Props> & OnlyWhatTheViewTakes<Props, ViewProps>,
   ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
     make<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
-      Effect.withSpan(inViewScope(Effect.map(props(outer), view)), spanName(view), {
+      Effect.withSpan(inViewScope(Effect.map(props(outer), view), spanName(view)), spanName(view), {
         captureStackTrace: false,
       }),
     )

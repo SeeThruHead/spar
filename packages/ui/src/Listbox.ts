@@ -1,4 +1,4 @@
-import { Array, Effect, Option, pipe } from "effect"
+import { Array, Effect, Option, pipe, Schema } from "effect"
 import { Events, Handle, Overlay, Reactive, UiState, View } from "spar"
 import type { Action } from "spar"
 import { ListboxListView, ListboxOptionView, ListboxView } from "./ListboxView.tsx"
@@ -106,7 +106,7 @@ export const Listbox = View.connect(
   }) {
     const ids = yield* Ids
     const listId = yield* ids.next
-    const open = yield* UiState.make(false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make
     const list = yield* pipe(
       open,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, SubscriptionRef } from "effect"
+import { Effect, Schema, SubscriptionRef } from "effect"
 import { Events, Reactive, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { DraftView } from "./forms.tsx"
@@ -7,8 +7,8 @@ import { LoadedView } from "./views.tsx"
 
 const Draft = View.connect(
   Effect.fnUntraced(function* () {
-    const draft = yield* UiState.make("")
-    const urgent = yield* UiState.make(false)
+    const draft = yield* UiState.make("draft", Schema.String, "")
+    const urgent = yield* UiState.make("urgent", Schema.Boolean, false)
     const saved = yield* SubscriptionRef.make("")
 
     yield* Events.onDocument("keyup", (event) =>

@@ -24,7 +24,7 @@ const idle = Reactive.succeed(false)
 export const Controls = View.connect(
   Effect.fnUntraced(function* () {
     const form = yield* Form.make(Profile, { name: "", plan: "team", news: false })
-    const compact = yield* UiState.make(false)
+    const compact = yield* UiState.make("compact", Schema.Boolean, false)
     const saved = yield* SubscriptionRef.make("nothing yet")
 
     return {
@@ -92,7 +92,7 @@ export const MenuStory = View.connect(
 
 export const DialogStory = View.connect(
   Effect.fnUntraced(function* () {
-    const open = yield* UiState.make(false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
 
     return {
       idle,
@@ -142,7 +142,7 @@ export const PopoverStory = View.connect(
 
 export const ListboxStory = View.connect(
   Effect.fnUntraced(function* () {
-    const size = yield* UiState.make("m")
+    const size = yield* UiState.make("size", Schema.String, "m")
 
     return {
       chosen: size,

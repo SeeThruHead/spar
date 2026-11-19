@@ -1,4 +1,4 @@
-import { Effect, pipe } from "effect"
+import { Effect, pipe, Schema } from "effect"
 import { Reactive, UiState, View } from "spar"
 import { TodoStore } from "./TodoStore.ts"
 import type { Todo } from "./TodoStore.ts"
@@ -20,7 +20,7 @@ const TodoRow = View.connect(
 export const Todos = View.connect(
   Effect.fnUntraced(function* () {
     const store = yield* TodoStore
-    const draft = yield* UiState.make("")
+    const draft = yield* UiState.make("draft", Schema.String, "")
 
     const rows = yield* pipe(
       store.select.todos,

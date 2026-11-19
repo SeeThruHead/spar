@@ -73,9 +73,9 @@ const StorePanel = View.connect(
       ),
     )
 
-    const exported = yield* UiState.make("")
-    const pasted = yield* UiState.make("")
-    const problem = yield* UiState.make("")
+    const exported = yield* UiState.make("exported", Schema.String, "")
+    const pasted = yield* UiState.make("pasted", Schema.String, "")
+    const problem = yield* UiState.make("problem", Schema.String, "")
     const say = (text: string) => run(UiState.set(problem, text))
 
     return {

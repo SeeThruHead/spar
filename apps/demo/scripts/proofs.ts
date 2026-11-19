@@ -98,7 +98,7 @@ const expectations: ReadonlyArray<Expectation> = [
     file: "ui-state-seeded-from-store.ts",
     rule: "Seeding UI state from a store selector",
     by: "types",
-    expect: "Reactive<number>' is not assignable to parameter of type 'never'",
+    expect: "Reactive<number>' is not assignable to parameter of type 'number'",
   },
   {
     file: "ui-state-written-from-a-stream.ts",

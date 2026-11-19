@@ -1,4 +1,4 @@
-import { Effect, flow, pipe } from "effect"
+import { Effect, flow, pipe, Schema } from "effect"
 import { Events, Outbox, Reactive, UiState, View } from "spar"
 import { MailApi } from "./MailApi.ts"
 import { MailStore } from "./MailStore.ts"
@@ -17,9 +17,9 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
   const store = yield* MailStore
   const outbox = yield* Outbox.Outbox
   const thread = yield* api.loadThread(id)
-  const menuOpen = yield* UiState.make(false)
-  const status = yield* UiState.make("In inbox")
-  const draft = yield* UiState.make("")
+  const menuOpen = yield* UiState.make("menuOpen", Schema.Boolean, false)
+  const status = yield* UiState.make("status", Schema.String, "In inbox")
+  const draft = yield* UiState.make("draft", Schema.String, "")
   const pick = (label: string) => [UiState.set(status, label), UiState.set(menuOpen, false)]
 
   yield* Events.onDocument("pointerdown", UiState.set(menuOpen, false))

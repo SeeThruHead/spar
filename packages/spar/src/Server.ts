@@ -3,6 +3,7 @@ import type { Layer } from "effect"
 import { Frame, noPage } from "./internal/frame.ts"
 import { toHtml } from "./internal/html.ts"
 import { OnServer } from "./internal/server.ts"
+import { Tree, UiTree } from "./internal/uiTree.ts"
 import type { NoProps } from "./App.ts"
 import type { Component } from "./View.ts"
 
@@ -17,5 +18,6 @@ export const renderToString = <R, LayerError = never>(
       Effect.provideService(Frame, noPage),
       Effect.provide(options.layer),
       Effect.provideService(OnServer, true),
+      Effect.provideService(UiTree, new Tree()),
       Effect.scoped,
     )

@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Schema, pipe } from "effect"
+import { Effect, Option, Schema, pipe } from "effect"
 import { Events, Form, Outbox, Reactive, Router, UiState, View } from "spar"
 import type { Action } from "spar"
 import { Dialog, Menu, Select, Toast } from "@spar/ui"
@@ -14,17 +14,19 @@ import {
   SidebarView,
 } from "./SidebarView.tsx"
 
-type Editing = Data.TaggedEnum<{
-  Nothing: {}
-  Starting: {}
-  AddingProject: {}
-  Tagging: { readonly id: AgentId }
-  Moving: { readonly id: AgentId }
-}>
+const Editing = Schema.TaggedUnion({
+  Nothing: {},
+  Starting: {},
+  AddingProject: {},
+  Tagging: { id: AgentId },
+  Moving: { id: AgentId },
+})
 
-const Editing = Data.taggedEnum<Editing>()
+type Editing = typeof Editing.Type
 
-type Dragged = { readonly kind: "agent" | "space"; readonly id: string }
+const Dragged = Schema.Struct({ kind: Schema.Literals(["agent", "space"]), id: Schema.String })
+
+type Dragged = typeof Dragged.Type
 
 type Dragging = {
   readonly dragged: UiState.UiState<Dragged | null>
@@ -87,10 +89,10 @@ const AgentRow = View.connect(
         text: "Actions",
         items: [
           { label: "Pin or unpin", onChoose: store.commands.pinToggled({ id }) },
-          { label: "Edit tags", onChoose: UiState.set(props.editing, Editing.Tagging({ id })) },
+          { label: "Edit tags", onChoose: UiState.set(props.editing, { _tag: "Tagging", id }) },
           {
             label: "Move to a project",
-            onChoose: UiState.set(props.editing, Editing.Moving({ id })),
+            onChoose: UiState.set(props.editing, { _tag: "Moving", id }),
           },
           { label: "Move up", onChoose: store.commands.agentNudged({ id, by: -1 }) },
           { label: "Move down", onChoose: store.commands.agentNudged({ id, by: 1 }) },
@@ -274,7 +276,7 @@ const MoveForm = View.connect(
 )(MoveFormView)
 
 const dialogs = Effect.fnUntraced(function* (editing: UiState.UiState<Editing>) {
-  const onClose = UiState.set(editing, Editing.Nothing())
+  const onClose = UiState.set(editing, { _tag: "Nothing" })
   const shared = { editing, onClose }
   const when = (tag: Editing["_tag"]) => Reactive.map(editing, (now) => now._tag === tag)
 
@@ -303,11 +305,11 @@ export const Sidebar = View.connect(
     const store = yield* BoardStore
     const outbox = yield* Outbox.Outbox
     const online = yield* Events.online
-    const filter = yield* UiState.make("")
-    const editing = yield* UiState.make<Editing>(Editing.Nothing())
+    const filter = yield* UiState.make("filter", Schema.String, "")
+    const editing = yield* UiState.make("editing", Editing, { _tag: "Nothing" })
     const dragging: Dragging = {
-      dragged: yield* UiState.make<Dragged | null>(null),
-      over: yield* UiState.make<string | null>(null),
+      dragged: yield* UiState.make("dragged", Schema.NullOr(Dragged), null),
+      over: yield* UiState.make("over", Schema.NullOr(Schema.String), null),
     }
     const shown = yield* Reactive.zip(store.select.board, filter)
     const sections = yield* pipe(
@@ -328,8 +330,8 @@ export const Sidebar = View.connect(
       online: Reactive.map(online, (connected) => (connected ? "Online" : "Offline")),
       idle: Reactive.succeed(false),
       sections,
-      onStart: UiState.set(editing, Editing.Starting()),
-      onAddProject: UiState.set(editing, Editing.AddingProject()),
+      onStart: UiState.set(editing, { _tag: "Starting" }),
+      onAddProject: UiState.set(editing, { _tag: "AddingProject" }),
       dialogs: yield* dialogs(editing),
     }
   }),

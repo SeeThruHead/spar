@@ -1,4 +1,4 @@
-import { Array, Effect, Option, pipe } from "effect"
+import { Array, Effect, Option, pipe, Schema } from "effect"
 import { Handle, Overlay, Reactive, UiState, View } from "spar"
 import type { Action } from "spar"
 import { MenuItemView, MenuListView, MenuView } from "./MenuView.tsx"
@@ -55,7 +55,7 @@ export const Menu = View.connect(
     readonly text: string
     readonly items: ReadonlyArray<Item>
   }) {
-    const open = yield* UiState.make(false)
+    const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make
     const list = yield* pipe(
       open,

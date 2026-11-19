@@ -68,10 +68,11 @@ Rules out: class components, a context API, lifecycle hooks and wrapper hierarch
 
 ## 6. UI state and app state are different types
 
-`UiState.make(initial)` only works inside a component's Effect. It can be read anywhere it is
+`UiState.make(name, schema, initial)` only works inside a component's Effect. It can be read anywhere it is
 passed, but it can only be changed by a `UiState.set` or `UiState.update` value, and the only thing
 that runs those is a DOM event handler (including `Events.onDocument` and `Events.onWindow`, which
-also only work inside a component). It has no Schema, so it cannot be a command payload. Form input
+also only work inside a component). Its Schema describes the value for the devtools and for
+restoring it; the state itself is a live handle, not data, so it cannot be a command payload. Form input
 is UI state inside `Form`. App state lives in stores and nowhere else.
 
 Rules out: local state kept in sync with a store, UI state created in a service, UI state sent to

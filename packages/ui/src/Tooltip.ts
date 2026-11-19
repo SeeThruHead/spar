@@ -1,4 +1,4 @@
-import { Effect, pipe } from "effect"
+import { Effect, pipe, Schema } from "effect"
 import { Handle, Overlay, Reactive, UiState, View } from "spar"
 import type { Action, Element, Handler } from "spar"
 import { Ids } from "./ids.ts"
@@ -33,7 +33,7 @@ export type Tooltip = {
 export const make = Effect.fnUntraced(function* (text: string) {
   const ids = yield* Ids
   const id = yield* ids.next
-  const shown = yield* UiState.make(false)
+  const shown = yield* UiState.make("shown", Schema.Boolean, false)
   const anchor = yield* Handle.make
   const show = UiState.set(shown, true)
   const hide = UiState.set(shown, false)

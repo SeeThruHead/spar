@@ -1,4 +1,4 @@
-import { Effect, Stream, SubscriptionRef, pipe } from "effect"
+import { Effect, pipe, Schema, Stream, SubscriptionRef } from "effect"
 import { Events, Handle, Reactive, UiState, View } from "spar"
 import { DialogView, FruitView, LoadingView, PageView, PairView, ReportView } from "./pages.tsx"
 import type { Fruit } from "./pages.tsx"
@@ -22,8 +22,8 @@ const Row = View.connect(({ fruit }: { readonly fruit: Reactive.Reactive<Fruit> 
 export const Page = (all: Reactive.Reactive<ReadonlyArray<Fruit>>) =>
   View.connect(
     Effect.fnUntraced(function* () {
-      const count = yield* UiState.make(2)
-      const busy = yield* UiState.make(true)
+      const count = yield* UiState.make("count", Schema.Finite, 2)
+      const busy = yield* UiState.make("busy", Schema.Boolean, true)
       const note = yield* SubscriptionRef.make("")
       const online = yield* Events.online
 
