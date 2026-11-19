@@ -55,3 +55,5 @@ export const ProductParams = Schema.Struct({ id: Schema.String })
 export const home = Router.route("/")
 
 export const productRoute = Router.route("/shelf/:id", ProductParams)
+
+export const slowRoute = Router.route("/slow/:id", ProductParams)

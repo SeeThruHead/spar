@@ -64,6 +64,29 @@ const page = (url: string) =>
       ),
   )
 
+const client = '<script type="module" async src="/client.js"></script>'
+
+const inPieces = (url: string) =>
+  Effect.map(
+    Effect.context(),
+    (context) =>
+      new Response(
+        Stream.toReadableStreamWith(
+          Stream.encodeText(
+            Server.renderInPieces(Site, {
+              layer: layer(url, "300 millis"),
+              open,
+              close: "</div>",
+              script: client,
+              end: "</body></html>",
+            }),
+          ),
+          context,
+        ),
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+  )
+
 const stock = Effect.map(crates(), (count) => json(`{"count":${count}}`))
 
 export const start = (port: number) => {
@@ -89,6 +112,7 @@ export const start = (port: number) => {
       if (path === "/client-spans") return runtime.runPromise(heard(await request.text()))
       if (path.startsWith("/spans/")) return runtime.runPromise(kept(path.slice(7)))
       if (path === "/rpc" || path === "/rpc/") return rpc.handler(request)
+      if (path.startsWith("/slow/")) return runtime.runPromise(inPieces(path))
       if (path === "/" || path.startsWith("/shelf/")) return runtime.runPromise(page(path))
 
       return new Response("Not found", { status: 404 })

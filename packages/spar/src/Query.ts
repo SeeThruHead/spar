@@ -3,6 +3,7 @@ import {
   Duration,
   Effect,
   Formatter,
+  Layer,
   Array,
   Option,
   Predicate,
@@ -15,6 +16,7 @@ import {
 } from "effect"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
+import { Adopters } from "./internal/pieces.ts"
 import type { Action } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
@@ -274,6 +276,9 @@ export const Tag =
               ? null
               : Diagnostics.brief("SPAR_IN_USE_AGAIN"),
         ),
+        streamed: Store.action(state, (before: State<A, E>, sent): State<A, E> => ({
+          entries: { ...before.entries, ...sent.entries },
+        })),
         invalidated: Store.action(Schema.Void, (before: State<A, E>): State<A, E> => ({
           entries: Record.map(before.entries, (held) => ({ ...held, loadedAt: null })),
         })),
@@ -562,7 +567,24 @@ export const Tag =
 
     return class extends base {
       static readonly loads = loads
-      static readonly live = base.layer([loads, drops, trims])
+      static readonly live = Layer.provideMerge(
+        Layer.effectDiscard(
+          Effect.gen(function* () {
+            const store = yield* Effect.service(base)
+            const adopters = yield* Adopters
+
+            yield* adopters.register(key, (sent) =>
+              Effect.ignore(
+                Effect.flatMap(
+                  Schema.decodeEffect(Schema.toCodecJson(state))(sent),
+                  store.commands.streamed,
+                ),
+              ),
+            )
+          }),
+        ),
+        base.layer([loads, drops, trims]),
+      )
       static readonly beside = <Props, EC = never, RC = never, ViewProps = never>(
         self: Mountable<Props, EC, RC, ViewProps>,
       ) => base.with(self, [loads])

@@ -458,5 +458,12 @@ export const boxAround = (attribute: string, id: number): Box | null => {
   }
 }
 
+export const takePieces = (name: string, onPiece: (piece: unknown) => void): void => {
+  const waiting: unknown = Reflect.get(globalThis, name)
+
+  Reflect.set(globalThis, name, { push: onPiece })
+  Array.from(Array.isArray(waiting) ? waiting : []).forEach(onPiece)
+}
+
 export const textOf = (id: string): string | null =>
   document.getElementById(id)?.textContent ?? null

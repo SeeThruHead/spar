@@ -12,6 +12,8 @@ import { Frame, noPage } from "./internal/frame.ts"
 import { toHtml } from "./internal/html.ts"
 import { Preload } from "./internal/preload.ts"
 import { installed } from "./internal/hook.ts"
+import { starter } from "./internal/listen.ts"
+import * as Pieces from "./internal/pieces.ts"
 import { renderInto } from "./internal/render.ts"
 import { Router } from "./Router.ts"
 import { Inspector } from "./Store.ts"
@@ -62,14 +64,30 @@ const rehearsal =
       }),
     )
 
+const adopted = (adopters: Cell.Cell<ReadonlyMap<string, Pieces.Adopt>>, piece: unknown) =>
+  Effect.forEach(
+    Option.toArray(Schema.decodeUnknownOption(Pieces.Piece)(piece)).flatMap((taken) =>
+      Object.entries(taken.stores),
+    ),
+    ([key, held]) => adopters.read().get(key)?.(held) ?? Effect.void,
+    { discard: true },
+  )
+
+const taking = (adopters: Cell.Cell<ReadonlyMap<string, Pieces.Adopt>>) =>
+  Effect.map(starter(), (start) =>
+    Dom.takePieces(Pieces.holder, (piece) => start(adopted(adopters, piece))),
+  )
+
 const started = <R, LayerError>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
   existing: (target: HTMLElement) => Dom.Cursor | undefined,
   state: Dehydrated,
   name: string,
-): Effect.Effect<never, LayerError> =>
-  Effect.all({
+): Effect.Effect<never, LayerError> => {
+  const adopters = Cell.make<ReadonlyMap<string, Pieces.Adopt>>(new Map())
+
+  return Effect.all({
     scope: Effect.scope,
     overlays: overlayRoot,
     context: Effect.context<Exclude<R, Frame>>(),
@@ -94,6 +112,7 @@ const started = <R, LayerError>(
         (mounted) =>
           Effect.withSpan(mounted, name, { captureStackTrace: false, ...continued(state) }),
         Effect.andThen(options.shown ?? Effect.void),
+        Effect.andThen(taking(adopters)),
         Effect.andThen(
           Option.match(installed.read(), {
             onNone: () => Effect.void,
@@ -109,12 +128,17 @@ const started = <R, LayerError>(
     Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),
     Effect.andThen(Effect.never),
     Effect.provide(options.layer),
+    Effect.provideService(Pieces.Adopters, {
+      register: (key, adopt) =>
+        Effect.sync(() => adopters.write(new Map([...adopters.read(), [key, adopt]]))),
+    }),
     Effect.provideService(Seed, state.stores),
     (app) =>
       Option.match(installed.read(), { onNone: () => app, onSome: (hook) => hook.wrap(app) }),
     Effect.scoped,
     Effect.provideService(Scheduler.Scheduler, browserScheduler),
   )
+}
 
 export const mount = <R, LayerError = never>(
   component: Component<NoProps, never, R>,

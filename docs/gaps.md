@@ -42,8 +42,9 @@ Built since, and smaller than they sound, but not done:
   wins, and when the swap is shown).
 - **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
-- **Server rendering sends the page whole.** The head goes first, then the page once every query
-  has answered. There is no sending in pieces and no way to hold a slow query back.
+- **A page sent in pieces fills in only with JavaScript.** `Server.renderInPieces` sends the page
+  as first drawn and then each query's data; it does not send finished HTML for a piece. If the
+  connection drops, a query whose piece never came stays `loading`.
 - **An event's span names its view only with the devtools on.** The renderer does not know
   which view drew a node; the inspector does.
 - **A query's default stale time is 0,** so a preload that finishes before the click, or a page

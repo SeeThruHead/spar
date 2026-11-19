@@ -160,6 +160,65 @@ const routed = async (page: Page): Promise<void> => {
   if (!kept) throw new Error("Following a link loaded a new document")
 }
 
+const readUntil = async (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  text: string,
+  done: (text: string) => boolean,
+): Promise<string> => {
+  if (done(text)) return text
+
+  const part = await reader.read()
+  if (part.done) return text
+
+  return readUntil(reader, text + new TextDecoder().decode(part.value), done)
+}
+
+const sentInPieces = async (): Promise<void> => {
+  const started = performance.now()
+  const reader = (await fetch(`${origin}/slow/cheese`)).body?.getReader()
+  if (reader === undefined) throw new Error("The page sent in pieces has no body")
+
+  const first = await readUntil(reader, "", (text) => text.includes('id="spar-state"'))
+  const firstAfter = performance.now() - started
+  const all = await readUntil(reader, first, () => false)
+  const wholeAfter = performance.now() - started
+
+  if (first.includes("Valley dairy"))
+    throw new Error("The first part of the page already held the slow supplier")
+  if (!first.includes('aria-label="Supplier status"'))
+    throw new Error("The first part of the page was not the page as first drawn")
+  if (firstAfter > 200)
+    throw new Error(
+      `The page as first drawn took ${firstAfter.toFixed(0)} ms, as long as the slow query`,
+    )
+  if (wholeAfter < 280)
+    throw new Error(
+      `The whole page took ${wholeAfter.toFixed(0)} ms, less than the slow query takes`,
+    )
+  if (!all.slice(first.length).includes("__sparPieces") || !all.includes("Valley dairy"))
+    throw new Error("The slow supplier did not follow as a piece")
+  if (!all.trimEnd().endsWith("</body></html>")) throw new Error("The document was not closed")
+}
+
+const takenInPieces = async (page: Page): Promise<void> => {
+  await page.goto(`${origin}/slow/cheese`, { waitUntil: "commit" })
+  await said(page, "Product", "Cheese & crackers")
+  await said(page, "Supplier", "Valley dairy")
+  await said(page, "Supplier status", "loaded")
+  await page.locator("#root[data-ready]").waitFor()
+  await sameTrace(page, ["Server.render", "Database.product", "Database.supplier", "App.hydrate"])
+  await page.waitForTimeout(200)
+
+  const afterPieces = await asked(page)
+  if (afterPieces !== 0)
+    throw new Error(
+      `The browser asked the server ${afterPieces} times for data that was sent in pieces`,
+    )
+
+  await page.getByRole("link", { name: "Back to the shop" }).click()
+  await page.getByRole("heading", { name: "Corner shop" }).waitFor()
+}
+
 const run = async (): Promise<void> => {
   const browser = await launch()
   const page = await browser.newPage({ viewport: { width: 820, height: 900 } })
@@ -167,7 +226,12 @@ const run = async (): Promise<void> => {
     page.on("pageerror", reject)
   })
 
-  await Promise.race([walk(page).then(() => routed(page)), broke]).finally(() => browser.close())
+  await Promise.race([
+    walk(page)
+      .then(() => routed(page))
+      .then(() => takenInPieces(page)),
+    broke,
+  ]).finally(() => browser.close())
 }
 
 expectSent("<h1>Corner shop</h1>")
@@ -184,6 +248,8 @@ const missing = ["Cheese &amp; crackers", "Valley dairy", '"ssr/Product"', '"ssr
 if (missing.length > 0)
   throw new Error(`The server's product page does not hold: ${missing.join(", ")}`)
 
+await sentInPieces()
+
 const opening = await firstPart()
 
 if (!opening.includes("<title>Corner shop</title>") || opening.includes("Cheese"))
@@ -191,5 +257,5 @@ if (!opening.includes("<title>Corner shop</title>") || opening.includes("Cheese"
 
 await run().finally(() => server.stop(true))
 console.log(
-  `Server rendering passed in ${engine()}: the document opens before the page is drawn, the page arrives complete with its state, its nodes are kept, the browser starts from the server stores, the takeover is in the trace of the render, and a routed page arrives with what its queries loaded, asks for none of it again, and goes on to other pages without a new document, each navigation one trace with the server`,
+  `Server rendering passed in ${engine()}: the document opens before the page is drawn, the page arrives complete with its state, its nodes are kept, the browser starts from the server stores, the takeover is in the trace of the render, and a routed page arrives with what its queries loaded, asks for none of it again, and goes on to other pages without a new document, each navigation one trace with the server; and a page with a slow query is sent as first drawn, with the slow data following as a piece that the browser takes without asking again`,
 )

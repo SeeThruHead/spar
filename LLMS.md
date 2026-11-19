@@ -419,16 +419,43 @@ browser test fails unless the page arrives with what its two queries loaded, the
 none of it again, a link to another product makes exactly two calls in one trace that reaches the
 database's spans, and going back loads no new document.
 
+#### Sending a page in pieces
+
+`Server.render` and `renderToStream` wait for every query, so the page arrives complete and
+works without JavaScript. `Server.renderInPieces` does not wait:
+
+```ts
+Server.renderInPieces(Site, {
+  layer: layer(url),
+  open,
+  close: "</div>",
+  script: '<script type="module" async src="/client.js"></script>',
+  end: "</body></html>",
+})
+```
+
+It sends the page as first drawn, with each query showing its own `loading` or `waiting`
+state, and the state it had then. The queries go on running on the server, dependent ones too,
+and each time their stores change the new state follows as a small script. The browser hands each
+piece to the query's store (the store's log shows it as `streamed`), the views update, and the
+browser asks the backend for nothing. The whole response is one render in one trace. The server
+code chooses per page which of the two to call.
+
+What to know: the client script must be `async`, or the browser runs it only after the last
+piece. Without JavaScript the page stays as first drawn. A query that is first asked for by a
+component that only mounts once data is there (a row of a loaded list) is not run on the server;
+the browser asks for it. If the connection drops part way, a query whose piece never came stays
+`loading`.
+
 From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
-and picked up in the browser, and a typed server boundary. It does not take: routes from files,
-server functions made by a compiler, or streaming a page in pieces. The document's head is sent
-first and the page follows whole once its data is in. There are no server components and no
-second kind of component.
+and picked up in the browser, a typed server boundary, and a choice per page between a complete
+page and one sent in pieces. It does not take: routes from files, or server functions made by a
+compiler. What is sent in pieces is data, not HTML: the server does not send finished fragments to
+swap in. There are no server components and no second kind of component.
 
 ### Not built
 
-- Sending a page in pieces as each query answers, or holding a slow query back so it does not
-  delay the first draw.
+- Sending finished HTML for a piece, so a page sent in pieces fills in without JavaScript.
 - A span for the code of a split page arriving.
 
 
@@ -936,7 +963,7 @@ sequenceDiagram
 
 `Server.render(Component, { layer })` runs the same component on a server and gives its HTML
 and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
-trace of the render. `Server.renderToString` gives only the HTML. Loading parts (`View.pending`)
+trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then each query's data as it lands (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
 
@@ -2323,8 +2350,9 @@ Built since, and smaller than they sound, but not done:
   wins, and when the swap is shown).
 - **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
-- **Server rendering sends the page whole.** The head goes first, then the page once every query
-  has answered. There is no sending in pieces and no way to hold a slow query back.
+- **A page sent in pieces fills in only with JavaScript.** `Server.renderInPieces` sends the page
+  as first drawn and then each query's data; it does not send finished HTML for a piece. If the
+  connection drops, a query whose piece never came stays `loading`.
 - **An event's span names its view only with the devtools on.** The renderer does not know
   which view drew a node; the inspector does.
 - **A query's default stale time is 0,** so a preload that finishes before the click, or a page

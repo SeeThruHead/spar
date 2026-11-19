@@ -180,6 +180,108 @@ describe("a page whose data comes from queries, drawn on the server", () => {
   )
 })
 
+const piecesOf = (parts: ReadonlyArray<string>): ReadonlyArray<unknown> =>
+  parts.flatMap((part) => {
+    const found =
+      /^<script>\(self\.__sparPieces=self\.__sparPieces\|\|\[\]\)\.push\((.*)\)<\/script>$/.exec(
+        part,
+      )
+
+    return found === null
+      ? []
+      : [Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(found[1])]
+  })
+
+const ordersStatus = () => document.querySelector('[aria-label="Orders status"]')?.textContent
+
+const pushPiece = (piece: unknown) =>
+  Effect.sync(() => {
+    const holding: unknown = Reflect.get(globalThis, "__sparPieces")
+
+    Reflect.apply(Object(Reflect.get(Object(holding), "push")), holding, [piece])
+  })
+
+const sentInPieces = Server.renderInPieces(Routed, {
+  layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+  open: "<main>",
+  close: "</main>",
+  script: "<script async></script>",
+  end: "</body>",
+})
+
+describe("a page sent in pieces", () => {
+  it.live("goes out as first drawn, then each query's data follows as it lands", () =>
+    Effect.gen(function* () {
+      const parts = yield* Stream.runCollect(sentInPieces)
+      const pieces = JSON.stringify(piecesOf(parts))
+
+      expect([parts[0], parts[2], parts[4], parts.at(-1)]).toEqual([
+        "<main>",
+        "</main>",
+        "<script async></script>",
+        "</body>",
+      ])
+      expect(parts[1]).toContain('<output aria-label="Orders status">waiting</output>')
+      expect(parts[3]).toContain('id="spar-state"')
+      expect(parts[3]).toContain('"status":"loading"')
+      expect(piecesOf(parts).length).toBeGreaterThanOrEqual(2)
+      expect(pieces).toContain('"value":["tea","ink","pen"]')
+      expect(pieces).toContain('"value":3')
+      expect(pieces).not.toContain("test/Shelf")
+    }),
+  )
+
+  it.live("a layer that cannot be built fails the stream", () =>
+    Effect.gen(function* () {
+      const failed = yield* Effect.flip(
+        Stream.runCollect(
+          Server.renderInPieces(Priced, {
+            layer: Layer.merge(Catalog.live, Price.live).pipe(
+              Layer.provideMerge(Layer.effect(Asked, Effect.fail("no database"))),
+              Layer.provide(SecureRandom.layerWebCrypto),
+            ),
+            open: "",
+            close: "",
+            script: "",
+            end: "",
+          }),
+        ),
+      )
+
+      expect(failed).toBe("no database")
+    }),
+  )
+
+  it.live("the browser takes the pieces as they come and asks for nothing itself", () =>
+    Effect.gen(function* () {
+      const parts = yield* Stream.runCollect(sentInPieces)
+      const [first, ...later] = piecesOf(parts)
+      const holder = yield* sentPage(`<div id="root">${parts[1]}</div>${parts[3]}`)
+      const target = holder.querySelector("div") ?? holder
+      const asked = yield* Layer.build(Asked.layer)
+      const inPage = Layer.merge(Catalog.live, Price.live).pipe(
+        Layer.provide(Layer.succeedContext(asked)),
+        Layer.provide(SecureRandom.layerWebCrypto),
+        Layer.merge(Router.Router.layerMemory("/orders")),
+      )
+      yield* Effect.acquireRelease(
+        Effect.sync(() => Reflect.set(globalThis, "__sparPieces", [first])),
+        () => Effect.sync(() => Reflect.deleteProperty(globalThis, "__sparPieces")),
+      )
+      yield* Effect.forkScoped(App.hydrate(Routed, { target, layer: inPage }), {
+        startImmediately: true,
+      })
+      yield* Testing.eventually(() => expect(ordersStatus()).toMatch(/waiting|loading/))
+      yield* pushPiece("not a piece")
+      yield* pushPiece({ stores: { "test/Nowhere": {}, "test/Catalog": 5 } })
+      yield* Effect.forEach(later, pushPiece)
+      yield* Testing.eventually(() => expect(ordersStatus()).toBe("loaded"))
+      expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("3")
+      expect(yield* Ref.get(Context.get(asked, Asked))).toEqual([])
+    }),
+  )
+})
+
 describe("a page drawn on the server and taken over with its state", () => {
   it.live("the server draws from its own data and says what state it drew", () =>
     Effect.gen(function* () {

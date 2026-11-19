@@ -1,4 +1,6 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Formatter, Queue, Schema, Stream } from "effect"
+import type { Cause } from "effect"
+import * as Pieces from "./internal/pieces.ts"
 import type { Cell as Held } from "./internal/cell.ts"
 import type { Layer, Scope } from "effect"
 import type { Element } from "./internal/element.ts"
@@ -96,6 +98,99 @@ export const render = <R, LayerError = never>(
     Effect.scoped,
   )
 }
+
+const haveEntries = Schema.is(Loading)
+
+const changedSince = (
+  sent: Readonly<Record<string, string>>,
+  now: ReadonlyArray<readonly [string, Schema.Json]>,
+): ReadonlyArray<readonly [string, Schema.Json]> =>
+  now.filter(([key, held]) => haveEntries(held) && sent[key] !== Formatter.formatJson(held))
+
+const followed = <E>(
+  stores: Held<ReadonlyArray<Inspected>>,
+  queue: Queue.Queue<string, E | Cause.Done>,
+  sent: Readonly<Record<string, string>>,
+  quiet: number,
+): Effect.Effect<void> =>
+  quiet === 2
+    ? Effect.void
+    : Effect.gen(function* () {
+        yield* Effect.sleep("1 milli")
+
+        const now = yield* Effect.forEach(stores.read(), encodedOf)
+        const changed = changedSince(sent, now)
+        const busy = yield* stillLoading(stores)
+
+        yield* Effect.forEach(
+          changed.length === 0 ? [] : [Pieces.script({ stores: Object.fromEntries(changed) })],
+          (chunk) => Queue.offer(queue, chunk),
+          { discard: true },
+        )
+
+        return yield* followed(
+          stores,
+          queue,
+          {
+            ...sent,
+            ...Object.fromEntries(changed.map(([key, held]) => [key, Formatter.formatJson(held)])),
+          },
+          busy || changed.length > 0 ? 0 : quiet + 1,
+        )
+      })
+
+export const renderInPieces = <R, LayerError = never>(
+  component: Component<NoProps, never, R>,
+  options: Options<R, LayerError> & {
+    readonly open: string
+    readonly close: string
+    readonly script: string
+    readonly end: string
+  },
+): Stream.Stream<string, LayerError> =>
+  Stream.callback<string, LayerError>((queue) => {
+    const tree = new Tree()
+    const stores = Cell.make<ReadonlyArray<Inspected>>([])
+
+    return Effect.gen(function* () {
+      yield* Queue.offer(queue, options.open)
+
+      const element = yield* component.mount({})
+      const html = yield* toHtml(element)
+      const span = yield* Effect.orDie(Effect.currentSpan)
+      const states = yield* Effect.forEach(stores.read(), encodedOf)
+
+      yield* Queue.offerAll(queue, [
+        html,
+        options.close,
+        stateScript({
+          stores: Object.fromEntries(states),
+          ui: tree.snapshot(),
+          trace: { traceId: span.traceId, spanId: span.spanId },
+        }),
+        options.script,
+      ])
+      yield* followed(
+        stores,
+        queue,
+        Object.fromEntries(states.map(([key, held]) => [key, Formatter.formatJson(held)])),
+        0,
+      )
+      yield* Queue.offer(queue, options.end)
+      yield* Queue.end(queue)
+    }).pipe(
+      Effect.provideService(Frame, noPage),
+      Effect.provide(options.layer),
+      Effect.provideService(OnServer, true),
+      Effect.provideService(UiTree, tree),
+      Effect.provideService(Inspector, {
+        keepStates: 0,
+        register: (store) => Effect.sync(() => stores.write([...stores.read(), store])),
+      }),
+      (rendered) => Effect.withSpan(rendered, "Server.render", { captureStackTrace: false }),
+      Effect.catch((error) => Queue.fail(queue, error)),
+    )
+  })
 
 export const renderToString = <R, LayerError = never>(
   component: Component<NoProps, never, R>,

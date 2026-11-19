@@ -1,6 +1,13 @@
 import { Effect, Option } from "effect"
 import { Props, Reactive, Router, View } from "spar"
-import { ProductParams, ProductQuery, SupplierQuery, home, productRoute } from "./Catalogue.ts"
+import {
+  ProductParams,
+  ProductQuery,
+  SupplierQuery,
+  home,
+  productRoute,
+  slowRoute,
+} from "./Catalogue.ts"
 import { Shop } from "./Shop.ts"
 import { MissingView, ProductView, SiteView } from "./SiteView.tsx"
 
@@ -31,7 +38,11 @@ export const Site = View.connect(
       cheese: router.link(productRoute, { id: "cheese" }),
       bread: router.link(productRoute, { id: "bread" }),
       page: yield* Router.outlet({
-        routes: [Router.on(home, Shop), Router.live(productRoute, ProductPage)],
+        routes: [
+          Router.on(home, Shop),
+          Router.live(productRoute, ProductPage),
+          Router.live(slowRoute, ProductPage),
+        ],
         otherwise: MissingView,
       }),
     }
