@@ -3,7 +3,15 @@ import { Reactive, Router, View } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
 import { home } from "./routes.ts"
-import { AgentLoadingView, AgentMissingView, AgentPageView } from "./SidebarView.tsx"
+import { NoRecord, Server, ServerUnreachable } from "./Server.ts"
+import {
+  AgentLoadingView,
+  AgentMissingView,
+  AgentPageView,
+  ServerRecordLoadingView,
+  ServerRecordProblemView,
+  ServerRecordView,
+} from "./SidebarView.tsx"
 
 class AgentNotFound extends Schema.TaggedError<AgentNotFound, { readonly brand: unique symbol }>()(
   "AgentNotFound",
@@ -13,6 +21,21 @@ class AgentNotFound extends Schema.TaggedError<AgentNotFound, { readonly brand: 
     return `There is no agent called ${this.id}. It may have been removed.`
   }
 }
+
+const ServerRecord = pipe(
+  View.taking(
+    { name: Schema.String },
+    Effect.fnUntraced(function* ({ name }) {
+      const server = yield* Server
+      const record = yield* server.describe(name)
+
+      return { key: record.key }
+    }),
+  )(ServerRecordView),
+  View.recover(NoRecord, ServerRecordProblemView),
+  View.recover(ServerUnreachable, ServerRecordProblemView),
+  View.pending(ServerRecordLoadingView),
+)
 
 const projectOf = (board: Board, agent: Agent): string =>
   Option.match(Option.fromNullishOr(board.spaces.find((space) => space.id === agent.spaceId)), {
@@ -42,6 +65,7 @@ export const AgentPage = pipe(
       )
 
       return {
+        record: yield* View.child(ServerRecord, { name: found.name }),
         name: Reactive.map(agent, (now) => now.name),
         status: Reactive.map(agent, (now) => now.status),
         tags: Reactive.map(agent, (now) => (now.tags.length === 0 ? "None" : now.tags.join(", "))),

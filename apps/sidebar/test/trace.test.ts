@@ -82,6 +82,9 @@ const app = (origin: string) =>
     Layer.provide(KeyValueStore.layerMemory),
   )
 
+const opened = (agent: string) =>
+  Effect.sync(() => fireEvent.click(screen.getByText(agent).closest("a") ?? document.body))
+
 const named = (spans: ReadonlyArray<Spans.Recorded>, name: string) =>
   spans.filter((span) => span.name === name)
 
@@ -134,6 +137,27 @@ describe("one trace from a click to the server and back", () => {
       expect(arriving.length).toBeGreaterThanOrEqual(2)
       expect(arriving.every((span) => browserIds.has(span.parentSpanId ?? ""))).toBe(true)
       expect(onServer.every((span) => span.traceId === traceId)).toBe(true)
+
+      yield* opened("Inbox triage")
+      yield* Testing.eventually(() =>
+        expect(screen.getByLabelText("Server record").textContent).toBe(
+          "The server has no record of Inbox triage yet.",
+        ),
+      )
+      yield* opened("Trace me")
+      yield* Testing.eventually(() =>
+        expect(screen.getByLabelText("Server record").textContent).toMatch(
+          /^The server started this agent as [0-9a-f-]{36}\.$/,
+        ),
+      )
+
+      const page = named(inBrowser.recent(), "ServerRecordView").at(-1)
+      const click = named(inBrowser.recent(), "on click").at(-1)
+      const asked = yield* spansOf(origin, click?.traceId ?? "")
+
+      expect(page?.traceId).toBe(click?.traceId)
+
+      expect(named(asked, "Agents.describe").map((span) => span.failed)).toEqual([false])
     }),
   )
 })

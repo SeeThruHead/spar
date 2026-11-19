@@ -10,7 +10,6 @@ import {
   Schedule,
   Schema,
   Stream,
-  SubscriptionRef,
 } from "effect"
 import type { Scope } from "effect"
 import * as Handle from "./Handle.ts"
@@ -21,7 +20,8 @@ import * as Dom from "./internal/dom.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { events, on as onTarget } from "./internal/listen.ts"
-import { fromSubscriptionRef, map } from "./internal/reactive.ts"
+import * as Cell from "./internal/cell.ts"
+import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Props from "./Props.ts"
 import * as Timeline from "./Timeline.ts"
@@ -187,23 +187,23 @@ const named =
 
 const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
   const start = yield* driver.read
-  const location = yield* SubscriptionRef.make(start)
-  const arrivedBy = yield* SubscriptionRef.make<Arrival>("link")
+  const location = Cell.make(start)
+  const arrivedBy = Cell.make<Arrival>("link")
   const arrive = (now: Location, by: Arrival) =>
     Effect.andThen(
-      SubscriptionRef.set(location, now),
+      Effect.sync(() => location.write(now)),
       Timeline.note("route", `${now.pathname}${now.search}`, () => by),
     )
   const followBy = (by: Arrival) =>
     Effect.andThen(
-      SubscriptionRef.set(arrivedBy, by),
+      Effect.sync(() => arrivedBy.write(by)),
       Effect.flatMap(driver.read, (now) => arrive(now, by)),
     )
   const follow = followBy("link")
 
   yield* Effect.forkScoped(
     Stream.runForEach(driver.moved, (now) =>
-      SubscriptionRef.set(arrivedBy, "history").pipe(
+      Effect.sync(() => arrivedBy.write("history")).pipe(
         Effect.andThen(arrive(now, "history")),
         Effect.andThen(Effect.forkScoped(driver.arrive)),
       ),
@@ -215,8 +215,8 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
     Effect.andThen(driver.visit(target.build(params)), follow).pipe(named("go"))
 
   return {
-    location: fromSubscriptionRef(location),
-    arrivedBy: fromSubscriptionRef(arrivedBy),
+    location: fromCell(location),
+    arrivedBy: fromCell(arrivedBy),
     go,
     replace: <Params>(target: Route<Params>, params: Params): Effect.Effect<void> =>
       Effect.andThen(driver.replace(target.build(params)), follow).pipe(named("replace")),

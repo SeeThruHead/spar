@@ -1,9 +1,10 @@
 import { Effect, Ref } from "effect"
-import { Agents, ServerUnreachable } from "../src/api.ts"
+import { Agents, NoRecord, ServerUnreachable } from "../src/api.ts"
+import type { Started } from "../src/api.ts"
 
 export const AgentsLive = Agents.toLayer(
   Effect.gen(function* () {
-    const seen = yield* Ref.make<ReadonlyArray<string>>([])
+    const seen = yield* Ref.make<ReadonlyArray<Started>>([])
     const attempts = yield* Ref.make(0)
 
     const start = Effect.fn("Agents.start")(function* (name: string, idempotencyKey: string) {
@@ -14,12 +15,25 @@ export const AgentsLive = Agents.toLayer(
 
       if (attempt % 2 === 1) return yield* new ServerUnreachable()
 
-      yield* Ref.update(seen, (all) => [...new Set([...all, idempotencyKey])])
+      yield* Ref.update(seen, (all) => [
+        ...all.filter((known) => known.key !== idempotencyKey),
+        { name, key: idempotencyKey },
+      ])
+    })
+
+    const describe = Effect.fn("Agents.describe")(function* (name: string) {
+      const all = yield* Ref.get(seen)
+
+      return yield* Effect.mapError(
+        Effect.fromNullishOr(all.findLast((known) => known.name === name)),
+        () => new NoRecord({ agent: name }),
+      )
     })
 
     return {
       Start: ({ name, idempotencyKey }) => start(name, idempotencyKey),
-      Started: () => Ref.get(seen),
+      Describe: ({ name }) => describe(name),
+      Started: () => Effect.map(Ref.get(seen), (all) => all.map((known) => known.key)),
     }
   }),
 )

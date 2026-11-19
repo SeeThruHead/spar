@@ -131,6 +131,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "Declared",
   },
   {
+    file: "backend-error-unhandled.ts",
+    rule: "Mounting a component that calls the backend without handling the failure its contract names",
+    by: "types",
+    expect: "Component<unknown, ThreadGone,",
+  },
+  {
     file: "store-without-a-state-schema.ts",
     rule: "Declaring a store whose state has no Schema",
     by: "types",

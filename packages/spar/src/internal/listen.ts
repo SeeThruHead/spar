@@ -1,4 +1,4 @@
-import { Effect, Queue, Stream } from "effect"
+import { Context, Effect, Fiber, Option, Queue, Stream, Tracer } from "effect"
 import type { Scope } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
@@ -27,13 +27,24 @@ export const events = <E, A>(source: Source<E>, take: (event: E) => A): Stream.S
     )
   })
 
+const causing = (): Option.Option<Tracer.AnySpan> =>
+  Option.flatMap(Option.fromUndefinedOr(Fiber.getCurrent()), (fiber) =>
+    Context.getOption(fiber.context, Tracer.ParentSpan),
+  )
+
+const causedBy = (effect: Effect.Effect<void>, cause: Option.Option<Tracer.AnySpan>) =>
+  Option.match(cause, {
+    onNone: () => effect,
+    onSome: (span) => Effect.withParentSpan(effect, span),
+  })
+
 export const starterIn = Effect.fnUntraced(function* (scope: Scope.Scope) {
   const services = yield* Effect.context()
   const start = Effect.runForkWith(services)
 
   return (action: Action): void => {
     start(
-      Effect.forkIn(Effect.catchDefect(run(action), report), scope, {
+      Effect.forkIn(Effect.catchDefect(causedBy(run(action), causing()), report), scope, {
         startImmediately: true,
       }),
     )
