@@ -103,6 +103,13 @@ describe("a store asked to fork", () => {
       yield* inspected.forkAt(1)
       expect(yield* tally.select.count.get).toBe(1)
       expect((yield* tally.log.get).map((entry) => entry.seq)).toEqual([1])
+      yield* inspected.travelTo(2)
+      expect(yield* tally.select.count.get).toBe(1)
+      yield* inspected.travelTo(0)
+      expect(yield* tally.select.count.get).toBe(0)
+      yield* inspected.travelTo(1)
+      expect(yield* tally.select.count.get).toBe(1)
+      yield* inspected.travelTo(null)
       yield* tally.commands.added({ by: 5 })
       expect(yield* tally.select.count.get).toBe(6)
       yield* back
@@ -193,6 +200,21 @@ describe("forking the running program", () => {
       expect(yield* branches).toEqual([
         ["Main", null, 5, false],
         ["Fork 1", 2, 3, true],
+      ])
+
+      yield* registry.fork
+      expect(yield* branches).toEqual([
+        ["Main", null, 5, false],
+        ["Fork 1", 2, 3, false],
+        ["Fork 2", 3, 3, true],
+      ])
+      yield* registry.switchTo(1)
+      yield* registry.switchTo(0)
+      yield* shows("4", "hi")
+      expect(yield* branches).toEqual([
+        ["Main", null, 5, true],
+        ["Fork 1", 2, 3, false],
+        ["Fork 2", 3, 3, false],
       ])
     }).pipe(Effect.provide(layer)),
   )

@@ -23,8 +23,10 @@ const addressOf = (input: RequestInfo | URL): string => {
 const answering: typeof fetch = Object.assign(
   (input: RequestInfo | URL) =>
     addressOf(input).includes("/rpc")
-      ? Bun.fetch(`data:application/x-ndjson,${encodeURIComponent(`${exit}\n`)}`)
-      : Bun.fetch("data:application/json,[]"),
+      ? Promise.resolve(
+          new Response(`${exit}\n`, { headers: { "content-type": "application/x-ndjson" } }),
+        )
+      : Promise.resolve(new Response("[]", { headers: { "content-type": "application/json" } })),
   { preconnect: () => undefined },
 )
 

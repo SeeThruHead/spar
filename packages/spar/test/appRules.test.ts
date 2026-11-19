@@ -54,6 +54,30 @@ describe("the build check on app code", () => {
     ])
   })
 
+  it("refuses each kind of cell and each client library by name", () => {
+    expect(
+      ["Ref", "SubscriptionRef", "SynchronizedRef", "MutableRef", "TxRef"].map((cell) =>
+        rules(`const held = ${cell}.make(0)`),
+      ),
+    ).toEqual(Array.from({ length: 5 }, () => ["state-only-through-spar"]))
+    expect(
+      [
+        "axios",
+        "ky",
+        "got",
+        "superagent",
+        "graphql-request",
+        "openapi-fetch",
+        "@trpc/client",
+        "@apollo/client",
+        "socket.io-client",
+      ].map((library) => rules(`import client from "${library}"`)),
+    ).toEqual(Array.from({ length: 9 }, () => ["backend-only-through-spar"]))
+    expect(rules(`import { Effect } from "effect"`)).toEqual([])
+    expect(rules(`const fetched = FetchHttpClient.Fetch`)).toEqual([])
+    expect(rules(`const made = Other.make(0)`)).toEqual([])
+  })
+
   it("lets the blessed client through", () => {
     expect(
       rules(
@@ -74,6 +98,10 @@ describe("the build check on app code", () => {
       { file: "src/Board.ts", line: 2, column: 15, rule: "state-only-through-spar" },
     ])
     expect(check("src/Board.ts", `fetch("/x")`)[0]?.message).toContain("Backend.rpc")
+    expect(check("src/Board.ts", `let a = 1`)[0]?.message).toContain("State is held in a Store")
+    expect(check("src/Board.ts", `const a = 1\nfetch("/x")\nconst b = 2\n`)).toMatchObject([
+      { line: 2, column: 1 },
+    ])
   })
 
   it("looks at app source only", () => {
