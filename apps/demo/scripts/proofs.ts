@@ -125,6 +125,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "is not assignable to parameter of type '() => Effect<",
   },
   {
+    file: "component-from-a-plain-function.ts",
+    rule: "Making a component from a function that is not a view with a props Schema",
+    by: "types",
+    expect: "Declared",
+  },
+  {
     file: "store-without-a-state-schema.ts",
     rule: "Declaring a store whose state has no Schema",
     by: "types",

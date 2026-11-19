@@ -3,7 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
-import { Devtools, Outbox, Store, View } from "spar"
+import { Devtools, Outbox, Props, Store, View } from "spar"
 import * as Testing from "spar/testing"
 import { jsx } from "spar/jsx-runtime"
 
@@ -38,8 +38,13 @@ const Screen = View.connect(
       tools: yield* View.child(Devtools.Panel, {}),
     }
   }),
-)(({ count, tools }) =>
-  jsx("main", { children: [jsx("output", { "aria-label": "Count", children: count }), tools] }),
+)(
+  View.make(
+    "ScreenView",
+    { count: Props.Reactive(Schema.Finite), tools: Props.Element },
+    ({ count, tools }) =>
+      jsx("main", { children: [jsx("output", { "aria-label": "Count", children: count }), tools] }),
+  ),
 )
 
 const count = (): string | null => screen.getByLabelText("Count").textContent

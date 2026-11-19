@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
 import { Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
-import { Handle, Router, View } from "spar"
-import type { Element } from "spar"
+import { Handle, Props, Router, View } from "spar"
 import * as Testing from "spar/testing"
 import {
   BillingView,
@@ -288,7 +287,7 @@ describe("the router", () => {
               }),
             }
           }),
-        )(({ page }: { readonly page: Element }) => page),
+        )(View.make("PageView", { page: Props.Element }, ({ page }) => page)),
       )
 
       const first = yield* heading("Live mail, page 1")

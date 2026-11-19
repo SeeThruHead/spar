@@ -1,4 +1,4 @@
-import { Context, Effect, Predicate, Schema, Scope, SubscriptionRef } from "effect"
+import { Context, Effect, Schema, Scope, SubscriptionRef } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -15,22 +15,24 @@ export type View<Props> = (props: Props) => Element
 
 export type Component<Props, E = never, R = never, ViewProps = never> = {
   readonly [TypeId]: typeof TypeId
-  readonly view: View<ViewProps>
+  readonly view: View<ViewProps> & Declared
   readonly mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>
 }
 
+export type Declared = { readonly displayName: string; readonly props: Fields }
+
 export type Mountable<Props, E = never, R = never, ViewProps = never> =
-  | (View<Props> & View<ViewProps>)
+  | (View<Props> & View<ViewProps> & Declared)
   | Component<Props, E, R, ViewProps>
 
 const component = <Props, E, R, ViewProps>(
-  view: View<ViewProps>,
+  view: View<ViewProps> & Declared,
   mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>,
 ): Component<Props, E, R, ViewProps> => ({ [TypeId]: TypeId, view, mount })
 
 const viewOf = <Props, E, R, ViewProps>(
   mountable: Mountable<Props, E, R, ViewProps>,
-): View<ViewProps> => (isComponent(mountable) ? mountable.view : mountable)
+): View<ViewProps> & Declared => (isComponent(mountable) ? mountable.view : mountable)
 
 export const child = <Props, E = never, R = never, ViewProps = never>(
   mountable: Mountable<Props, E, R, ViewProps>,
@@ -77,13 +79,8 @@ export const make = <const F extends Fields>(
 ): Made<F> =>
   Object.assign((given: Schema.Struct<F>["Type"]) => draw(given), { displayName: name, props })
 
-const givenName = (view: { readonly name: string }): string =>
-  Predicate.hasProperty(view, "displayName") && Predicate.isString(view.displayName)
-    ? view.displayName
-    : view.name
-
-const spanName = (view: { readonly name: string }): string =>
-  givenName(view) === "" ? "View (unnamed)" : givenName(view)
+const spanName = (view: Declared): string =>
+  view.displayName === "" ? "View (unnamed)" : view.displayName
 
 type Extra<Props, ViewProps> = [Props] extends [never]
   ? never
@@ -105,7 +102,7 @@ export const taking = <const F extends Fields, Props, E, Requirements>(
 const connected =
   <Props, Outer, E, Requirements>(props: (outer: Outer) => Effect.Effect<Props, E, Requirements>) =>
   <ViewProps = Props>(
-    view: View<ViewProps> & View<Props> & OnlyWhatTheViewTakes<Props, ViewProps>,
+    view: View<ViewProps> & View<Props> & Declared & OnlyWhatTheViewTakes<Props, ViewProps>,
   ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
     component<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
       Effect.withSpan(inViewScope(Effect.map(props(outer), view), spanName(view)), spanName(view), {

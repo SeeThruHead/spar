@@ -37,7 +37,7 @@ export const mount = Effect.fnUntraced(function* <R>(
 })
 
 export const render = <Props>(
-  view: View.View<Props>,
+  view: View.View<Props> & View.Declared,
   props: Props,
 ): Effect.Effect<void, never, Scope.Scope> =>
   mount(

@@ -14,7 +14,7 @@ const items = (labels: ReadonlyArray<string>): ReadonlyArray<Item> =>
 const Listed = (
   list: Reactive.Reactive<ReadonlyArray<Item>>,
   row: Mountable<{ readonly item: Reactive.Reactive<Item> }>,
-  frame: View.View<{ readonly rows: import("spar").Element }>,
+  frame: View.View<{ readonly rows: import("spar").Element }> & View.Declared,
 ) =>
   View.connect(
     Effect.fnUntraced(function* () {

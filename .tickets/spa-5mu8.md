@@ -1,6 +1,6 @@
 ---
 id: spa-5mu8
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T03:59:08Z
@@ -17,3 +17,9 @@ View.connect and View.taking accept any function from props to an element, so a 
 
 A forbidden proof by types; no plain function view left in the repo.
 
+
+## Notes
+
+**2026-11-19T04:00:30Z**
+
+Done: Mountable, Component.view, connect, taking and Testing.render all require a declared view (displayName and props). Proof: component-from-a-plain-function. No plain function view is left.

@@ -37,8 +37,8 @@ const spanProps = Effect.fnUntraced(function* () {
 
 const Traced = View.connect(spanProps)(SpanView)
 
-const TracedUnnamed = View.connect(spanProps)(({ span }) =>
-  jsx("p", { role: "note", children: span }),
+const TracedUnnamed = View.connect(spanProps)(
+  View.make("", { span: Schema.String }, ({ span }) => jsx("p", { role: "note", children: span })),
 )
 
 const Counted = (count: number) =>
@@ -71,13 +71,14 @@ const Listed = (
     }),
   )(BoardView)
 
-const LooseView = () =>
+const LooseView = View.make("LooseView", {}, () =>
   jsx("p", {
     role: "note",
     title: { not: "text" },
     onClick: undefined,
     children: [null, "kept", Reactive.map(Reactive.succeed(1), () => null)],
-  })
+  }),
+)
 
 describe("composition", () => {
   it.live("typing changes UI state, and one click can run an effect and reset the draft", () =>
