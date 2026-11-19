@@ -1,16 +1,15 @@
 import { Effect, Option, Schema, pipe } from "effect"
-import { Reactive, Router, View } from "spar"
+import { Query, Reactive, Router, View } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
 import { Notes } from "./Notes.ts"
 import { home } from "./routes.ts"
+import { Started } from "./api.ts"
 import { NoRecord, Server, ServerUnreachable } from "./server/Server.ts"
 import {
   AgentLoadingView,
   AgentMissingView,
   AgentPageView,
-  ServerRecordLoadingView,
-  ServerRecordProblemView,
   ServerRecordView,
 } from "./SidebarView.tsx"
 
@@ -23,20 +22,33 @@ class AgentNotFound extends Schema.TaggedError<AgentNotFound, { readonly brand: 
   }
 }
 
-const ServerRecord = pipe(
-  View.taking(
-    { name: Schema.String },
-    Effect.fnUntraced(function* ({ name }) {
-      const server = yield* Server
-      const record = yield* server.describe(name)
+export class RecordQuery extends Query.Tag<RecordQuery>()("sidebar/Record", {
+  input: Schema.String,
+  success: Started,
+  failure: Schema.Union([NoRecord, ServerUnreachable]),
+  load: (name: string) => Effect.flatMap(Effect.service(Server), (server) => server.describe(name)),
+}) {}
 
-      return { key: record.key }
-    }),
-  )(ServerRecordView),
-  View.recover(NoRecord, ServerRecordProblemView),
-  View.recover(ServerUnreachable, ServerRecordProblemView),
-  View.pending(ServerRecordLoadingView),
-)
+const recordText = (
+  name: string,
+  record: Started | null,
+  problem: NoRecord | ServerUnreachable | null,
+): string => {
+  if (record !== null) return `The server started this agent as ${record.key}.`
+  if (problem !== null) return problem.message
+
+  return `Asking the server about ${name}.`
+}
+
+const ServerRecord = View.taking(
+  { name: Schema.String },
+  Effect.fnUntraced(function* ({ name }) {
+    const record = yield* RecordQuery.ask(name)
+    const answer = yield* Reactive.zip(record.value, record.error)
+
+    return { text: Reactive.map(answer, ([found, problem]) => recordText(name, found, problem)) }
+  }),
+)(ServerRecordView)
 
 const projectOf = (board: Board, agent: Agent): string =>
   Option.match(Option.fromNullishOr(board.spaces.find((space) => space.id === agent.spaceId)), {
@@ -54,8 +66,6 @@ export const AgentPage = pipe(
       const found = board.agents.find((agent) => agent.id === id)
 
       yield* Effect.annotateCurrentSpan("agent.id", id)
-      yield* Effect.sleep("120 millis")
-
       if (found === undefined) return yield* new AgentNotFound({ id })
 
       const agent = Reactive.map(store.select.board, (now) =>

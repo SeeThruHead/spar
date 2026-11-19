@@ -1,5 +1,6 @@
 import { Effect, Layer, Option, Schema } from "effect"
 import { Props, Query, Reactive, Router, View } from "spar"
+import { RecordQuery } from "./AgentPage.ts"
 import { Found, ServerUnreachable } from "./api.ts"
 import { DeepMissingView, ReportView, SegmentView } from "./DeepView.tsx"
 import { Server } from "./server/Server.ts"
@@ -148,6 +149,7 @@ export const OrgSegment = View.taking(
 )(SegmentView)
 
 export const deepQueries = Layer.mergeAll(
+  RecordQuery.live,
   OrgQuery.live,
   TeamQuery.live,
   MemberQuery.live,

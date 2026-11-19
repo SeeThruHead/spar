@@ -1,6 +1,6 @@
 import { Context, Effect, Option, Schema } from "effect"
 
-export const Kind = Schema.Literals(["command", "ui", "route", "data", "call", "refused"])
+export const Kind = Schema.Literals(["command", "ui", "route", "data", "call", "refused", "waited"])
 
 export type Kind = typeof Kind.Type
 

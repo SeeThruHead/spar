@@ -226,20 +226,10 @@ export const MissingPageView = View.make("MissingPageView", { path: Schema.Strin
   </section>
 ))
 
-export const ServerRecordView = View.make("ServerRecordView", { key: Schema.String }, ({ key }) => (
-  <p aria-label="Server record">The server started this agent as {key}.</p>
-))
-
-export const ServerRecordProblemView = View.make(
-  "ServerRecordProblemView",
-  { error: Schema.Struct({ message: Schema.String }) },
-  ({ error }) => <p aria-label="Server record">{error.message}</p>,
-)
-
-export const ServerRecordLoadingView = View.make(
-  "ServerRecordLoadingView",
-  { name: Schema.String },
-  ({ name }) => <p aria-label="Server record">Asking the server about {name}.</p>,
+export const ServerRecordView = View.make(
+  "ServerRecordView",
+  { text: Props.Reactive(Schema.String) },
+  ({ text }) => <p aria-label="Server record">{text}</p>,
 )
 
 export const AgentPageView = View.make(

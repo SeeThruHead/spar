@@ -120,7 +120,8 @@ describe("one trace from a click to the server and back", () => {
       )
       const traceId = submit[0]?.traceId ?? ""
       const onServer = yield* Effect.repeat(spansOf(origin, traceId), {
-        until: (spans) => named(spans, "Agents.start").length >= 2,
+        until: (spans) =>
+          named(spans, "Agents.start").filter((span) => span.endedAt !== null).length >= 2,
         schedule: Schedule.spaced("50 millis"),
       })
       const mine = inBrowser.ofTrace(traceId)

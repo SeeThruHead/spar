@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Schema, Scope, SubscriptionRef } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schema, Scope, SubscriptionRef } from "effect"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -11,6 +11,7 @@ import { RowKey, UiTree } from "./internal/uiTree.ts"
 import { drawn, placed, recovering } from "./internal/inspect.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Fields } from "./Props.ts"
+import * as Timeline from "./Timeline.ts"
 
 export type View<Props> = (props: Props) => Element
 
@@ -114,6 +115,22 @@ const shownIn = <Props>(view: View<Props>, made: Props, services: ReadonlyArray<
     }),
   )
 
+const aFrame = 16
+
+const noticed = <A, E, R>(name: string, made: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.timed(made), ([took, value]) => {
+    const millis = Math.round(Duration.toMillis(took))
+    if (millis < aFrame) return Effect.succeed(value)
+
+    return Effect.as(
+      Effect.andThen(
+        Effect.annotateCurrentSpan("spar.waited_ms", millis),
+        Timeline.note("waited", name, () => ({ millis })),
+      ),
+      value,
+    )
+  })
+
 const connected =
   <Props, Outer, E, Requirements>(
     props: (outer: Outer) => Effect.Effect<Props, E, Requirements>,
@@ -125,7 +142,9 @@ const connected =
     component<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
       Effect.withSpan(
         inViewScope(
-          Effect.flatMap(props(outer), (made) => shownIn(view, made, services)),
+          Effect.flatMap(noticed(spanName(view), props(outer)), (made) =>
+            shownIn(view, made, services),
+          ),
           spanName(view),
         ),
         spanName(view),

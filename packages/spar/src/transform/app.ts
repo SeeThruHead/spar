@@ -1,7 +1,10 @@
 import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
 
-export type Rule = "state-only-through-spar" | "backend-only-through-spar"
+export type Rule =
+  | "state-only-through-spar"
+  | "backend-only-through-spar"
+  | "no-waiting-in-components"
 
 export type Violation = {
   readonly rule: Rule
@@ -14,8 +17,47 @@ export type Violation = {
 const messages: Readonly<Record<Rule, string>> = {
   "state-only-through-spar":
     "State is held in a Store (Store.Tag, placed with .layer or beside a view with .with) or in UiState.make, so every change is an action in the one log the devtools read. A Ref, a SubscriptionRef or a variable that is assigned again is state the log cannot see.",
+  "no-waiting-in-components":
+    "A component's Effect does not wait. Whatever it waits for holds back every component below it, and their queries start late: a waterfall. Declare the data with a Query and ask for it (yield* TheQuery.ask(input)); the handle is there at once and the view shows its status.",
   "backend-only-through-spar":
     "A backend is called through Backend (Backend.rpc for an Effect RPC group, or the HttpClient that Backend.layer provides for HttpApi and JSON clients), so every call is a span and an entry in the log. fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, FetchHttpClient.layer and other client libraries go around it.",
+}
+
+const isComponent = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("CallExpression"),
+    callee: Schema.Struct({
+      object: Schema.Struct({ name: Schema.Literal("View") }),
+      property: Schema.Struct({ name: Schema.Literals(["connect", "taking"]) }),
+    }),
+  }),
+)
+
+const isWait = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("YieldExpression"),
+    argument: Schema.Struct({
+      type: Schema.Literal("CallExpression"),
+      callee: Schema.Struct({
+        object: Schema.Struct({ name: Schema.Literals(["Effect", "Deferred", "Fiber"]) }),
+        property: Schema.Struct({
+          name: Schema.Literals(["sleep", "promise", "tryPromise", "callback", "await", "join"]),
+        }),
+      }),
+    }),
+  }),
+)
+
+const functions: ReadonlySet<string> = new Set(["ArrowFunctionExpression", "FunctionExpression"])
+
+type Where = "outside" | "entering" | "body" | "nested"
+
+const inside = (node: unknown, type: string, where: Where): Where => {
+  if (isComponent(node)) return "entering"
+  if (!functions.has(type)) return where
+  if (where === "entering") return "body"
+
+  return where === "body" ? "nested" : where
 }
 
 const isNode = Schema.is(Schema.Struct({ type: Schema.String, start: Schema.Finite }))
@@ -98,20 +140,25 @@ const aroundTheBackend = (node: unknown): boolean => {
   return isImport(node) && clients.has(node.source.value)
 }
 
-const ruleFor = (node: unknown): ReadonlyArray<Rule> => {
+const ruleFor = (node: unknown, where: Where): ReadonlyArray<Rule> => {
+  if (where === "body" && isWait(node)) return ["no-waiting-in-components"]
   if (isCellMade(node) || isReassignable(node)) return ["state-only-through-spar"]
   if (aroundTheBackend(node)) return ["backend-only-through-spar"]
 
   return []
 }
 
-const visit = (node: unknown): ReadonlyArray<readonly [Rule, number]> => {
+const visit = (node: unknown, where: Where): ReadonlyArray<readonly [Rule, number]> => {
   if (!isNode(node)) return []
 
-  const found = ruleFor(node).map((rule) => [rule, node.start] as const)
+  const found = ruleFor(node, where).map((rule) => [rule, node.start] as const)
   if (found.length > 0) return found
 
-  return Object.values(node).flatMap((value) => Array.ensure(value).flatMap(visit))
+  const within = inside(node, node.type, where)
+
+  return Object.values(node).flatMap((value) =>
+    Array.ensure(value).flatMap((child) => visit(child, within)),
+  )
 }
 
 const locate = (
@@ -124,7 +171,7 @@ const locate = (
 }
 
 export const check = (file: string, source: string): ReadonlyArray<Violation> =>
-  visit(parseSync(file, source).program).map(([rule, offset]) => ({
+  visit(parseSync(file, source).program, "outside").map(([rule, offset]) => ({
     rule,
     message: messages[rule],
     file,
