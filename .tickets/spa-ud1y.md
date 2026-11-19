@@ -1,6 +1,6 @@
 ---
 id: spa-ud1y
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T15:15:37Z
