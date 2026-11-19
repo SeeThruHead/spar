@@ -137,6 +137,7 @@ describe("one log of everything that happened", () => {
       yield* inspector.register({
         key: "test/Late",
         base: 7,
+        encoded: Effect.succeed(null),
         state: Reactive.succeed(null),
         log: Reactive.succeed([]),
         viewing: Reactive.succeed(null),

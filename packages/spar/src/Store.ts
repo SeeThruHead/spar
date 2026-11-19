@@ -43,10 +43,11 @@ import type {
   Step,
 } from "./internal/journal.ts"
 import { sourced } from "./internal/inspect.ts"
+import { Seed } from "./internal/server.ts"
 import { Outbox } from "./Outbox.ts"
 import * as Timeline from "./Timeline.ts"
 
-export { Entries, LogText, UnknownAction, Unreadable, replay }
+export { Entries, LogText, Seed, UnknownAction, Unreadable, replay }
 export type { Action, Definition, Durable, Entry, Selector }
 
 export type Reaction<State, R = never> = {
@@ -93,6 +94,7 @@ const shown = <State>(held: Held<State>): State =>
 export type Inspected = {
   readonly key: string
   readonly base: number
+  readonly encoded: Effect.Effect<Schema.Json>
   readonly state: Reactive<unknown>
   readonly log: Reactive<ReadonlyArray<Entry>>
   readonly viewing: Reactive<number | null>
@@ -398,6 +400,9 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       yield* inspector.register({
         key,
         base,
+        encoded: Effect.flatMap(state.get, (now) =>
+          Effect.orDie(Schema.encodeUnknownEffect(Schema.toCodecJson(definition.state))(now)),
+        ),
         state,
         log,
         viewing,
@@ -424,6 +429,24 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
     }),
   )
 
+const seeded =
+  <State, A extends Actions<State>, S extends Selectors<State>>(
+    key: string,
+    definition: Definition<State, A, S>,
+  ): Open<State, never, never> =>
+  (leftovers) =>
+    Effect.flatMap(Effect.service(Seed), (seed) =>
+      inMemory(
+        Option.getOrElse(
+          Option.flatMap(
+            Record.get(seed, key),
+            Schema.decodeUnknownOption(Schema.toCodecJson(definition.state)),
+          ),
+          () => definition.initialState,
+        ),
+      )(leftovers),
+    )
+
 export const Tag =
   <Self>() =>
   <
@@ -441,7 +464,14 @@ export const Tag =
       static readonly definition = definition
       static readonly actions = definition.actions
       static readonly layer = <R = never>(reactions: ReadonlyArray<Reaction<State, R>> = []) =>
-        makeLayer(service, key, definition, reactions, inMemory(definition.initialState))
+        makeLayer(service, key, definition, reactions, seeded(key, definition))
+      static readonly layerFrom = <E, RL, R = never>(
+        load: Effect.Effect<State, E, RL>,
+        reactions: ReadonlyArray<Reaction<State, R>> = [],
+      ) =>
+        makeLayer(service, key, definition, reactions, (leftovers) =>
+          Effect.flatMap(load, (loaded) => inMemory(loaded)(leftovers)),
+        )
       static readonly layerDurable = <R = never>(
         durable: Durable = {},
         reactions: ReadonlyArray<Reaction<State, R>> = [],

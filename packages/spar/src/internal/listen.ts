@@ -60,7 +60,7 @@ export const starter = Effect.fnUntraced(function* () {
 export const traced = (type: string, action: Action): Action => {
   if (Array.isArray(action) && action.length === 0) return action
 
-  return Effect.withSpan(run(action), `on ${type}`, { captureStackTrace: false })
+  return Effect.withSpan(run(action), `on ${type}`, { captureStackTrace: false, root: true })
 }
 
 export const listen = Effect.fnUntraced(function* (

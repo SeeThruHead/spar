@@ -457,3 +457,6 @@ export const boxAround = (attribute: string, id: number): Box | null => {
     height: Math.max(...boxes.map((box) => box.bottom)) - top,
   }
 }
+
+export const textOf = (id: string): string | null =>
+  document.getElementById(id)?.textContent ?? null
