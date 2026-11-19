@@ -1,6 +1,6 @@
 ---
 id: spa-1d6n
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T18:58:49Z

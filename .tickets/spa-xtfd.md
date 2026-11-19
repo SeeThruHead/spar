@@ -1,6 +1,6 @@
 ---
 id: spa-xtfd
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T18:58:49Z
