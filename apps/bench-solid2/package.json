@@ -1,0 +1,23 @@
+{
+  "name": "@spar/bench-solid2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "effect-tsgo tsrs -p tsconfig.json",
+    "build": "vite build",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  },
+  "dependencies": {
+    "@solidjs/web": "2.0.3",
+    "solid-js": "2.0.3"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.7",
+    "@solidjs/vite-plugin": "3.0.1",
+    "@types/bun": "1.4.3",
+    "oxfmt": "0.73.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}

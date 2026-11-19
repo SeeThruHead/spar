@@ -36,7 +36,7 @@ type Result = {
 const root = new URL("..", import.meta.url).pathname
 const repo = new URL("../../..", import.meta.url).pathname
 
-const frameworks = ["spar", "solid", "react", "foldkit"] as const
+const frameworks = ["spar", "solid", "solid2", "react", "foldkit"] as const
 
 const thousand = [{ click: "#run", rows: 1000 }]
 
@@ -334,7 +334,7 @@ const report = (results: ReadonlyArray<Result>, browserVersion: string): string 
   [
     "# Benchmarks",
     "",
-    `The same table app in Spar, Solid ${solidVersion}, React ${reactVersion} and Foldkit ${foldkitVersion}, built with Vite and`,
+    `The same table app in Spar, Solid ${solidVersion} (solid), Solid ${solid2Version} (solid2), React ${reactVersion} and Foldkit ${foldkitVersion}, built with Vite and`,
     `driven in headless Chromium ${browserVersion} on this machine. Each number is the median of ${runs - warmups} runs`,
     `after ${warmups} warm-up runs, from the click until the next frame after the DOM reached its final state.`,
     "Lower is better. Rerun with `bun run bench` at the repo root, which also writes docs/benchmarks.html with the graphs.",
@@ -391,6 +391,7 @@ type Metric = {
 const colours: Readonly<Record<string, string>> = {
   spar: "#1d5fd6",
   solid: "#3f6b3a",
+  solid2: "#0f766e",
   react: "#8a4a00",
   foldkit: "#6b3fa0",
 }
@@ -443,7 +444,7 @@ const page = (results: ReadonlyArray<Result>, browserVersion: string): string =>
     '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Spar benchmarks</title>',
     "<style>body{font:16px/1.5 system-ui,sans-serif;color:#1b2330;max-width:72rem;margin:2rem auto;padding:0 1rem}figure{margin:0 0 1.25rem}.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(30rem,1fr));gap:0.5rem 2rem}</style></head><body>",
     "<h1>Spar benchmarks</h1>",
-    `<p>The same table app in Spar, Solid ${solidVersion}, React ${reactVersion} and Foldkit ${foldkitVersion}, built with Vite and driven in headless Chromium ${browserVersion} on one desktop machine. Each time is the median of ${runs - warmups} runs after ${warmups} warm-up runs, from the click until the next frame after the page reached its final state. Lower is better in every chart.</p>`,
+    `<p>The same table app in Spar, Solid ${solidVersion} (solid), Solid ${solid2Version} (solid2), React ${reactVersion} and Foldkit ${foldkitVersion}, built with Vite and driven in headless Chromium ${browserVersion} on one desktop machine. Each time is the median of ${runs - warmups} runs after ${warmups} warm-up runs, from the click until the next frame after the page reached its final state. Lower is better in every chart.</p>`,
     "<p>How it is measured: each run loads the app fresh, sets up the rows the operation needs, then clicks once. A MutationObserver waits for the expected end state (a row count, an id in a given row, a label ending, a selected row) and the clock stops on the next animation frame. Heap is read after a forced garbage collection. Startup is the time from the start of navigation until the app's first button is in the page, from a local server. Shipped JavaScript is every built .js file, gzipped. Rerun everything with <code>bun run bench</code> at the repo root.</p>",
     "<p>Change one row among 10,000 is the suite chosen for Spar's model, where one store action should end in one text node changing. It is timed twice: to the next frame like the rest, and until the DOM changed, which leaves out the browser's own layout and paint of 10,000 rows. Solid wins it by a wide margin, because it sets one signal. In Spar the store action builds a new array of 10,000 rows and the keyed list is given all of them, so it still walks every key, but it now only compares them and rewrites the one row that changed.</p>",
     "<!-- charts -->",
@@ -469,6 +470,7 @@ const versionOf = async (name: string): Promise<string> => {
 }
 
 const solidVersion = await versionOf("solid-js")
+const solid2Version = await versionOf("../../bench-solid2/node_modules/solid-js")
 const foldkitVersion = await versionOf("foldkit")
 const reactVersion = await versionOf("react")
 

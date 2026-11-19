@@ -1,0 +1,14 @@
+$schema: https://moonrepo.dev/schemas/project.json
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", "/tsconfig.base.json", "/apps/bench/src/shared/**/*"]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  build:
+    command: bun run build
+    inputs: ["src/**/*", "vite.config.ts", "/apps/bench/src/shared/**/*"]
+    outputs: ["/apps/bench/dist/solid2"]
+  check:
+    deps: [typecheck, format]
