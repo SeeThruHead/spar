@@ -2,7 +2,8 @@ import { Effect } from "effect"
 import { Handle, Router, View } from "spar"
 import { Toast } from "@spar/ui"
 import { AgentPage } from "./AgentPage.ts"
-import { OrgSegment, deepExample, orgRoute, reportRoute } from "./Deep.ts"
+import { deepExample, orgRoute, reportRoute } from "./Deep.ts"
+import { DeepLoadingView } from "./DeepLoadingView.tsx"
 import { Notes } from "./Notes.ts"
 import { People } from "./People.ts"
 import { ResetCounter } from "./ResetCounter.ts"
@@ -28,7 +29,12 @@ export const Shell = View.connect(
         routes: [
           Router.on(home, EmptyPageView),
           Router.on(agentRoute, AgentPage),
-          Router.live(orgRoute, OrgSegment),
+          Router.live(
+            orgRoute,
+            View.split(DeepLoadingView, () =>
+              import("./DeepPage.ts").then((module) => module.OrgSegment),
+            ),
+          ),
         ],
         otherwise: MissingPageView,
       }),

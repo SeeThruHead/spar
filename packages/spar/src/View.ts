@@ -252,6 +252,19 @@ export const pending =
       }),
     )
 
+export const split = <Props, R = never, LoadedProps = never>(
+  placeholder: View<Props> & Declared,
+  load: () => Promise<Mountable<Props, never, R, LoadedProps>>,
+): Component<Props, never, R, Props> =>
+  pending(placeholder)(
+    component(placeholder, (props: Props) =>
+      Effect.flatMap(
+        Effect.promise(() => load()),
+        (loaded) => child(loaded, props),
+      ),
+    ),
+  )
+
 const placeOf = (parent: ReadonlyArray<string>, taken: string, mark: string): string =>
   [...parent, taken.replace(` ${mark}`, "")].join(" / ")
 
