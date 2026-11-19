@@ -1,8 +1,8 @@
-import { engine } from "./launch.ts"
+import { engine, freePort } from "./launch.ts"
 
 const image = "mcr.microsoft.com/playwright:v1.65.1-noble"
 
-const port = 39_217
+const port = await freePort()
 
 const endpoint = `ws://127.0.0.1:${port}/`
 
