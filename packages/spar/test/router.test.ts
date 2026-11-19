@@ -123,6 +123,23 @@ describe("routes", () => {
     expect(paramsAt(search, "/search/mail?page=2")).toEqual(Option.some({ kind: "mail", page: 2 }))
   })
 
+  it("a route declared under another takes its path from it and must carry its params", () => {
+    const tab = Router.under(settings, "/tabs/:tab/*", Schema.Struct({ tab: Schema.String }))
+    const field = Router.under(
+      tab,
+      "/fields/:field",
+      Schema.Struct({ tab: Schema.String, field: Schema.String }),
+    )
+
+    expect(tab.pattern).toBe("/settings/tabs/:tab/*")
+    expect(field.build({ tab: "billing", field: "card" })).toBe(
+      "/settings/tabs/billing/fields/card",
+    )
+    expect(paramsAt(field, "/settings/tabs/billing/fields/card")).toEqual(
+      Option.some({ tab: "billing", field: "card" }),
+    )
+  })
+
   it("a URL that does not fit a route does not match it", () => {
     expect(Option.isNone(paramsAt(home, "/threads"))).toBe(true)
     expect(Option.isNone(paramsAt(thread, "/threads"))).toBe(true)

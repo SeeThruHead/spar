@@ -44,9 +44,10 @@ type Matched<Params> = {
   readonly place: string
 }
 
-export type Route<Params> = {
+export type Route<Params, Path extends string = string> = {
   readonly [TypeId]: typeof TypeId
   readonly pattern: string
+  readonly path?: Path
   readonly parse: (location: Location) => Option.Option<Matched<Params>>
   readonly build: (params: Params) => string
 }
@@ -106,10 +107,10 @@ const bind = (
 
 const strings = Schema.Record(Schema.String, Schema.String)
 
-const make = <Params, Encoded extends Raw>(
+const make = <Params, Encoded extends Raw, Path extends string = string>(
   pattern: string,
   schema: Schema.Codec<Params, Encoded>,
-): Route<Params> => {
+): Route<Params, Path> => {
   const expected = segmentsOf(pattern.replace(openEnd, ""))
   const open = openEnd.test(pattern)
   const inPath = new Set(expected.filter(isParam).map((name) => name.slice(1)))
@@ -154,16 +155,37 @@ const make = <Params, Encoded extends Raw>(
 type Paramless<Path extends string> = [ParamNames<Path>] extends [never] ? Path : never
 
 export const route: {
-  <const Path extends string>(path: Paramless<Path>): Route<PathParams<Path>>
+  <const Path extends string>(path: Paramless<Path>): Route<PathParams<Path>, Path>
   <const Path extends string, Params, Encoded extends Raw & PathParams<Path>>(
     path: Path,
     schema: Schema.Codec<Params, Encoded>,
-  ): Route<Params>
+  ): Route<Params, Path>
 } = <Params, Encoded extends Raw>(
   path: string,
   schema?: Schema.Codec<Params, Encoded>,
 ): Route<Params> | Route<Readonly<Record<string, string>>> =>
   schema === undefined ? make(path, strings) : make(path, schema)
+
+type Under<Parent extends string, Sub extends string> = Parent extends `${infer Head}/*`
+  ? `${Head}${Sub}`
+  : never
+
+type InsideOpen<Parent extends string, Sub extends string> = Parent extends `${string}/*`
+  ? Sub
+  : "the parent route must end with /* to have routes under it"
+
+export const under = <
+  ParentParams,
+  const Parent extends string,
+  const Sub extends `/${string}`,
+  Params,
+  Encoded extends Raw & PathParams<Under<Parent, Sub>>,
+>(
+  parent: Route<ParentParams, Parent>,
+  path: InsideOpen<Parent, Sub>,
+  schema: Schema.Codec<Params, Encoded>,
+): Route<Params, Under<Parent, Sub>> =>
+  make(`${parent.pattern.replace(openEnd, "")}${path}`, schema)
 
 const locate = (url: string): Location => {
   const parsed = new URL(url, "http://spar.invalid")

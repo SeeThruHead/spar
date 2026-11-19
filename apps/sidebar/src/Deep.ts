@@ -54,16 +54,13 @@ export const Report = Schema.Struct({ ...Member.fields, report: Schema.String })
 
 export const orgRoute = Router.route("/org/:org/*", Org)
 
-export const teamRoute = Router.route("/org/:org/team/:team/*", Team)
+export const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
 
-export const memberRoute = Router.route("/org/:org/team/:team/member/:member/*", Member)
+export const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
 
-export const reportsRoute = Router.route("/org/:org/team/:team/member/:member/reports/*", Member)
+export const reportsRoute = Router.under(memberRoute, "/reports/*", Member)
 
-export const reportRoute = Router.route(
-  "/org/:org/team/:team/member/:member/reports/:report",
-  Report,
-)
+export const reportRoute = Router.under(reportsRoute, "/:report", Report)
 
 export const deepQueries = Layer.mergeAll(
   RecordQuery.live,
