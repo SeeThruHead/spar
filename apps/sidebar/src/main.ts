@@ -2,20 +2,19 @@ import "@spar/ui/styles.css"
 import "./app.css"
 import { Effect, Layer, Option } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { FetchHttpClient } from "effect/http"
 import { Otlp } from "effect/observability"
 import { KeyValueStore } from "effect/persistence"
-import { App, Outbox, Router, Tabs } from "spar"
+import { App, Backend, Outbox, Router, Tabs } from "spar"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "./BoardStore.ts"
-import { Server } from "./Server.ts"
+import { Server } from "./server/Server.ts"
 import { Shell } from "./Shell.ts"
 
 const telemetry = Otlp.layerJson({
   baseUrl: `${location.origin}/otlp`,
   resource: { serviceName: "spar-sidebar" },
   tracerExportInterval: "1 second",
-}).pipe(Layer.provide(FetchHttpClient.layer))
+}).pipe(Layer.provide(Backend.layerTelemetry))
 
 const server = Option.match(
   Option.fromNullishOr(
@@ -24,7 +23,7 @@ const server = Option.match(
   {
     onNone: () => Server.layer,
     onSome: (path) =>
-      Layer.provide(Server.layerRemote(new URL(path, location.origin).href), FetchHttpClient.layer),
+      Layer.provide(Server.layerRemote(new URL(path, location.origin).href), Backend.layer),
   },
 )
 

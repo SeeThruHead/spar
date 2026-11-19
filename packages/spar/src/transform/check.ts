@@ -100,7 +100,9 @@ export const check = (file: string, source: string): ReadonlyArray<Violation> =>
     ...locate(source, offset),
   }))
 
-export const format = (violations: ReadonlyArray<Violation>): string =>
+export const format = (
+  violations: ReadonlyArray<Omit<Violation, "rule"> & { readonly rule: string }>,
+): string =>
   violations
     .map(({ file, line, column, rule, message }) => `${file}:${line}:${column} ${rule}: ${message}`)
     .join("\n")

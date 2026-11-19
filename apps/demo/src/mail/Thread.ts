@@ -1,6 +1,6 @@
 import { Effect, flow, pipe, Schema } from "effect"
 import { Events, Outbox, Reactive, UiState, View } from "spar"
-import { MailApi, ThreadLoadFailed } from "./MailApi.ts"
+import { MailApi, ThreadLoadFailed } from "../server/MailApi.ts"
 import { MailStore } from "./MailStore.ts"
 import type { Reply } from "./MailStore.ts"
 import {

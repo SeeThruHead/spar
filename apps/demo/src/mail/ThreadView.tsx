@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Events, Props, Reactive, UiState, View } from "spar"
-import { ThreadLoadFailed } from "./MailApi.ts"
+import { ThreadLoadFailed } from "../server/MailApi.ts"
 import { Reply } from "./MailStore.ts"
 
 export const ThreadSkeletonView = View.make(

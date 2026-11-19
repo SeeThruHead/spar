@@ -9,7 +9,7 @@ import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "../src/BoardStore.ts"
-import { Server } from "../src/Server.ts"
+import { Server } from "../src/server/Server.ts"
 import { Shell } from "../src/Shell.ts"
 
 const addressOf = (input: URL | RequestInfo): string => {

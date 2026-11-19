@@ -11,6 +11,7 @@
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-runtime.ts",
     "./transform/check": "./src/transform/check.ts",
+    "./transform/app": "./src/transform/app.ts",
     "./transform/bun": "./src/transform/bun.ts",
     "./transform/vite": "./src/transform/vite.ts",
     "./devtools": "./src/Devtools.ts",

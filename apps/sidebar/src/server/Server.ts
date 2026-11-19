@@ -1,8 +1,8 @@
 import { Context, Effect, Layer, Ref } from "effect"
 import type { HttpClient } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
-import { Agents, NoRecord, ServerUnreachable } from "./api.ts"
-import type { Started } from "./api.ts"
+import { Agents, NoRecord, ServerUnreachable } from "../api.ts"
+import type { Started } from "../api.ts"
 
 export { NoRecord, ServerUnreachable }
 

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Store } from "spar"
-import { MailApi } from "./MailApi.ts"
+import { MailApi } from "../server/MailApi.ts"
 
 export const Reply = Schema.Struct({
   id: Schema.String,

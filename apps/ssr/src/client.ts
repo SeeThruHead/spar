@@ -1,6 +1,7 @@
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { FetchHttpClient, HttpClient } from "effect/http"
+import { HttpClient } from "effect/http"
+import { Backend } from "spar"
 import { Stockroom } from "./Shop.ts"
 import { ShopStore } from "./ShopStore.ts"
 
@@ -16,7 +17,7 @@ const overHttp = Layer.effect(
       Effect.orElseSucceed(() => 0),
     ),
   })),
-).pipe(Layer.provide(FetchHttpClient.layer))
+).pipe(Layer.provide(Backend.layer))
 
 export const layer = Layer.merge(ShopStore.layer(), overHttp).pipe(
   Layer.provide(SecureRandom.layerWebCrypto),

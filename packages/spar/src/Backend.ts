@@ -29,6 +29,11 @@ export const layerFrom = <E, R>(
 
 export const layer: Layer.Layer<HttpClient.HttpClient> = layerFrom(FetchHttpClient.layer)
 
+export const layerTelemetry: Layer.Layer<HttpClient.HttpClient> = FetchHttpClient.layer
+
+export const beacon = (url: string, body: string): Effect.Effect<boolean> =>
+  Effect.sync(() => navigator.sendBeacon(url, body))
+
 export const rpc = <Rpcs extends Rpc.Any>(group: RpcGroup.RpcGroup<Rpcs>, url: string) =>
   Effect.flatMap(
     Layer.build(Layer.provide(RpcClient.layerProtocolHttp({ url }), RpcSerialization.layerNdjson)),

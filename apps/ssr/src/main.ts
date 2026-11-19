@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { App } from "spar"
+import { App, Backend } from "spar"
 import * as Spans from "spar/devtools/spans"
 import { layer } from "./client.ts"
 import { Shop } from "./Shop.ts"
@@ -13,10 +13,10 @@ const program = Effect.gen(function* () {
     App.hydrate(Shop, {
       target,
       layer,
-      shown: Effect.sync(() => {
-        navigator.sendBeacon("/client-spans", Spans.textOf(buffer.recent()))
-        target.setAttribute("data-ready", "")
-      }),
+      shown: Effect.andThen(
+        Effect.suspend(() => Backend.beacon("/client-spans", Spans.textOf(buffer.recent()))),
+        Effect.sync(() => target.setAttribute("data-ready", "")),
+      ),
     }),
     spans,
   )

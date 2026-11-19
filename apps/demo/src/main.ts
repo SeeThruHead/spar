@@ -1,8 +1,7 @@
 import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
 import { Otlp } from "effect/observability"
 import { KeyValueStore } from "effect/persistence"
-import { App } from "spar"
+import { App, Backend } from "spar"
 import * as DevtoolsLink from "@spar/devtools-mcp/client"
 import { Root, layer } from "./Root.ts"
 
@@ -10,7 +9,7 @@ const telemetry = Otlp.layerJson({
   baseUrl: `${location.origin}/otlp`,
   resource: { serviceName: "spar-demo" },
   tracerExportInterval: "1 second",
-}).pipe(Layer.provide(FetchHttpClient.layer))
+}).pipe(Layer.provide(Backend.layerTelemetry))
 
 const devtoolsServer = new URLSearchParams(location.search).get("devtools")
 

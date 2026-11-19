@@ -1,5 +1,5 @@
-import { Effect, Schema, SubscriptionRef, pipe } from "effect"
-import { Form, Reactive, UiState, View } from "spar"
+import { Effect, Schema, pipe } from "effect"
+import { Form, Reactive, Store, UiState, View } from "spar"
 import { Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
   ControlsView,
@@ -21,11 +21,22 @@ const Profile = Schema.Struct({
 
 const idle = Reactive.succeed(false)
 
-export const Controls = View.connect(
+class Saved extends Store.Tag<Saved>()("stories/Saved", {
+  state: Schema.String,
+  initialState: "nothing yet",
+  actions: {
+    saved: Store.action(Schema.String, (_before: string, text) => text),
+  },
+  selectors: {
+    text: Store.selector(Schema.String, (text: string) => text),
+  },
+}) {}
+
+const ControlsForm = View.connect(
   Effect.fnUntraced(function* () {
+    const store = yield* Saved
     const form = yield* Form.make(Profile, { name: "", plan: "team", news: false })
     const compact = yield* UiState.make("compact", Schema.Boolean, false)
-    const saved = yield* SubscriptionRef.make("nothing yet")
 
     return {
       name: form.field("name"),
@@ -42,15 +53,17 @@ export const Controls = View.connect(
       busy: form.submitting,
       compact,
       idle,
-      saved: Reactive.fromSubscriptionRef(saved),
+      saved: store.select.text,
       onSubmit: form.submit((profile) =>
-        SubscriptionRef.set(saved, `${profile.name} on the ${profile.plan} plan`),
+        store.commands.saved(`${profile.name} on the ${profile.plan} plan`),
       ),
       onToggleCompact: UiState.update(compact, (on) => !on),
       onReset: form.reset,
     }
   }),
 )(ControlsView)
+
+export const Controls = Saved.with(ControlsForm)
 
 export const TabsStory = View.connect(
   Effect.fnUntraced(function* () {
@@ -73,17 +86,17 @@ export const TabsStory = View.connect(
 
 export const MenuStory = View.connect(
   Effect.fnUntraced(function* () {
-    const chosen = yield* SubscriptionRef.make("none")
+    const chosen = yield* UiState.make("chosen", Schema.String, "none")
 
     return {
-      chosen: Reactive.fromSubscriptionRef(chosen),
+      chosen,
       menu: yield* View.child(Menu, {
         label: "More actions",
         text: "More actions",
         items: [
-          { label: "Rename", onChoose: SubscriptionRef.set(chosen, "Rename") },
-          { label: "Duplicate", onChoose: SubscriptionRef.set(chosen, "Duplicate") },
-          { label: "Archive", onChoose: SubscriptionRef.set(chosen, "Archive") },
+          { label: "Rename", onChoose: UiState.set(chosen, "Rename") },
+          { label: "Duplicate", onChoose: UiState.set(chosen, "Duplicate") },
+          { label: "Archive", onChoose: UiState.set(chosen, "Archive") },
         ],
       }),
     }

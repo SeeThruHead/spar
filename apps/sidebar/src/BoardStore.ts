@@ -13,7 +13,7 @@ import {
   spacePlacedBefore,
   toggled,
 } from "./domain.ts"
-import { Server } from "./Server.ts"
+import { Server } from "./server/Server.ts"
 
 const agent = (id: string, name: string, given: Partial<Agent>): Agent => ({
   id: AgentId.make(id),

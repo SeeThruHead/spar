@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { App, View } from "spar"
-import { MailApi } from "../src/mail/MailApi.ts"
+import { MailApi } from "../src/server/MailApi.ts"
 import { ThreadSkeletonView } from "../src/mail/ThreadView.tsx"
 
 const Thread = View.connect(

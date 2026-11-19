@@ -3,7 +3,7 @@ import { Reactive, Router, View } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
 import { home } from "./routes.ts"
-import { NoRecord, Server, ServerUnreachable } from "./Server.ts"
+import { NoRecord, Server, ServerUnreachable } from "./server/Server.ts"
 import {
   AgentLoadingView,
   AgentMissingView,
