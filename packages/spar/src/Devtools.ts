@@ -803,6 +803,15 @@ const percent = (part: number, whole: number): string => `${((part / whole) * 10
 
 const waitedFor = (source: string): string => (source === "" ? "" : `input from ${source}`)
 
+const noteOf = (attributes: Readonly<Record<string, string>>): string => {
+  const from = attributes["spar.query.served_from"]
+  if (from === undefined) return waitedFor(attributes["spar.query.after"] ?? "")
+
+  return from === ""
+    ? "served from what was loaded"
+    : `served from what trace ${from.slice(0, 8)} loaded`
+}
+
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
   const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
@@ -818,7 +827,7 @@ export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
     indent: px(depthOf(span, byId, 0) * 12),
     left: percent(span.startedAt - start, whole),
     width: percent(endOf(span) - span.startedAt, whole),
-    note: waitedFor(span.attributes["spar.query.after"] ?? ""),
+    note: noteOf(span.attributes),
   }))
 }
 

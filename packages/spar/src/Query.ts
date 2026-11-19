@@ -1,9 +1,10 @@
-import { Clock, Duration, Effect, Formatter, Option, Record, Schema, Stream } from "effect"
+import { Clock, Duration, Effect, Formatter, Option, Record, Schema, Stream, Tracer } from "effect"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import type { Action } from "./internal/journal.ts"
 import { isReactive, map, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Store from "./Store.ts"
+import * as Timeline from "./Timeline.ts"
 import type { Mountable } from "./View.ts"
 
 export const Status = Schema.Literals(["waiting", "loading", "loaded", "failed"])
@@ -17,6 +18,8 @@ export type Entry<A, E> = {
   readonly loadedAt: number | null
   readonly request: number
   readonly input: Schema.Json
+  readonly traceId: string
+  readonly spanId: string
 }
 
 export type State<A, E> = { readonly entries: Readonly<Record<string, Entry<A, E>>> }
@@ -33,12 +36,7 @@ export type Handle<A, E> = {
 
 type Asked = { readonly key: string; readonly input: Schema.Json }
 
-const isFresh = <A, E>(
-  entry: Entry<A, E> | undefined,
-  now: number,
-  staleAfter: number,
-): boolean => {
-  if (entry === undefined) return false
+const isFresh = <A, E>(entry: Entry<A, E>, now: number, staleAfter: number): boolean => {
   if (entry.status === "loading") return true
   if (entry.status !== "loaded" || entry.loadedAt === null) return false
 
@@ -58,6 +56,26 @@ const settled = <A, E>(
 ): State<A, E> => ({
   entries: Record.map(state.entries, (entry, name) => (name === key ? change(entry) : entry)),
 })
+
+const linksTo = (entry: { readonly traceId: string; readonly spanId: string }) =>
+  entry.traceId === ""
+    ? []
+    : [
+        {
+          span: Tracer.externalSpan({
+            traceId: entry.traceId,
+            spanId: entry.spanId,
+            sampled: true,
+          }),
+          attributes: {},
+        },
+      ]
+
+const keyOf = (asked: Option.Option<Asked>): string | null =>
+  Option.getOrNull(Option.map(asked, (target) => target.key))
+
+const sameKey = (one: Option.Option<Asked>, other: Option.Option<Asked>): boolean =>
+  keyOf(one) === keyOf(other)
 
 const optional = <I>(given: I | Option.Option<I>): Option.Option<I> =>
   Option.isOption(given) ? given : Option.some(given)
@@ -86,6 +104,8 @@ export const Tag =
       loadedAt: Schema.NullOr(Schema.Finite),
       request: Schema.Int,
       input: Schema.Json,
+      traceId: Schema.String,
+      spanId: Schema.String,
     })
     const state: Schema.Codec<State<A, E>, unknown> = Schema.Struct({
       entries: Schema.Record(Schema.String, entry),
@@ -100,6 +120,8 @@ export const Tag =
             key: Schema.String,
             input: Schema.Json,
             after: Schema.NullOr(Schema.String),
+            traceId: Schema.String,
+            spanId: Schema.String,
           }),
           (before: State<A, E>, asked): State<A, E> => ({
             entries: {
@@ -111,6 +133,8 @@ export const Tag =
                 request: (before.entries[asked.key]?.request ?? 0) + 1,
                 status: "loading",
                 input: asked.input,
+                traceId: asked.traceId,
+                spanId: asked.spanId,
               },
             },
           }),
@@ -195,19 +219,36 @@ export const Tag =
       const store = yield* Effect.service(base)
       const now = yield* Clock.currentTimeMillis
       const held = yield* store.state.get
+      const span = yield* Effect.option(Effect.currentSpan)
+      const from = Option.match(span, {
+        onNone: () => ({ traceId: "", spanId: "" }),
+        onSome: (current) => ({ traceId: current.traceId, spanId: current.spanId }),
+      })
 
       yield* Effect.forEach(
-        Option.toArray(asked).filter(
-          (wanted) => !isFresh(held.entries[wanted.key], now, staleAfter),
-        ),
-        (wanted) =>
-          Effect.annotateSpans(store.commands.requested({ ...wanted, after }), {
+        Option.toArray(asked),
+        (wanted) => {
+          const known = held.entries[wanted.key]
+          if (known !== undefined && isFresh(known, now, staleAfter)) return served(wanted, known)
+
+          return Effect.annotateSpans(store.commands.requested({ ...wanted, after, ...from }), {
             "spar.kind": "data",
             "spar.query.after": after ?? "",
-          }),
+          })
+        },
         { discard: true },
       )
     })
+    const served = (wanted: Asked, hit: Entry<A, E>) =>
+      Effect.withSpan(
+        Timeline.note("data", `${key}/served`, () => ({ key: wanted.key, from: hit.traceId })),
+        `${key}/served`,
+        {
+          captureStackTrace: false,
+          attributes: { "spar.kind": "data", "spar.query.served_from": hit.traceId },
+          links: linksTo(hit),
+        },
+      )
     const ask = Effect.fnUntraced(function* (input: Input<I>) {
       const store = yield* Effect.service(base)
       const wanted = map(optionalOf(input), askedFor)
@@ -218,7 +259,13 @@ export const Tag =
 
       yield* ensured(first, after)
       yield* Effect.forkScoped(
-        Stream.runForEach(wanted.changes, (next) => Effect.provide(ensured(next, after), context)),
+        Stream.runForEach(
+          Stream.drop(
+            Stream.changesWith(Stream.concat(Stream.succeed(first), wanted.changes), sameKey),
+            1,
+          ),
+          (next) => Effect.provide(ensured(next, after), context),
+        ),
         { startImmediately: true },
       )
 
@@ -239,7 +286,7 @@ export const Tag =
         refetch: Effect.flatMap(wanted.get, (asked) =>
           Effect.forEach(
             Option.toArray(asked),
-            (target) => store.commands.requested({ ...target, after }),
+            (target) => store.commands.requested({ ...target, after, traceId: "", spanId: "" }),
             { discard: true },
           ),
         ),
@@ -262,7 +309,14 @@ export const Tag =
       yield* store.commands.invalidated()
       yield* Effect.forEach(
         Record.toEntries(before.entries),
-        ([name, held]) => store.commands.requested({ key: name, input: held.input, after: null }),
+        ([name, held]) =>
+          store.commands.requested({
+            key: name,
+            input: held.input,
+            after: null,
+            traceId: "",
+            spanId: "",
+          }),
         { discard: true },
       )
     })

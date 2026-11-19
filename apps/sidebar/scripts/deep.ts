@@ -74,6 +74,22 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   const traces = new Set(spans.map((span) => span.traceId))
 
+  await page.goBack()
+  await page.getByRole("link", { name: "Open a page five segments deep" }).click()
+  await page.getByLabel("Author status").filter({ hasText: "loaded" }).waitFor({ timeout: 8000 })
+  await log
+    .locator("ol li", { hasText: "route /org/" })
+    .last()
+    .getByRole("button", { name: /^Trace / })
+    .click()
+  await page.getByLabel("Spans").locator("li", { hasText: "served from" }).first().waitFor()
+
+  const again = await page.getByLabel("Spans").locator("li").allInnerTexts()
+  const asAgain = await lookups()
+
+  await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${root}artifacts/devtools-served.png` })
+
   return [
     ...(author === "author author-of-q3" ? [] : [`the author read "${author}"`]),
     ...(first.length === 5 ? [] : [`the backend saw ${first.length} of the five lookups`]),
@@ -84,6 +100,12 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
       : ["the author lookup started before the report had answered"]),
     ...(whole < 600 ? [] : [`all six lookups took ${whole.toFixed(0)} ms, as if in a row`]),
     ...(traces.size === 1 ? [] : [`the lookups were in ${traces.size} traces`]),
+    ...(again.filter((line) => line.includes("served from what trace")).length >= 6
+      ? []
+      : [
+          `going there again did not say what was served from the earlier load: ${again.join(" | ")}`,
+        ]),
+    ...(asAgain.length === spans.length ? [] : ["going there again asked the backend again"]),
     ...(data.some(
       (line) => line.includes("sidebar/Author/requested") && line.includes("input from"),
     )
@@ -107,6 +129,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-  "The page five segments deep: five lookups start together, the author's waits only for the report, and all six are one trace",
+  "The page five segments deep: five lookups start together, the author's waits only for the report, all six are one trace, and going there again is served from that load and says so",
 )
 process.exit(0)

@@ -8,7 +8,12 @@ import { Server } from "./server/Server.ts"
 const lookup = (kind: string) => (id: string) =>
   Effect.flatMap(Effect.service(Server), (server) => server.lookup(kind, id))
 
-const query = { input: Schema.String, success: Found, failure: ServerUnreachable } as const
+const query = {
+  input: Schema.String,
+  success: Found,
+  failure: ServerUnreachable,
+  staleAfter: "30 seconds",
+} as const
 
 export class OrgQuery extends Query.Tag<OrgQuery>()("sidebar/Org", {
   ...query,

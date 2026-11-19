@@ -116,7 +116,7 @@ const opened = Effect.gen(function* () {
     Roster.layer([Users.invalidatedBy(Roster.actions.renamed)]).pipe(
       Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live)),
       Layer.provideMerge(Directory.layer),
-      Layer.provide(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
+      Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
     ),
   )
   const found = yield* Effect.provide(directory, built)
@@ -307,10 +307,20 @@ describe("server data in a store", () => {
 
       expect(yield* readings(shown)).toEqual(["loaded", [ada], null, false])
       expect(Object.values(yield* users.select.entries.get)).toEqual([
-        { status: "loaded", value: [ada], error: null, loadedAt: 5000, request: 1, input: null },
+        {
+          status: "loaded",
+          value: [ada],
+          error: null,
+          loadedAt: 5000,
+          request: 1,
+          input: null,
+          traceId: "",
+          spanId: "",
+        },
       ])
       expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name])).toEqual([
         ["command", "test/Users/requested"],
+        ["data", "test/Users/served"],
         ["command", "test/Users/loaded"],
       ])
     }),
@@ -398,6 +408,39 @@ describe("server data in a store", () => {
           ["test/Users/loaded", "data"],
         ])
         expect(recorded[0]?.attributes["spar.query.after"]).toBe("")
+      }),
+  )
+
+  it.effect(
+    "data already there is served with a short span that points at the trace that loaded it",
+    () =>
+      Effect.gen(function* () {
+        const { built, noted, answer } = yield* opened
+        const spans = yield* Layer.build(Spans.layer())
+        const buffer = Context.get(spans, Spans.SpanBuffer)
+        const asking = (during: string) =>
+          Effect.provide(Effect.withSpan(Effect.provide(Users.ask(), built), during), spans)
+
+        yield* asking("pointing at the link")
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+        yield* asking("the click")
+
+        const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+        const [preload] = named("pointing at the link")
+        const [click] = named("the click")
+        const [served] = named("test/Users/served")
+
+        expect(preload?.traceId).not.toBe(click?.traceId)
+        expect(served?.traceId).toBe(click?.traceId)
+        expect(served?.attributes).toMatchObject({
+          "spar.kind": "data",
+          "spar.query.served_from": preload?.traceId,
+        })
+        expect((yield* Ref.get(noted)).findLast((seen) => seen.kind === "data")?.detail).toEqual({
+          key: "null",
+          from: preload?.traceId,
+        })
       }),
   )
 

@@ -200,6 +200,13 @@ describe("one log of everything that happened", () => {
       ]).map((bar) => bar.note),
     ).toEqual(["input from test/Users . value"])
     expect(
+      ["0123456789abcdef", ""].map(
+        (from) =>
+          Devtools.barsOf([{ span: made({ "spar.query.served_from": from }), where: "page" }])[0]
+            ?.note,
+      ),
+    ).toEqual(["served from what trace 01234567 loaded", "served from what was loaded"])
+    expect(
       Devtools.barsOf([{ span: recorded("only", "elsewhere", 5, 5, false), where: "page" }]).map(
         (bar) => [bar.indent, bar.left, bar.width],
       ),
