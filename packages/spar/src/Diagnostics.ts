@@ -57,6 +57,11 @@ export const all = {
     what: "A query that takes no input waits for another query's value before it starts.",
     fix: "Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.",
   },
+  SPAR_SENT_AGAIN: {
+    kind: "run",
+    what: "The same command, with the same payload, was sent again while the work the first one started was still running.",
+    fix: "If the second send is a mistake, such as a second press of Pay, give the action a guard that refuses it while the first is in progress (Store.action's third argument), or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",

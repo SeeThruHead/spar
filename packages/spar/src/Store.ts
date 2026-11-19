@@ -2,6 +2,7 @@ import {
   Array,
   Context,
   Effect,
+  Formatter,
   Layer,
   Option,
   Record,
@@ -14,6 +15,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import * as Cell from "./internal/cell.ts"
+import { noticed } from "./internal/notice.ts"
 import { provideTo } from "./internal/context.ts"
 import { report } from "./internal/crash.ts"
 import { fromCell, map } from "./internal/reactive.ts"
@@ -62,6 +64,7 @@ export type Send<State> = <Payload>(
 export type Reaction<State, R = never> = {
   readonly action: Action<State, unknown>
   readonly detached?: boolean
+  readonly queued?: boolean
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
   readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
   readonly start: (channel: string) => Effect.Effect<void, never, R | Scope.Scope>
@@ -216,6 +219,26 @@ export const selector = <A, State>(
   schema: Schema.Codec<A, unknown>,
   select: (state: State) => NoInfer<A>,
 ): Selector<State, A> => ({ schema, select })
+
+const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => {
+  if (reaction.detached === true) return false
+
+  return reaction.queued !== true
+}
+
+const sameAs = (entry: Entry): string => `${entry.action} ${Formatter.formatJson(entry.payload)}`
+
+const counted = (
+  busy: Cell.Cell<ReadonlyMap<string, number>>,
+  name: string,
+  by: number,
+): number => {
+  const next = (busy.read().get(name) ?? 0) + by
+
+  busy.write(new Map([...busy.read(), [name, next]]))
+
+  return next
+}
 
 const channelOf = (key: string, name: string): string => `${key}/${name}`
 
@@ -423,20 +446,50 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           ),
         )
 
+      const busy = Cell.make<ReadonlyMap<string, number>>(new Map())
+      const sentAgain = (entry: Entry, reacting: ReadonlyArray<Reaction<State, R>>) => {
+        const attached = reacting.filter(runsHere)
+        if (attached.length === 0) return Effect.void
+        if (counted(busy, sameAs(entry), attached.length) === attached.length) return Effect.void
+
+        return noticed(
+          "SPAR_SENT_AGAIN",
+          `${key}/${entry.action}`,
+          `${key}/${entry.action} was sent again with the same payload while what the first one started was still running.`,
+        )
+      }
+
+      const started = (
+        reaction: Reaction<State, R>,
+        done: { readonly entry: Entry; readonly next: State },
+      ) => {
+        const running = reaction.run(done.entry, done.next, send)
+        if (reaction.detached === true) {
+          return Effect.updateContext(
+            Effect.forkIn(running, scope),
+            (_caller: Context.Context<never>) => context,
+          )
+        }
+        if (reaction.queued === true) return Effect.forkIn(running, scope)
+
+        return Effect.forkIn(
+          Effect.ensuring(
+            running,
+            Effect.sync(() => counted(busy, sameAs(done.entry), -1)),
+          ),
+          scope,
+        )
+      }
+
       const react = (
         handled: Action<State, unknown>,
         done: { readonly entry: Entry; readonly next: State },
       ) =>
-        Effect.forEach(
-          reactionsTo(handled),
-          (reaction) =>
-            reaction.detached === true
-              ? Effect.updateContext(
-                  Effect.forkIn(reaction.run(done.entry, done.next, send), scope),
-                  (_caller: Context.Context<never>) => context,
-                )
-              : Effect.forkIn(reaction.run(done.entry, done.next, send), scope),
-          { discard: true },
+        Effect.andThen(
+          sentAgain(done.entry, reactionsTo(handled)),
+          Effect.forEach(reactionsTo(handled), (reaction) => started(reaction, done), {
+            discard: true,
+          }),
         )
 
       const adopt = (orphan: Orphan) =>
@@ -669,9 +722,23 @@ export const outbox = <State, Payload, E, R>(
   send: (payload: Payload, idempotencyKey: string) => Effect.Effect<void, E, R>,
 ): Reaction<State, R | Outbox> => ({
   action: trigger,
+  queued: true,
   persist: (channel, entry) =>
     Outbox.use((service) =>
-      service.persist({ key: entry.id, channel, payload: entry.payload, seq: entry.seq }),
+      Effect.andThen(
+        Effect.flatMap(service.persisted(channel), (waiting) =>
+          waiting.some(
+            (other) => Formatter.formatJson(other.payload) === Formatter.formatJson(entry.payload),
+          )
+            ? noticed(
+                "SPAR_SENT_AGAIN",
+                channel,
+                `${channel} was sent again with the same payload while the first is still waiting to be sent.`,
+              )
+            : Effect.void,
+        ),
+        service.persist({ key: entry.id, channel, payload: entry.payload, seq: entry.seq }),
+      ),
     ),
   run: () => Effect.void,
   start: (channel) =>
