@@ -39,3 +39,20 @@ export const OrdersView = View.make(
 export const ShelfView = View.make("Shelf", { orders: Props.Element }, ({ orders }) => (
   <section>{orders}</section>
 ))
+
+export const MarkView = View.make(
+  "Mark",
+  { marked: Props.Reactive(Schema.Boolean), rows: Props.Element },
+  ({ marked, rows }) => (
+    <section>
+      <p aria-label="mark" class={{ on: marked }}>
+        mark
+      </p>
+      <ul>{rows}</ul>
+    </section>
+  ),
+)
+
+export const LineView = View.make("Line", { text: Props.Reactive(Schema.String) }, ({ text }) => (
+  <li>{text}</li>
+))

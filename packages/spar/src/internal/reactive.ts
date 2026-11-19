@@ -13,6 +13,7 @@ export const Direct: unique symbol = Symbol.for("~spar/Reactive/direct")
 export type Now<A> = {
   readonly read: () => A
   readonly watch: (listener: Cell.Listener<A>, onError: (defect: unknown) => void) => Cell.Stop
+  watchFrom(first: A, listener: Cell.Listener<A>, onError: (defect: unknown) => void): Cell.Stop
 }
 
 export type Reactive<A> = {
@@ -55,7 +56,11 @@ export const succeed = <A>(value: A): Reactive<A> => ({
   get: Effect.succeed(value),
   changes: Stream.empty,
   [Observe]: () => Effect.succeed(Function.constVoid),
-  [Direct]: { read: () => value, watch: () => Function.constVoid },
+  [Direct]: {
+    read: () => value,
+    watch: () => Function.constVoid,
+    watchFrom: () => Function.constVoid,
+  },
 })
 
 class FromCell<A, Held extends Cell.Cell<A>> implements Backed<A, Held>, Now<A> {
@@ -104,6 +109,10 @@ class FromCell<A, Held extends Cell.Cell<A>> implements Backed<A, Held>, Now<A> 
 
   watch(listener: Cell.Listener<A>, onError: (defect: unknown) => void): Cell.Stop {
     return this[Backing].subscribe(Cell.guarded(listener, onError))
+  }
+
+  watchFrom(_first: A, listener: Cell.Listener<A>, onError: (defect: unknown) => void): Cell.Stop {
+    return this.watch(listener, onError)
   }
 }
 
@@ -157,6 +166,10 @@ class MappedNow<A, B> implements Now<B> {
 
   watch(listener: Cell.Listener<B>, onError: (defect: unknown) => void): Cell.Stop {
     return this.source.watch(Cell.mapped(this.f, listener), onError)
+  }
+
+  watchFrom(first: B, listener: Cell.Listener<B>, onError: (defect: unknown) => void): Cell.Stop {
+    return this.source.watch(Cell.mapped(this.f, listener, first), onError)
   }
 }
 

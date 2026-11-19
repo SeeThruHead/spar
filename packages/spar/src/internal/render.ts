@@ -97,8 +97,10 @@ const bind = <A>(source: Reactive<A>, write: (value: A) => void, place: Place): 
   const direct = source[Direct]
   if (direct === undefined) return Cell.defer(place.later, bindLater(source, write, place))
 
-  write(direct.read())
-  Cell.own(place.owner, direct.watch(write, place.crashed))
+  const first = direct.read()
+
+  write(first)
+  Cell.own(place.owner, direct.watchFrom(first, write, place.crashed))
 }
 
 const apply = (value: unknown, write: (value: unknown) => void, place: Place): void => {
@@ -325,6 +327,22 @@ const repeated = (keys: ReadonlyArray<string>): ReadonlyArray<string> => [
 
 type Placed<A> = { readonly entry: Entry<A>; readonly position: number }
 
+const sameKeys = <A>(
+  previous: ReadonlyArray<Entry<A>>,
+  next: ReadonlyArray<A>,
+  key: (item: A) => string,
+): boolean =>
+  previous.length === next.length && next.every((item, index) => previous[index]?.key === key(item))
+
+const refreshChanged = <A>(previous: ReadonlyArray<Entry<A>>, next: ReadonlyArray<A>): void => {
+  next.forEach((item, index) => {
+    const cell = previous[index]?.cell
+    if (Object.is(cell?.read(), item)) return
+
+    cell?.write(item)
+  })
+}
+
 const refreshed = <A>(existing: Placed<A>, item: A): Placed<A> => {
   existing.entry.cell.write(item)
 
@@ -409,6 +427,9 @@ const fillRows = Effect.fnUntraced(function* <A>(
   const reconcile = Effect.fnUntraced(
     function* (next: ReadonlyArray<A>) {
       const previous = yield* Ref.get(entries)
+
+      if (sameKeys(previous, next, rows.key)) return refreshChanged(previous, next)
+
       const nextKeys = next.map(rows.key)
       const keys = new Set(nextKeys)
 

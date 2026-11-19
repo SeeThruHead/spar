@@ -63,8 +63,12 @@ export const make = <A>(initial: A): Cell<A> => new Held(initial)
 
 const never: unique symbol = Symbol("never seen")
 
-export const mapped = <A, B>(f: (value: A) => B, listener: Listener<B>): Listener<A> => {
-  const seen: { last: B | typeof never } = { last: never }
+export const mapped = <A, B>(
+  f: (value: A) => B,
+  listener: Listener<B>,
+  first: B | typeof never = never,
+): Listener<A> => {
+  const seen: { last: B | typeof never } = { last: first }
 
   return (value) => {
     const next = f(value)
