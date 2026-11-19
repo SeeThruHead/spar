@@ -72,6 +72,11 @@ export const all = {
     what: "The same request was made again while an identical one was still on its way.",
     fix: "Load it once with a Query and let each component that needs it ask for it (yield* TheQuery.ask(input)): one request runs for each input and everyone shares the answer. Do not fetch in a component and pass the data down, and do not fetch the same thing once in each row.",
   },
+  SPAR_TYPING_REPLACED: {
+    kind: "run",
+    what: "A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.",
+    fix: "Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",

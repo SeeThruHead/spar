@@ -1,4 +1,5 @@
 import { Option, Predicate, Schema } from "effect"
+import * as Cell from "./cell.ts"
 
 export type Namespace = "html" | "svg"
 
@@ -464,6 +465,57 @@ export const takePieces = (name: string, onPiece: (piece: unknown) => void): voi
   Reflect.set(globalThis, name, { push: onPiece })
   Array.from(Array.isArray(waiting) ? waiting : []).forEach(onPiece)
 }
+
+const events = Cell.make(0)
+
+export const nextEvent = (): number => {
+  events.write(events.read() + 1)
+
+  return events.read()
+}
+
+const typedAt = new WeakMap<object, number>()
+
+const watched = new WeakSet<object>()
+
+export const watchTyping = (page: Document): void => {
+  if (watched.has(page)) return
+
+  watched.add(page)
+  page.addEventListener(
+    "input",
+    (event) => {
+      Option.map(Option.fromNullOr(event.target), (field) => typedAt.set(field, nextEvent()))
+    },
+    true,
+  )
+}
+
+export const typingReplaced = (
+  node: Host,
+  name: string,
+  value: unknown,
+  causedAt: number,
+): boolean => {
+  if (name !== "value" || Reflect.get(node, "value") === value) return false
+
+  return (typedAt.get(node) ?? 0) > causedAt
+}
+
+export const described = (node: Host): string =>
+  [
+    node.localName,
+    ...["name", "aria-label", "id"].flatMap((attribute) =>
+      Option.toArray(
+        Option.map(
+          Option.fromNullOr(node.getAttribute(attribute)),
+          (text) => `[${attribute}="${text}"]`,
+        ),
+      ),
+    ),
+  ]
+    .slice(0, 2)
+    .join("")
 
 export const whenParsed = (then: () => void): void => {
   if (document.readyState !== "loading") return then()

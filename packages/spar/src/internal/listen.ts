@@ -4,6 +4,7 @@ import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
 import { ActionScope } from "./actionScope.ts"
 import { report } from "./crash.ts"
+import * as Dom from "./dom.ts"
 import { viewAt } from "./inspect.ts"
 
 export type Source<E> = {
@@ -39,6 +40,20 @@ const causedBy = (effect: Effect.Effect<void>, cause: Option.Option<Tracer.AnySp
     onSome: (span) => Effect.withParentSpan(effect, span),
   })
 
+const rootOf = (span: Tracer.AnySpan): Tracer.AnySpan =>
+  span._tag === "Span" && Option.isSome(span.parent) ? rootOf(span.parent.value) : span
+
+const eventOf = (span: Tracer.AnySpan): number => {
+  if (span._tag !== "Span") return 0
+
+  const event: unknown = span.attributes.get("spar.event")
+
+  return typeof event === "number" ? event : 0
+}
+
+export const causedAt = (): number =>
+  Option.match(causing(), { onNone: () => 0, onSome: (span) => eventOf(rootOf(span)) })
+
 export const starterIn = Effect.fnUntraced(function* (scope: Scope.Scope) {
   const services = yield* Effect.context()
   const start = Effect.runForkWith(services)
@@ -66,6 +81,7 @@ export const traced = (type: string, action: Action, target: unknown): Action =>
     root: true,
     attributes: {
       "spar.kind": "action",
+      "spar.event": Dom.nextEvent(),
       ...Option.match(viewAt(target), {
         onNone: () => ({}),
         onSome: (view) => ({ "spar.view": view }),

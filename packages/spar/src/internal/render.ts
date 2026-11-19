@@ -21,7 +21,8 @@ import { HandleTypeId, isHandle } from "./handle.ts"
 import type { Handle } from "./handle.ts"
 import { TypeId, isElement } from "./element.ts"
 import type { Drawn, Element, Intrinsic, Mounted, Rows } from "./element.ts"
-import { starter, starterIn, traced } from "./listen.ts"
+import { causedAt, starter, starterIn, traced } from "./listen.ts"
+import { noticed } from "./notice.ts"
 import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
@@ -140,6 +141,20 @@ const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace =>
   return namespace
 }
 
+const written = (node: Dom.Host, name: string, value: unknown, place: Place): void => {
+  if (Dom.typingReplaced(node, name, value, causedAt())) {
+    place.start(
+      noticed(
+        "SPAR_TYPING_REPLACED",
+        Dom.described(node),
+        `What was typed in ${Dom.described(node)} was replaced by a value from something that began before the last keystroke.`,
+      ),
+    )
+  }
+
+  Dom.setAttribute(node, name, value)
+}
+
 const applyProp = (node: Dom.Host, name: string, value: unknown, place: Place): void => {
   if (name === "children") return render(value, { ...place, parent: node, before: null })
   if (isEventName(name)) return listen(node, name.slice(2).toLowerCase(), value, place)
@@ -151,7 +166,7 @@ const applyProp = (node: Dom.Host, name: string, value: unknown, place: Place): 
     return applyEach(value, (property, current) => Dom.setStyle(node, property, current), place)
   }
 
-  return apply(value, (current) => Dom.setAttribute(node, name, current), place)
+  return apply(value, (current) => written(node, name, current, place), place)
 }
 
 const renderText = (source: Reactive<unknown>, place: Place): void => {
@@ -529,6 +544,8 @@ export const renderInto = Effect.fnUntraced(function* (
   const start = yield* starter()
   const owner = Cell.owner()
   const later = Cell.waiting<Later>()
+
+  Dom.watchTyping(document)
 
   yield* Effect.addFinalizer(() => Effect.sync(() => Cell.release(owner)))
   yield* Effect.sync(() =>
