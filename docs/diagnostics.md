@@ -120,6 +120,14 @@ Fix: If only the newest answer matters, as with a search, declare the reaction w
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_DUPLICATE_CALL
+
+The same request was made again while an identical one was still on its way.
+
+Fix: Load it once with a Query and let each component that needs it ask for it (yield* TheQuery.ask(input)): one request runs for each input and everyone shares the answer. Do not fetch in a component and pass the data down, and do not fetch the same thing once in each row.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_DUPLICATE_KEY
 
 A keyed list has rows that share a key.

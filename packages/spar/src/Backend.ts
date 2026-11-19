@@ -4,21 +4,54 @@ import type { HttpClientRequest } from "effect/http"
 import { RpcClient, RpcSerialization } from "effect/rpc"
 import type { Rpc, RpcGroup } from "effect/rpc"
 import { Socket } from "effect/socket"
+import * as Cell from "./internal/cell.ts"
+import { noticed } from "./internal/notice.ts"
 import * as Timeline from "./Timeline.ts"
 
 const pathOf = (request: HttpClientRequest.HttpClientRequest): string =>
   URL.canParse(request.url) ? new URL(request.url).pathname : request.url
 
-const logged = (client: HttpClient.HttpClient): HttpClient.HttpClient =>
-  HttpClient.transform(client, (answer, request) =>
+const readsOnly: ReadonlySet<string> = new Set(["GET", "HEAD"])
+
+const counted = (
+  flying: Cell.Cell<ReadonlyMap<string, number>>,
+  name: string,
+  by: number,
+): number => {
+  const next = (flying.read().get(name) ?? 0) + by
+
+  flying.write(new Map([...flying.read(), [name, next]]))
+
+  return next
+}
+
+const logged = (client: HttpClient.HttpClient): HttpClient.HttpClient => {
+  const flying = Cell.make<ReadonlyMap<string, number>>(new Map())
+  const again = (request: HttpClientRequest.HttpClientRequest) => {
+    if (!readsOnly.has(request.method)) return Effect.void
+    if (counted(flying, `${request.method} ${request.url}`, 1) === 1) return Effect.void
+
+    return noticed(
+      "SPAR_DUPLICATE_CALL",
+      `${request.method} ${pathOf(request)}`,
+      `${request.method} ${request.url} was asked for again while the same request was still on its way.`,
+    )
+  }
+  const landed = (request: HttpClientRequest.HttpClientRequest) =>
+    Effect.sync(() => {
+      if (readsOnly.has(request.method)) counted(flying, `${request.method} ${request.url}`, -1)
+    })
+
+  return HttpClient.transform(client, (answer, request) =>
     Effect.andThen(
       Timeline.note("call", `${request.method} ${pathOf(request)}`, () => ({
         method: request.method,
         url: request.url,
       })),
-      answer,
+      Effect.andThen(again(request), Effect.ensuring(answer, landed(request))),
     ),
   )
+}
 
 export const layerFrom = <E, R>(
   client: Layer.Layer<HttpClient.HttpClient, E, R>,

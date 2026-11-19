@@ -72,6 +72,60 @@ describe("Backend", () => {
   )
 })
 
+const slowly: typeof fetch = Object.assign(
+  () =>
+    new Promise<Response>((resolve) => {
+      setTimeout(
+        () => resolve(new Response("[]", { headers: { "content-type": "application/json" } })),
+        20,
+      )
+    }),
+  { preconnect: () => undefined },
+)
+
+describe("the same request made twice at once", () => {
+  it.live(
+    "is reported for the second, and not once the first has landed or for another address",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+        const client = yield* HttpClient.HttpClient
+        const noticing = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          Effect.provideService(effect, Timeline.Recorder, recording(seen))
+
+        yield* noticing(
+          Effect.all(
+            [
+              client.get("http://backend.test/authors/7"),
+              client.get("http://backend.test/authors/7"),
+              client.get("http://backend.test/authors/8"),
+              client.post("http://backend.test/authors/7"),
+              client.post("http://backend.test/authors/7"),
+            ],
+            { concurrency: "unbounded" },
+          ),
+        )
+        yield* noticing(client.get("http://backend.test/authors/7"))
+
+        expect(
+          (yield* Ref.get(seen))
+            .filter((call) => call.kind === "noticed")
+            .map((call) => [call.name, call.detail]),
+        ).toEqual([
+          [
+            "GET /authors/7",
+            {
+              code: "SPAR_DUPLICATE_CALL",
+              said: "GET http://backend.test/authors/7 was asked for again while the same request was still on its way.",
+              in: "",
+              at: "",
+            },
+          ],
+        ])
+      }).pipe(Effect.provide(Backend.layer), Effect.provideService(FetchHttpClient.Fetch, slowly)),
+  )
+})
+
 describe("a socket through Backend", () => {
   it.effect("each batch of frames received and sent is an entry in the log", () =>
     Effect.gen(function* () {

@@ -67,6 +67,11 @@ export const all = {
     what: "What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.",
     fix: "If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.",
   },
+  SPAR_DUPLICATE_CALL: {
+    kind: "run",
+    what: "The same request was made again while an identical one was still on its way.",
+    fix: "Load it once with a Query and let each component that needs it ask for it (yield* TheQuery.ask(input)): one request runs for each input and everyone shares the answer. Do not fetch in a component and pass the data down, and do not fetch the same thing once in each row.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",
