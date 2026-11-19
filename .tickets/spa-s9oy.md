@@ -1,6 +1,6 @@
 ---
 id: spa-s9oy
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T14:37:53Z

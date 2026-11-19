@@ -279,6 +279,50 @@ describe("server data in a store", () => {
     }),
   )
 
+  it.effect(
+    "freshness is counted from when it was loaded, and loading is only true while it loads",
+    () =>
+      Effect.gen(function* () {
+        const { built, users, calls, answer } = yield* opened
+
+        expect(yield* users.select.loading.get).toBe(false)
+        yield* TestClock.adjust("5 seconds")
+        yield* Effect.provide(Users.ensure, built)
+        yield* Effect.yieldNow
+        yield* answer(0, [ada])
+        yield* Effect.yieldNow
+        expect(yield* users.select.loading.get).toBe(false)
+
+        yield* TestClock.adjust("56 seconds")
+        yield* Effect.provide(Users.ensure, built)
+        yield* Effect.yieldNow
+        expect(yield* calls).toBe(1)
+
+        yield* users.commands.invalidated()
+        yield* Effect.provide(Users.ensure, built)
+        yield* Effect.yieldNow
+        expect(yield* calls).toBe(2)
+      }),
+  )
+
+  it("its states and a refusal are plain data with a Schema", () => {
+    expect(["idle", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+    ])
+    expect(
+      Schema.is(Store.Refusal)({
+        action: "requested",
+        reason: "It is already loading",
+        payload: null,
+      }),
+    ).toBe(true)
+    expect(Schema.is(Store.Refusal)({ action: "requested" })).toBe(false)
+  })
+
   it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
     Effect.gen(function* () {
       const Shown = Users.beside(
