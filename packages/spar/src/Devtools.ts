@@ -640,7 +640,7 @@ const depthOf = (
 
 const percent = (part: number, whole: number): string => `${((part / whole) * 100).toFixed(2)}%`
 
-const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
+export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
   const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
   const start = Math.min(...ordered.map((each) => each.span.startedAt))

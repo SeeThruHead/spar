@@ -4,6 +4,13 @@ A UI framework for Effect. A component is a pure JSX view plus one Effect that m
 Effect runs once when the component mounts; reactive values update single DOM nodes; errors and
 required services are part of a component's type and are settled where the app is mounted.
 
+Everything declared has a Schema: props, UI state, store state, commands, selectors, route params
+and errors. A click and the backend work it causes are one trace. The same components run on a
+server and in the browser, by the layers they are given. In development a Vite plugin adds the
+devtools: an inspector for the component under the pointer, one log of everything that happened
+with rewind, and a trace waterfall across the page and the backend; an agent gets the same over
+MCP.
+
 This repo is private and nothing here is published.
 
 ## Read
@@ -20,17 +27,21 @@ This repo is private and nothing here is published.
 
 ## Run
 
-| Command                             | What it does                                                                       |
-| ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `bun install`                       | Installs everything and the git hooks.                                             |
-| `bun run check`                     | Typecheck, lint, format check, unit tests at 100% coverage, forbidden-code proofs. |
-| `bun run moon run demo:browser`     | Drives the demo in headless Chromium.                                              |
-| `bun run moon run stories:play`     | Plays every component story at three sizes with an accessibility audit.            |
-| `bun run moon run sidebar:features` | Runs the proof app's Gherkin scenarios in Chromium.                                |
-| `bun run moon run bench:leaks`      | Checks that mounting and unmounting leaves nothing behind.                         |
-| `bun run moon run bench:bench`      | Reruns the benchmarks (several minutes) and rewrites `docs/benchmarks.md`.         |
-| `bun run --cwd apps/sidebar dev`    | The proof app on http://127.0.0.1:4181.                                            |
-| `bun run --cwd apps/stories dev`    | The component stories on http://127.0.0.1:4180.                                    |
+| Command                              | What it does                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `bun install`                        | Installs everything and the git hooks.                                             |
+| `bun run check`                      | Typecheck, lint, format check, unit tests at 100% coverage, forbidden-code proofs. |
+| `bun run moon run demo:browser`      | Drives the demo in headless Chromium.                                              |
+| `bun run moon run stories:play`      | Plays every component story at three sizes with an accessibility audit.            |
+| `bun run moon run sidebar:features`  | Runs the proof app's Gherkin scenarios in Chromium.                                |
+| `bun run moon run bench:leaks`       | Checks that mounting and unmounting leaves nothing behind.                         |
+| `bun run moon run bench:bench`       | Reruns the benchmarks (several minutes) and rewrites `docs/benchmarks.md`.         |
+| `bun run --cwd apps/sidebar dev`     | The proof app on http://127.0.0.1:4181, with the devtools.                         |
+| `bun run --cwd apps/sidebar backend` | The proof app served by its real backend on http://127.0.0.1:4182.                 |
+| `bun run moon run sidebar:devtools`  | Drives the devtools through the Vite dev server with the backend behind it.        |
+| `bun run moon run sidebar:traced`    | Follows one trace through the proof app and its backend in a real browser.         |
+| `bun run moon run ssr:browser`       | The server-rendered shop: streamed, taken over from the server's state, one trace. |
+| `bun run --cwd apps/stories dev`     | The component stories on http://127.0.0.1:4180.                                    |
 
 ## Layout
 

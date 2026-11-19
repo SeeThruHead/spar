@@ -31,17 +31,35 @@ WebKit runs from the pinned Playwright container through podman
 
 ## Layout
 
-- `packages/spar`: the framework. `src/*.ts` are the public modules (App, View, Reactive, UiState,
-  Store, Outbox, Tabs, Form, Router, Overlay, Handle, Events, Devtools) and `src/testing.ts` is
-  `spar/testing`. `src/internal` is the renderer. `src/transform` is the JSX build check and its Bun
-  and Vite adapters.
+- `packages/spar`: the framework. `src/*.ts` are the public modules (App, View, Props, Reactive,
+  UiState, Store, Outbox, Tabs, Form, Router, Overlay, Handle, Events, Timeline, Server) and
+  `src/testing.ts` is `spar/testing`. `src/internal` is the renderer. `src/transform` is the JSX
+  build check, the dev transform that names a component's services, and the Bun and Vite adapters.
+  The devtools are their own entry points and never part of the main one: `spar/devtools`
+  (`src/Devtools.ts`, views in `src/devtools/PanelView.tsx`), `spar/devtools/vite` (the plugin),
+  `spar/devtools/entry` and `client` (what the plugin injects), `spar/devtools/spans` and
+  `span-routes` (a span buffer for the page or a backend). Both packages are side-effect free on
+  purpose: a view is a module-level call, so an unused one only leaves a bundle that way.
 - `packages/ui`: base components (`@spar/ui`) and their stylesheet.
 - `packages/browsers`: picks the browser engine for the browser suites.
-- `packages/devtools-mcp`: a server that lets an agent read and drive a running app's stores over
-  MCP, and the client layer an app uses to link to it.
+- `packages/devtools-mcp`: a server that lets an agent read and drive a running app over MCP
+  (stores, UI state, the one log, components, traces), and the client layer an app uses to link to
+  it.
 - `packages/lint`: repo hygiene only (house rules as an oxlint plugin, the attribution hook).
 - `apps/demo`: the first demo, its browser test, and `forbidden/`, code that must not compile.
 - `apps/stories`: one page per base component, with play tests.
+- `apps/sidebar`: the proof app. It has a real backend (`src/api.ts` is the shared RPC contract,
+  `server/handlers.ts`, `scripts/backend.ts`) and the browser checks that use it:
+  `sidebar:devtools` (the tools through the Vite plugin, with screenshots in `artifacts/`),
+  `sidebar:traced` (one trace through page and backend) and `sidebar:production` (no devtools
+  code in a production build). `test/trace.test.ts` starts the backend as a process.
+- `apps/ssr`: the same components on a server and in the browser: `server/` has the server's
+  layers and its data, `src/client.ts` the browser's.
+
+In tests that run in happy-dom: send requests with `Bun.fetch` through `FetchHttpClient.Fetch`,
+never start a Bun HTTP server inside that environment (start a process), and remember that a
+passing test hides its console output.
+
 - `apps/sidebar`: the proof app, a port of a real Foldkit screen, with Gherkin scenarios.
 - `apps/ssr`: a small page rendered on a server and taken over in the browser, with a browser test
   that checks none of the server's nodes are made again.

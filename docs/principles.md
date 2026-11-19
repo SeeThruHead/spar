@@ -160,6 +160,28 @@ values, restored, and sent to an agent, without any of it being written twice.
 Rules out: props, state and params that exist only as types, which nothing at run time can read,
 check, show or restore.
 
+## 14. One application, front to back
+
+A click and everything it causes are one trace: the event, the command, what the outbox sends
+(now or after a restart), the components that mount because of it, the call to the backend and the
+backend's own work. The backend is reached through a shared Effect RPC contract, so its failures
+are part of the calling component's type and an unhandled one is a compile error. The same
+component runs on a server and in the browser; the layers it is given decide where its data comes
+from, and the render and the takeover are one trace too.
+
+Rules out: a front end and a back end that only meet in a network tab, failures that surface as
+an unknown error, and directives that say where code runs.
+
+## 15. What the app is doing can always be read
+
+In development the tools are there without being asked for, and a production build has none of
+their code. A person picks a component on the page and reads its data where it lives; an agent
+asks the same over MCP. Both see one log of everything that happened, can show the app as it was
+at any moment, and can open any moment as one trace across the page and the backend.
+
+Rules out: debugging by guessing what state a component is in, and devtools that only work with a
+browser extension or only for people.
+
 ## Where this differs from the first brief
 
 - `recover` takes one tag at a time. Looking up a handler by tag in a record cannot be typed without

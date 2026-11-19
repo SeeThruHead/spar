@@ -108,6 +108,8 @@ describe("a view made from a Schema of its props", () => {
     expect(fits(Props.Element, BadgeView({ text: "x" }))).toBe(true)
     expect(fits(Props.Element, "x")).toBe(false)
     expect(fits(Props.Handle, {})).toBe(false)
+    expect(Props.shown(Props.Action, [])).toEqual(Option.some("action"))
+    expect(Props.shown(Props.Handle, {})).toEqual(Option.none())
     expect(fits(Props.Callback(Schema.String), () => [])).toBe(true)
     expect(fits(Props.Callback(Schema.String), [])).toBe(false)
     expect(fits(Props.Handler("keydown"), () => [])).toBe(true)

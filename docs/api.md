@@ -28,6 +28,24 @@ export const AgentPage = pipe(
 
 (`apps/sidebar/src/AgentPage.ts`)
 
+## Props
+
+A view's props are declared as a record of Schemas. Plain data uses `Schema` as it is; what is
+not data has a Schema of its own kind:
+
+| Schema                                                           | A prop that is                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------- |
+| `Props.Reactive(schema)`                                         | a reactive value of that type                        |
+| `Props.State(schema)`                                            | UI state the view may also set                       |
+| `Props.Action`                                                   | something to run from a handler                      |
+| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named |
+| `Props.Callback(schema)`                                         | a function from a value to an action                 |
+| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element          |
+| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits          |
+
+`Props.kind(guard, show)` makes one for a type of your own. `Props.allShown(fields, props)` gives a
+view's props as plain values, which is what the inspector and the MCP tools read.
+
 ## Reactive
 
 A `Reactive<A>` is a value that changes: `get` reads it and `changes` is a stream that starts with
@@ -211,38 +229,117 @@ sequenceDiagram
   Note over B: attach listeners
 ```
 
-`Server.renderToString(Component, { layer })` runs the same component on a server and gives its
-HTML. Loading parts (`View.pending`) are waited for, so the page arrives complete; overlays are
-left out; `Events` values take their resting values (online, visible, no media query matching)
-and window listeners are not attached. Give it server layers: `Router.Router.layerMemory(url)`,
-stores in memory or over a `KeyValueStore` you provide.
+`Server.render(Component, { layer })` runs the same component on a server and gives its HTML
+and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
+trace of the render. `Server.renderToString` gives only the HTML. Loading parts (`View.pending`)
+are waited for, so the page arrives complete; overlays are left out; `Events` values take their
+resting values (online, visible, no media query matching) and window listeners are not attached.
+
+There are no directives. The component is the same in both places, and the layers it is given
+decide where its data comes from. On the server a store starts from data loaded there,
+`Self.layerFrom(load)`, and a service reads the database directly. In the browser the same store
+is `Self.layer()`, which starts from the state the server sent, and the same service asks over
+the network.
+
+`Server.renderToStream(Component, { layer, open, close, end })` sends the document in parts:
+`open` at once, before anything is drawn, then the page, `close`, the state as a
+`<script type="application/json" id="spar-state">`, and `end`. `Server.stateScript(state)` is that
+script on its own.
 
 In the browser, `App.hydrate(Component, { target, layer })` takes the page over instead of
 building it again: it keeps the server's nodes, attaches listeners and bindings to them, and
-repairs whatever does not match what the component would have drawn. While it takes over,
+repairs whatever does not match what the component would have drawn. It reads the state script,
+so stores and UI state start where the server left them, and its span `App.hydrate` is a child of
+the server's `Server.render`: the render and the takeover are one trace. While it takes over,
 loading parts are waited for as on the server, so nothing flickers back to a placeholder.
 `App.mount` and `App.hydrate` both take `shown`, an effect run once the first picture is up.
 
-(`apps/ssr`)
+(`apps/ssr`: `server/layers.ts` and `src/client.ts` are the two sets of layers.)
+
+## One application, front to back
+
+Every DOM handler runs in a span named `on <event>`, the root of a trace. What it causes stays in
+that trace: the store command (`<store>/<action>`), what the outbox saves and later sends, even
+after a restart (`Outbox.persist`, `Outbox.deliver`), navigation (`Router.go`), each component
+that mounts because of it (a span with the view's name), and each call to the backend. Calls go
+through Effect RPC, which carries the trace to the server, so the backend's spans are children of
+the page's.
+
+The contract is shared: an `RpcGroup` whose payloads, results and failures are Schemas. A failure
+named in the contract is in the calling component's error type, so a component that calls the
+backend and does not `View.recover` it cannot be mounted.
+
+`spar/devtools/spans` is a span buffer for either side: `Spans.layer()` wraps whatever tracer is
+installed and keeps the newest spans; `SpanBuffer.ofTrace(id)` and `recent()` give them as plain
+data. `spar/devtools/span-routes` has `route` (`GET /spans/:traceId`) and `recentRoute`
+(`GET /spans`) for an Effect HTTP server.
+
+(`apps/sidebar`: `src/api.ts` is the contract, `server/handlers.ts` and `scripts/backend.ts` the
+backend; `bun run backend` serves the app with it, and `bun run traced` follows one trace through
+both in a real browser.)
+
+## Timeline
+
+`Timeline.note(kind, name, detail)` reports something that happened to whoever is recording; with
+nobody recording it does nothing. Store commands, `UiState.set` and `update`, and route changes
+report themselves; use it for data arriving from a server. Each note carries the trace and span it
+happened in.
 
 ## Devtools
 
-Provide `Devtools.layer` to the store layers and mount `Devtools.Panel`: each store's actions and
-state, with Back, Forward, Live and Go to. Actions restored from the device can be stepped to as
-well. Export log gives a store's actions as JSON text; pasting a log and pressing Load log replays
-it from the store's first state and shows the result without touching the live state (Live goes
-back). When the app has an outbox, the panel also shows how many items are waiting and lists what
-could not be sent, each with Retry and Discard.
+The devtools are not part of an app. In development the Vite plugin adds them:
+
+```ts
+import { sparDevtools } from "spar/devtools/vite"
+
+export default defineConfig({
+  plugins: [sparJsx, sparDevtools({ backends: ["http://127.0.0.1:4182"] })],
+})
+```
+
+It only acts on the dev server. A production build carries no devtools code at all
+(`apps/sidebar` checks its own build for that as part of `check`). `backends` are the servers
+that expose `GET /spans/:traceId`; leave it out when there is none.
+
+What the tools show, docked at the corner of the page:
+
+- **Inspector.** Pick a component on the page: it is outlined as you move over it, and picking it
+  shows its place in the tree, the props its view receives as plain values (reactive ones as they
+  are now, and the store selector each comes from), its UI state, the services its Effect uses,
+  the failures it recovers from, and a list of what changed in it after each action.
+- **Everything that happened.** One log of store commands, UI state changes, route changes and
+  data arriving, in order, each with its trace id. Jump to any moment, step earlier and later, or
+  go back to now; the whole app, stores and UI state together, shows that moment.
+- **Trace.** Any moment opens as a waterfall of its spans: the page's and the backends' on one
+  time line, nested by parent, with how long each took and the failed ones marked.
+- **Stores.** Each store's actions and state, with Back, Forward, Live and Go to; export a log as
+  JSON text, or paste one and load it to see where it leads without touching the live state. When
+  the app has an outbox: how many items are waiting, and what could not be sent, each with Retry
+  and Discard.
+
+An app can also include the stores panel on purpose: provide `Devtools.layer` (from
+`spar/devtools`) to its store layers and mount `Devtools.Panel`.
 
 ### For agents
 
 `bun run --cwd packages/devtools-mcp start` runs a small server on 127.0.0.1:4188 (set
 `SPAR_DEVTOOLS_PORT` to change it). An app that provides
-`DevtoolsLink.layer({ url })` from `@spar/devtools-mcp/client` beside `Devtools.layer` reports its
-stores to it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4188`. An
-agent connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and gets six tools: `list_stores`,
-`get_state`, `get_log`, `travel_to`, `run_action` and `load_log`. Each failure comes back as a
-plain sentence. With several pages linked, the tools speak for the one that reported last.
+`DevtoolsLink.layer({ url })` from `@spar/devtools-mcp/client` beside `Devtools.layer` reports to
+it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4188`. An agent
+connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and can ask what the app is doing right
+now:
+
+| Tool                                  | What it gives                                                                                |
+| ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `list_stores`, `get_state`, `get_log` | The stores, a store's state, its recorded actions                                            |
+| `travel_to`, `run_action`, `load_log` | Step one store through its log, carry out an action, replay another log                      |
+| `get_ui_state`, `set_ui_state`        | Every piece of UI state by component path; set one (refused when it does not fit its Schema) |
+| `get_timeline`, `rewind`              | The one log with trace ids; show the whole app as it was after a moment                      |
+| `list_components`, `get_component`    | The mounted components; one component's props, UI state, services and recovered failures     |
+| `get_trace`                           | The spans the page recorded for a trace                                                      |
+
+Each failure comes back as a plain sentence. With several pages linked, the tools speak for the
+one that reported last.
 
 ## App
 

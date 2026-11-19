@@ -157,6 +157,7 @@ describe("what the inspector knows about what is on the page", () => {
 
         expect(Option.getOrThrow(inspector.find(idOf(row))).name).toBe("Badge")
         expect([...inspector.seen.values()].map((seen) => seen.name)).toEqual(["Listed", "Badge"])
+        expect([...inspector.seen.keys()]).toEqual([1, 2])
       }),
     ),
   )

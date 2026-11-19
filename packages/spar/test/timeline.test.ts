@@ -56,6 +56,23 @@ const shown = (): ReadonlyArray<string | null> => {
 const shows = (count: string, draft: string) =>
   Testing.eventually(() => expect(shown()).toEqual([count, draft]))
 
+const recorded = (
+  spanId: string,
+  parentSpanId: string | null,
+  startedAt: number,
+  endedAt: number | null,
+  failed: boolean,
+) => ({
+  name: spanId,
+  traceId: "t",
+  spanId,
+  parentSpanId,
+  startedAt,
+  endedAt,
+  failed,
+  attributes: {},
+})
+
 describe("one log of everything that happened", () => {
   it.live("commands, UI state and route changes are in one order, each with its trace", () =>
     Effect.gen(function* () {
@@ -103,7 +120,14 @@ describe("one log of everything that happened", () => {
       expect(registry.setUi(["DeskView"], "draft", "set from outside")).toBe(true)
       expect(registry.setUi(["DeskView"], "draft", 7)).toBe(false)
       yield* shows("0", "set from outside")
-      expect(Devtools.components(registry.uiState())).toEqual([
+      expect(
+        Devtools.components([
+          ...registry.uiState(),
+          { path: ["Other"], name: "elsewhere", value: 1 },
+          { path: ["DeskView", "Child"], name: "deeper", value: 2 },
+          { path: [], name: "nowhere", value: 3 },
+        ]),
+      ).toEqual([
         {
           name: "DeskView",
           place: "DeskView",
@@ -115,6 +139,71 @@ describe("one log of everything that happened", () => {
       ])
     }).pipe(Effect.provide(layer)),
   )
+
+  it("a trace is laid out on one time line, nested by parent, whichever side a span ran on", () => {
+    const bars = Devtools.barsOf([
+      { span: recorded("open", "inner", 180, null, false), where: "backend" },
+      { span: recorded("inner", "root", 120, 150, true), where: "page" },
+      { span: recorded("root", null, 100, 200, false), where: "page" },
+    ])
+
+    expect(bars).toEqual([
+      {
+        key: "page root",
+        name: "root",
+        where: "page",
+        took: "100.0 ms",
+        failed: false,
+        indent: "0px",
+        left: "0.00%",
+        width: "100.00%",
+      },
+      {
+        key: "page inner",
+        name: "inner",
+        where: "page",
+        took: "30.0 ms",
+        failed: true,
+        indent: "12px",
+        left: "20.00%",
+        width: "30.00%",
+      },
+      {
+        key: "backend open",
+        name: "open",
+        where: "backend",
+        took: "0.0 ms",
+        failed: false,
+        indent: "24px",
+        left: "80.00%",
+        width: "0.00%",
+      },
+    ])
+    expect(
+      Devtools.barsOf([{ span: recorded("only", "elsewhere", 5, 5, false), where: "page" }]).map(
+        (bar) => [bar.indent, bar.left, bar.width],
+      ),
+    ).toEqual([["0px", "0.00%", "0.00%"]])
+    expect(Devtools.barsOf([])).toEqual([])
+  })
+
+  it("what is recorded has a shape that can be checked", () => {
+    const moment = { seq: 1, kind: "ui", name: "n", detail: null, traceId: "", spanId: "" }
+
+    expect(["command", "ui", "route", "data", "other"].map(Schema.is(Timeline.Kind))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+    ])
+    expect(Schema.is(Timeline.Moment)(moment)).toBe(true)
+    expect(Schema.is(Timeline.Moment)({ ...moment, seq: "1" })).toBe(false)
+    expect(Schema.is(Timeline.Noted)({})).toBe(false)
+    expect(Schema.is(Timeline.Moment)({})).toBe(false)
+    expect(Schema.is(UiState.Entry)({})).toBe(false)
+    expect(Schema.is(Devtools.Component)({})).toBe(false)
+  })
 
   it("with inspection off there are no components to read", () => {
     expect(Devtools.components([])).toEqual([])
