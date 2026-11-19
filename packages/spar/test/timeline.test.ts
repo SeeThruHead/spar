@@ -39,6 +39,33 @@ const Desk = View.connect(
   }),
 )(DeskView)
 
+class Beside extends Store.Tag<Beside>()("test/Beside", {
+  state: State,
+  initialState: { count: 0 },
+  actions: {
+    added: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
+      count: state.count + by,
+    })),
+  },
+  selectors: { count: Store.selector(Schema.Finite, (state: State) => state.count) },
+}) {}
+
+const BesideDesk = Beside.with(
+  View.connect(
+    Effect.fnUntraced(function* () {
+      const beside = yield* Beside
+      const router = yield* Router.Router
+
+      return {
+        count: beside.select.count,
+        draft: yield* UiState.make("draft", Schema.String, ""),
+        onAdd: beside.commands.added({ by: 1 }),
+        onGo: router.go(next, {}),
+      }
+    }),
+  )(DeskView),
+)
+
 const layer = Layer.mergeAll(Tally.layer(), Router.Router.layerMemory("/")).pipe(
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
@@ -143,6 +170,25 @@ describe("one log of everything that happened", () => {
           state: { draft: "set from outside" },
         },
       ])
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a store beside a view is listed while the view is mounted and not after", () =>
+    Effect.gen(function* () {
+      const registry = yield* Devtools.Registry
+      const listed = Effect.map(registry.stores.get, (all) =>
+        all.map((store) => store.key).filter((key) => key.startsWith("test/Beside")),
+      )
+
+      yield* Effect.scoped(
+        Effect.andThen(
+          Effect.andThen(Testing.mount(BesideDesk), Testing.find("textbox", "Draft")),
+          Effect.flatMap(listed, (keys) =>
+            Effect.sync(() => expect(keys).toEqual(["test/Beside @ DeskView"])),
+          ),
+        ),
+      )
+      expect(yield* listed).toEqual([])
     }).pipe(Effect.provide(layer)),
   )
 

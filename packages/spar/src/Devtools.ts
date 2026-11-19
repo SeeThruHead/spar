@@ -313,6 +313,8 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       Context.add(Store.Inspector, {
         keepStates: 1000,
         register: (store) => Effect.sync(() => stores.write([...stores.read(), store])),
+        forget: (key) =>
+          Effect.sync(() => stores.write(stores.read().filter((store) => store.key !== key))),
       }),
       Context.add(Timeline.Recorder, Option.some(record)),
     )

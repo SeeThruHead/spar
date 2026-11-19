@@ -132,6 +132,7 @@ export type Inspected = {
 export const Inspector = Context.Reference<{
   readonly keepStates: number
   readonly register: (store: Inspected) => Effect.Effect<void>
+  readonly forget?: (key: string) => Effect.Effect<void>
 }>("spar/Store/Inspector", {
   defaultValue: () => ({ keepStates: 0, register: () => Effect.void }),
 })
@@ -506,6 +507,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       Object.entries(select).forEach(([name, reading]) =>
         sourced(Object(reading), `${key} . ${name}`),
       )
+      yield* Effect.addFinalizer(() => inspector.forget?.(key) ?? Effect.void)
       yield* inspector.register({
         key,
         base,
