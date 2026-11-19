@@ -79,3 +79,20 @@ report as `[CODE] message`, an `in` line with the owners, an `at` line with the 
 column, and points an agent at a skill file with a section for each code. Spar now does the same
 in its own terms: `docs/diagnostics.md`. What Spar's reports lack next to Solid's: the path of
 owning components on a run-time report, and a source location on anything but a build finding.
+
+## Routing and preloading
+
+Read from the README of Solid Router's main branch, whose 1.0 line targets Solid 2.
+
+|                                         | Solid Router 1.0                                                                                  | Spar                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Where a route's data is                 | A `query` function, read with a memo in the component, and started early by the route's `preload` | `ask` in the component; nothing is declared on the route                                    |
+| Preload on intent                       | Opt-in for the router: after the pointer rests on a link for 20 ms, or on focus or touch          | Opt-in for each link: `onIntent` on the anchor                                              |
+| What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask` |
+| How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | The query's `staleAfter`, which is 0 unless set, so a preload can be wasted                 |
+| Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                             |
+| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request               |
+
+Two things Solid Router does that bear on Spar's list of open cases. Preloaded data is fresh for
+a few seconds by itself, which is the behaviour the default stale time of 0 lacks. And a
+mutation's answer brings the refreshed data with it, where Spar asks again.
