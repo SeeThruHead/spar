@@ -1,4 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
+import type { Cell as Held } from "./internal/cell.ts"
 import type { Layer } from "effect"
 import * as Cell from "./internal/cell.ts"
 import { Dehydrated, Text, stateId } from "./internal/dehydrated.ts"
@@ -22,6 +23,29 @@ type Options<R, LayerError> = {
 const encodedOf = (store: Inspected) =>
   Effect.map(store.encoded, (state) => [store.key, state] as const)
 
+const Loading = Schema.Struct({
+  entries: Schema.Record(Schema.String, Schema.Struct({ status: Schema.String })),
+})
+
+const isLoading = (state: unknown): boolean => {
+  if (!Schema.is(Loading)(state)) return false
+
+  return Object.values(state.entries).some((entry) => entry.status === "loading")
+}
+
+const stillLoading = (stores: Held<ReadonlyArray<Inspected>>): Effect.Effect<boolean> =>
+  Effect.map(
+    Effect.forEach(stores.read(), (store) => store.state.get),
+    (states) => states.some(isLoading),
+  )
+
+const settled = (stores: Held<ReadonlyArray<Inspected>>, quiet: number): Effect.Effect<void> =>
+  quiet === 2
+    ? Effect.void
+    : Effect.flatMap(Effect.andThen(Effect.sleep("1 milli"), stillLoading(stores)), (busy) =>
+        settled(stores, busy ? 0 : quiet + 1),
+      )
+
 export const render = <R, LayerError = never>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
@@ -30,7 +54,11 @@ export const render = <R, LayerError = never>(
   const stores = Cell.make<ReadonlyArray<Inspected>>([])
 
   return Effect.gen(function* () {
-    const html = yield* Effect.flatMap(component.mount({}), toHtml)
+    const element = yield* component.mount({})
+
+    yield* settled(stores, 0)
+
+    const html = yield* toHtml(element)
     const span = yield* Effect.orDie(Effect.currentSpan)
     const states = yield* Effect.forEach(stores.read(), encodedOf)
 

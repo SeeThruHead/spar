@@ -1,11 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Server, Store, UiState, View } from "spar"
+import { App, Query, Reactive, Server, Store, UiState, View } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { ShelfView } from "./shelf.tsx"
+import { OrdersView } from "./units.tsx"
 
 const State = Schema.Struct({ items: Schema.Array(Schema.String) })
 
@@ -63,6 +64,96 @@ const shown = (): ReadonlyArray<string | null> => {
     note instanceof HTMLInputElement ? note.value : null,
   ]
 }
+
+class Asked extends Context.Service<Asked, Ref.Ref<ReadonlyArray<string>>>()("test/Asked") {
+  static readonly layer = Layer.effect(Asked, Ref.make<ReadonlyArray<string>>([]))
+}
+
+const answering = <A>(what: string, value: A) =>
+  Effect.flatMap(Effect.service(Asked), (asked) =>
+    Effect.as(
+      Effect.andThen(
+        Ref.update(asked, (all) => [...all, what]),
+        Effect.sleep("5 millis"),
+      ),
+      value,
+    ),
+  )
+
+class Catalog extends Query.Tag<Catalog>()("test/Catalog", {
+  input: Schema.Void,
+  success: Schema.Array(Schema.String),
+  failure: Schema.Never,
+  load: () => answering("catalog", ["tea", "ink", "pen"]),
+  staleAfter: "1 minute",
+}) {}
+
+class Price extends Query.Tag<Price>()("test/Price", {
+  input: Schema.String,
+  success: Schema.Finite,
+  failure: Schema.Never,
+  load: (item: string) => answering(`price of ${item}`, item.length),
+  staleAfter: "1 minute",
+}) {}
+
+const Priced = View.connect(
+  Effect.fnUntraced(function* () {
+    const catalog = yield* Catalog.ask()
+    const price = yield* Price.ask(
+      Reactive.map(catalog.value, (items) => Option.fromNullishOr(items?.[0])),
+    )
+
+    return { status: price.status, count: Reactive.map(price.value, (found) => found ?? 0) }
+  }),
+)(OrdersView)
+
+const queries = Layer.merge(Catalog.live, Price.live).pipe(
+  Layer.provideMerge(Asked.layer),
+  Layer.provide(SecureRandom.layerWebCrypto),
+)
+
+describe("a page whose data comes from queries, drawn on the server", () => {
+  it.live("the server waits for every query, dependent ones too, and sends what they loaded", () =>
+    Effect.gen(function* () {
+      const made = yield* Server.render(Priced, { layer: queries })
+
+      expect(made.html).toContain('<output aria-label="Orders status">loaded</output>')
+      expect(made.html).toContain('<output aria-label="Orders count">3</output>')
+      expect(Object.keys(made.state.stores)).toEqual(["test/Catalog", "test/Price"])
+      expect(JSON.stringify(made.state.stores)).toContain('"value":["tea","ink","pen"]')
+    }),
+  )
+
+  it.live("the browser starts with that data in hand and asks for nothing again", () =>
+    Effect.gen(function* () {
+      const made = yield* Server.render(Priced, { layer: queries })
+      const built = yield* Effect.provideService(
+        Layer.build(queries),
+        Store.Seed,
+        made.state.stores,
+      )
+      const taken = yield* Effect.provide(
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.ask()
+          const price = yield* Price.ask("tea")
+          const asked = yield* Effect.service(Asked)
+
+          yield* Effect.sleep("10 millis")
+
+          return [
+            yield* catalog.status.get,
+            yield* catalog.value.get,
+            yield* price.value.get,
+            yield* Ref.get(asked),
+          ]
+        }),
+        built,
+      )
+
+      expect(taken).toEqual(["loaded", ["tea", "ink", "pen"], 3, []])
+    }),
+  )
+})
 
 describe("a page drawn on the server and taken over with its state", () => {
   it.live("the server draws from its own data and says what state it drew", () =>
