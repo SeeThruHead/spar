@@ -465,5 +465,11 @@ export const takePieces = (name: string, onPiece: (piece: unknown) => void): voi
   Array.from(Array.isArray(waiting) ? waiting : []).forEach(onPiece)
 }
 
+export const whenParsed = (then: () => void): void => {
+  if (document.readyState !== "loading") return then()
+
+  document.addEventListener("DOMContentLoaded", then, { once: true })
+}
+
 export const textOf = (id: string): string | null =>
   document.getElementById(id)?.textContent ?? null

@@ -267,6 +267,12 @@ describe("a page sent in pieces", () => {
         Layer.merge(Router.Router.layerMemory("/orders")),
       )
       yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Object.defineProperty(document, "readyState", { value: "loading", configurable: true }),
+        ),
+        () => Effect.sync(() => Reflect.deleteProperty(document, "readyState")),
+      )
+      yield* Effect.acquireRelease(
         Effect.sync(() => Reflect.set(globalThis, "__sparPieces", [first])),
         () => Effect.sync(() => Reflect.deleteProperty(globalThis, "__sparPieces")),
       )
@@ -306,6 +312,12 @@ describe("a page sent in pieces", () => {
         )
 
         yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Object.defineProperty(document, "readyState", { value: "loading", configurable: true }),
+          ),
+          () => Effect.sync(() => Reflect.deleteProperty(document, "readyState")),
+        )
+        yield* Effect.acquireRelease(
           Effect.sync(() => Reflect.set(globalThis, "__sparPieces", [])),
           () => Effect.sync(() => Reflect.deleteProperty(globalThis, "__sparPieces")),
         )
@@ -318,6 +330,52 @@ describe("a page sent in pieces", () => {
         expect(yield* Ref.get(Context.get(asked, Asked))).toEqual([])
 
         yield* pushPiece({ stores: {}, done: true })
+        yield* Testing.eventually(() => expect(ordersStatus()).toBe("loaded"))
+        expect(yield* Ref.get(Context.get(asked, Asked))).toEqual(["price of tea"])
+      }),
+  )
+
+  it.live(
+    "when the page ends before the server said it was done, the browser asks for what is missing",
+    () =>
+      Effect.gen(function* () {
+        const made = yield* Server.render(Routed, {
+          layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+        })
+        const state = {
+          ...made.state,
+          stores: { ...made.state.stores, "test/Price": { entries: {} } },
+          pieces: true,
+        }
+        const holder = yield* sentPage(
+          `<div id="root">${made.html}</div>${Server.stateScript(state)}`,
+        )
+        const asked = yield* Layer.build(Asked.layer)
+        const inPage = Layer.merge(Catalog.live, Price.live).pipe(
+          Layer.provide(Layer.succeedContext(asked)),
+          Layer.provide(SecureRandom.layerWebCrypto),
+          Layer.merge(Router.Router.layerMemory("/orders")),
+        )
+
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Object.defineProperty(document, "readyState", { value: "loading", configurable: true }),
+          ),
+          () => Effect.sync(() => Reflect.deleteProperty(document, "readyState")),
+        )
+        yield* Effect.acquireRelease(
+          Effect.sync(() => Reflect.set(globalThis, "__sparPieces", [])),
+          () => Effect.sync(() => Reflect.deleteProperty(globalThis, "__sparPieces")),
+        )
+        yield* Effect.forkScoped(
+          App.hydrate(Routed, { target: holder.querySelector("div") ?? holder, layer: inPage }),
+          { startImmediately: true },
+        )
+        yield* Testing.eventually(() => expect(ordersStatus()).toBe("waiting"))
+        yield* Effect.sleep("30 millis")
+        expect(yield* Ref.get(Context.get(asked, Asked))).toEqual([])
+
+        yield* Effect.sync(() => document.dispatchEvent(new Event("DOMContentLoaded")))
         yield* Testing.eventually(() => expect(ordersStatus()).toBe("loaded"))
         expect(yield* Ref.get(Context.get(asked, Asked))).toEqual(["price of tea"])
       }),

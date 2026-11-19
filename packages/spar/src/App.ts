@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Scheduler, Schema, Tracer } from "effect"
+import { Effect, Layer, Option, Scheduler, Schema, Semaphore, Tracer } from "effect"
 import type { Context } from "effect"
 import * as Cell from "./internal/cell.ts"
 import { Text, stateId } from "./internal/dehydrated.ts"
@@ -85,10 +85,22 @@ const adopted = (taking: Taking, piece: unknown) =>
     { discard: true },
   )
 
-const taken = (taking: Taking) =>
-  Effect.map(starter(), (start) =>
-    Dom.takePieces(Pieces.holder, (piece) => start(adopted(taking, piece))),
+const taken = Effect.fnUntraced(function* (taking: Taking) {
+  const start = yield* starter()
+  const turn = yield* Semaphore.make(1)
+
+  Dom.takePieces(Pieces.holder, (piece) =>
+    start(Semaphore.withPermit(turn, adopted(taking, piece))),
   )
+  Dom.whenParsed(() =>
+    start(
+      Semaphore.withPermit(
+        turn,
+        Effect.sync(() => taking.expecting.write(false)),
+      ),
+    ),
+  )
+})
 
 const started = <R, LayerError>(
   component: Component<NoProps, never, R>,

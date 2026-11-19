@@ -446,8 +446,8 @@ What to know: the client script must be `async`, or the browser runs it only aft
 piece. Without JavaScript the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
 server is done, and whatever is still missing then is asked for by the browser. That covers a
 query first asked for by a component that only mounts once data is there (a row of a loaded
-list), which the server does not run. If the connection drops part way, the last piece never
-comes, and a query whose data was on its way stays `loading`.
+list), which the server does not run. If the connection drops part way, the document ends without that last piece; the browser
+notices the end and asks for what is missing itself.
 
 From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
 and picked up in the browser, a typed server boundary, and a choice per page between a complete
@@ -2353,8 +2353,7 @@ Built since, and smaller than they sound, but not done:
 - **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
 - **A page sent in pieces fills in only with JavaScript.** `Server.renderInPieces` sends the page
-  as first drawn and then each query's data; it does not send finished HTML for a piece. If the
-  connection drops, a query whose piece never came stays `loading`.
+  as first drawn and then each query's data; it does not send finished HTML for a piece.
 - **An event's span names its view only with the devtools on.** The renderer does not know
   which view drew a node; the inspector does.
 - **A query's default stale time is 0,** so a preload that finishes before the click, or a page
