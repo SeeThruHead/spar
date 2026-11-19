@@ -61,6 +61,7 @@ export type Send<State> = <Payload>(
 
 export type Reaction<State, R = never> = {
   readonly action: Action<State, unknown>
+  readonly detached?: boolean
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
   readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
   readonly start: (channel: string) => Effect.Effect<void, never, R | Scope.Scope>
@@ -412,7 +413,13 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       ) =>
         Effect.forEach(
           reactionsTo(handled),
-          (reaction) => Effect.forkIn(reaction.run(done.entry, done.next, send), scope),
+          (reaction) =>
+            reaction.detached === true
+              ? Effect.updateContext(
+                  Effect.forkIn(reaction.run(done.entry, done.next, send), scope),
+                  (_caller: Context.Context<never>) => context,
+                )
+              : Effect.forkIn(reaction.run(done.entry, done.next, send), scope),
           { discard: true },
         )
 
@@ -635,6 +642,11 @@ export const after = <State, Payload, R>(
   start: () => Effect.void,
   leftovers: () => Effect.succeed([]),
 })
+
+export const afterDetached = <State, Payload, R>(
+  trigger: Action<State, Payload>,
+  effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
+): Reaction<State, R> => ({ ...after(trigger, effect), detached: true })
 
 export const outbox = <State, Payload, E, R>(
   trigger: Action<State, Payload>,

@@ -697,6 +697,39 @@ describe("server data in a store", () => {
     }),
   )
 
+  it.effect("the wait before a drop does not hold on to the trace it was released in", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+
+      yield* Effect.provide(
+        Effect.withSpan(
+          Effect.scoped(
+            Effect.gen(function* () {
+              yield* Effect.provide(Orders.ask(4), built)
+              yield* Effect.yieldNow
+              yield* answer("orders 4", ["tea"])
+            }),
+          ),
+          "the page that was left",
+        ),
+        spans,
+      )
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("5 minutes")
+
+      const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+      const [page] = named("the page that was left")
+      const [released] = named("test/Orders/released")
+
+      expect(released?.traceId).toBe(page?.traceId)
+      expect(named("test/Orders/dropped")).toEqual([])
+      expect(Object.keys((yield* orders.state.get).entries)).toEqual([])
+    }),
+  )
+
   it.effect("data that is asked for again before it is dropped is kept", () =>
     Effect.gen(function* () {
       const { built, noted, answer } = yield* opened
