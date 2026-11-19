@@ -8,7 +8,7 @@ import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { Hydrating, OnServer } from "./internal/server.ts"
 import { RowKey, UiTree } from "./internal/uiTree.ts"
-import { drawn, placed } from "./internal/inspect.ts"
+import { drawn, placed, recovering } from "./internal/inspect.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Fields } from "./Props.ts"
 
@@ -180,6 +180,11 @@ export const recover =
   <Props, E = never, R = never, ViewProps = never>(self: Mountable<Props, E | Err, R, ViewProps>) =>
     component(viewOf(self), (props: Props) =>
       child(self, props).pipe(
+        Effect.tap(() =>
+          Effect.sync(() =>
+            recovering(String(Reflect.get(failure, "name")), viewOf(handler).displayName),
+          ),
+        ),
         Effect.catchIf(
           (error: E | Err): error is Err => Schema.is(failure)(error),
           (error) => child(handler, { error }),

@@ -90,8 +90,14 @@ const gone = (id: string | null): Element => {
 }
 
 const facts = (table: string): ReadonlyArray<string> =>
-  [...screen.getByLabelText(table, { exact: true }).querySelectorAll("tr")].map(
-    (row) => `${row.querySelector("th")?.textContent} ${row.querySelector("td")?.textContent}`,
+  [...screen.getByLabelText(table, { exact: true }).querySelectorAll("tr")].map((row) =>
+    [
+      row.querySelector("th")?.textContent,
+      row.querySelector("code")?.textContent,
+      row.querySelector("small")?.textContent,
+    ]
+      .filter((part) => part !== "")
+      .join(" "),
   )
 
 const listed = (): ReadonlyArray<string | null | undefined> =>
@@ -165,13 +171,18 @@ describe("devtools an app did not ask for", () => {
         expect(screen.getByLabelText("Picked component").textContent).toBe("DeskView")
         expect(screen.getByLabelText("Where it is").textContent).toBe("DeskView")
         expect(screen.getByLabelText("Services").textContent).toBe("Tally, Router.Router")
-        expect(facts("Props")).toEqual(["count 0", 'draft ""', 'onAdd "action"', 'onGo "action"'])
+        expect(facts("Props")).toEqual([
+          "count 0 test/Tally . count",
+          'draft ""',
+          'onAdd "action"',
+          'onGo "action"',
+        ])
         expect(facts("UI state")).toEqual(['draft ""'])
 
         yield* Testing.fill("textbox", "Draft", "hi")
         yield* Testing.click("button", "Add")
         yield* Testing.eventually(() =>
-          expect(facts("Props").slice(0, 2)).toEqual(["count 1", 'draft "hi"']),
+          expect(facts("Props").slice(0, 2)).toEqual(["count 1 test/Tally . count", 'draft "hi"']),
         )
         yield* Testing.eventually(() =>
           expect(

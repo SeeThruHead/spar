@@ -115,14 +115,18 @@ const cell = { padding: "2px 10px 2px 0", verticalAlign: "top", textAlign: "left
 
 export const FactView = View.make(
   "FactView",
-  { name: Props.Reactive(Schema.String), value: Props.Reactive(Schema.String) },
-  ({ name, value }) => (
+  {
+    name: Props.Reactive(Schema.String),
+    value: Props.Reactive(Schema.String),
+    from: Props.Reactive(Schema.String),
+  },
+  ({ name, value, from }) => (
     <tr>
       <th scope="row" style={{ ...cell, fontWeight: "600", whiteSpace: "nowrap" }}>
         {name}
       </th>
       <td style={cell}>
-        <code>{value}</code>
+        <code>{value}</code> <small>{from}</small>
       </td>
     </tr>
   ),
@@ -150,6 +154,7 @@ export const InspectorView = View.make(
     name: Props.Reactive(Schema.String),
     place: Props.Reactive(Schema.String),
     services: Props.Reactive(Schema.String),
+    recovers: Props.Reactive(Schema.String),
     props: Props.Element,
     state: Props.Element,
     changes: Props.Element,
@@ -157,7 +162,19 @@ export const InspectorView = View.make(
     outline: Props.Element,
     onPick: Props.Action,
   },
-  ({ picking, name, place, services, props, state, changes, veil: over, outline, onPick }) => (
+  ({
+    picking,
+    name,
+    place,
+    services,
+    recovers,
+    props,
+    state,
+    changes,
+    veil: over,
+    outline,
+    onPick,
+  }) => (
     <section aria-label="Component inspector">
       <h2>Inspector</h2>
       <p>
@@ -179,6 +196,8 @@ export const InspectorView = View.make(
       </table>
       <h3>Services</h3>
       <p aria-label="Services">{services}</p>
+      <h3>Failures it recovers from</h3>
+      <p aria-label="Failures it recovers from">{recovers}</p>
       <h3>What changed</h3>
       <ol aria-label="What changed">{changes}</ol>
       {over}
@@ -186,6 +205,26 @@ export const InspectorView = View.make(
     </section>
   ),
 )
+
+const look = [
+  "[data-spar-devtools] * { box-sizing: border-box }",
+  "[data-spar-devtools] h2 { font-size: 14px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid #e3e7ee }",
+  "[data-spar-devtools] section:first-of-type h2 { border-top: 0; padding-top: 0 }",
+  "[data-spar-devtools] h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #4b5666; margin: 14px 0 4px }",
+  "[data-spar-devtools] p { margin: 4px 0 }",
+  "[data-spar-devtools] button { font: inherit; padding: 3px 10px; border-radius: 6px; border: 1px solid #aab3c2; background: #f5f7fa; color: #141a22; cursor: pointer }",
+  "[data-spar-devtools] button:hover { background: #e9edf3 }",
+  "[data-spar-devtools] button[aria-pressed=true] { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff }",
+  "[data-spar-devtools] code, [data-spar-devtools] pre, [data-spar-devtools] textarea { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace }",
+  "[data-spar-devtools] table { border-collapse: collapse; width: 100% }",
+  "[data-spar-devtools] tr + tr { border-top: 1px solid #eef1f5 }",
+  "[data-spar-devtools] ol { margin: 4px 0; padding-left: 22px }",
+  "[data-spar-devtools] li { margin: 3px 0; padding: 1px 4px }",
+  "[data-spar-devtools] li[aria-current=true] { background: #eaf0ff; border-radius: 4px }",
+  "[data-spar-devtools] small { color: #4b5666 }",
+  "[data-spar-devtools] textarea { width: 100% }",
+  "[data-spar-devtools] pre { max-height: 180px; overflow: auto; background: #f5f7fa; padding: 8px; border-radius: 6px }",
+].join("\n")
 
 const dock = {
   position: "fixed",
@@ -233,6 +272,7 @@ export const ToolsView = View.make(
   },
   ({ open, inspector, timeline, stores }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
+      <style>{look}</style>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
         Devtools
       </button>

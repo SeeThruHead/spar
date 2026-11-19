@@ -3,13 +3,24 @@ import { Effect, Option, Schema, SubscriptionRef, pipe } from "effect"
 import { Props, Reactive, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import { fragment } from "../src/internal/element.ts"
-import { Inspecting, inspecting, mark } from "../src/internal/inspect.ts"
+import {
+  Inspecting,
+  inspecting,
+  mark,
+  recovering,
+  sourceOf,
+  sourced,
+} from "../src/internal/inspect.ts"
 import { BadgeView } from "./made.tsx"
 import { NoteView, TwiceView } from "./tree.tsx"
+
+class Lost extends Schema.TaggedError<Lost, { readonly brand: unique symbol }>()("Lost", {}) {}
 
 const Pair = View.make("Pair", { left: Props.Element, right: Props.Element }, ({ left, right }) =>
   fragment([left, "and", right]),
 )
+
+const Sorry = View.make("Sorry", { error: Schema.Unknown }, () => fragment(["Sorry"]))
 
 const Listed = View.make("Listed", { rows: Props.Element }, ({ rows }) => rows)
 
@@ -149,6 +160,51 @@ describe("what the inspector knows about what is on the page", () => {
       }),
     ),
   )
+
+  it.live("a component that recovers from a failure says which, and by which view", () =>
+    inspected(
+      Effect.fnUntraced(function* (inspector) {
+        yield* Testing.mount(
+          pipe(
+            View.connect(() => Effect.succeed({ text: "safe" }))(BadgeView),
+            View.recover(Lost, Sorry),
+            View.recover(Schema.Struct({ error: Schema.String }), Sorry),
+          ),
+        )
+
+        const seen = Option.getOrThrow(inspector.find(idOf(yield* Testing.findText("safe"))))
+
+        expect(seen.recovers).toEqual(["Lost is shown by Sorry", "Schema is shown by Sorry"])
+      }),
+    ),
+  )
+
+  it.live("a reactive value says which store selector it is, or is made from", () =>
+    inspected(
+      Effect.fnUntraced(function* () {
+        const selector = Reactive.succeed(1)
+        const derived = Reactive.map(
+          Reactive.map(selector, (count) => count + 1),
+          String,
+        )
+
+        yield* Effect.sync(() => sourced(selector, "shop . count"))
+        expect(sourceOf(selector)).toEqual(Option.some("shop . count"))
+        expect(sourceOf(derived)).toEqual(Option.some("made from shop . count"))
+        expect(sourceOf(Reactive.succeed(2))).toEqual(Option.none())
+        expect(sourceOf(Reactive.map(Reactive.succeed(2), String))).toEqual(Option.none())
+        expect(sourceOf("shop . count")).toEqual(Option.none())
+      }),
+    ),
+  )
+
+  it("with no inspector nothing is remembered about where a value came from", () => {
+    const selector = Reactive.succeed(1)
+
+    sourced(selector, "shop . count")
+    recovering("Lost", "Listed")
+    expect(sourceOf(selector)).toEqual(Option.none())
+  })
 
   it.live("with no inspector nothing is marked", () =>
     Effect.gen(function* () {

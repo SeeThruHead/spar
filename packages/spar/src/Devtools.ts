@@ -30,7 +30,7 @@ import {
 } from "./devtools/PanelView.tsx"
 import * as Events from "./Events.ts"
 import * as Dom from "./internal/dom.ts"
-import { inspecting, mark } from "./internal/inspect.ts"
+import { inspecting, mark, sourceOf } from "./internal/inspect.ts"
 import type { Seen } from "./internal/inspect.ts"
 import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
@@ -346,7 +346,7 @@ export const TimelinePanel = View.connect(
   }),
 )(TimelineView)
 
-type Fact = { readonly name: string; readonly value: string }
+type Fact = { readonly name: string; readonly value: string; readonly from: string }
 
 type Details = {
   readonly id: number
@@ -355,13 +355,21 @@ type Details = {
   readonly services: string
   readonly props: ReadonlyArray<Fact>
   readonly state: ReadonlyArray<Fact>
+  readonly recovers: string
   readonly when: string
 }
 
 type Changed = Fact & { readonly key: string; readonly from: string; readonly when: string }
 
-const factsOf = (shown: Readonly<Record<string, Schema.Json>>): ReadonlyArray<Fact> =>
-  Object.entries(shown).map(([name, value]) => ({ name, value: Formatter.formatJson(value) }))
+const factsOf = (
+  shown: Readonly<Record<string, Schema.Json>>,
+  given: unknown,
+): ReadonlyArray<Fact> =>
+  Object.entries(shown).map(([name, value]) => ({
+    name,
+    value: Formatter.formatJson(value),
+    from: Option.getOrElse(sourceOf(Reflect.get(Object(given), name)), () => ""),
+  }))
 
 const samePath = (left: UiState.Path, right: UiState.Path): boolean =>
   left.length === right.length && left.every((part, index) => part === right[index])
@@ -369,7 +377,7 @@ const samePath = (left: UiState.Path, right: UiState.Path): boolean =>
 const stateAt = (path: UiState.Path, snapshot: UiState.Snapshot): ReadonlyArray<Fact> =>
   snapshot
     .filter((entry) => samePath(entry.path, path))
-    .map((entry) => ({ name: entry.name, value: Formatter.formatJson(entry.value) }))
+    .map((entry) => ({ name: entry.name, value: Formatter.formatJson(entry.value), from: "" }))
 
 const whenOf = (moments: ReadonlyArray<Timeline.Moment>): string =>
   Option.match(Array.last(moments), {
@@ -392,7 +400,8 @@ const detailsOf = (
     onNone: () => "None: a view cannot reach a service",
     onSome: (placed) => placed.services.join(", "),
   }),
-  props: factsOf(Props.allShown(seen.fields, seen.props)),
+  props: factsOf(Props.allShown(seen.fields, seen.props), seen.props),
+  recovers: seen.recovers.join(". "),
   state: Option.match(seen.placed, {
     onNone: () => [],
     onSome: (placed) => stateAt(placed.path, snapshot),
@@ -401,7 +410,7 @@ const detailsOf = (
 })
 
 const labelled = (kind: string, facts: ReadonlyArray<Fact>): ReadonlyArray<Fact> =>
-  facts.map((fact) => ({ name: `${kind} ${fact.name}`, value: fact.value }))
+  facts.map((fact) => ({ ...fact, name: `${kind} ${fact.name}` }))
 
 const allFacts = (details: Details): ReadonlyArray<Fact> => [
   ...labelled("prop", details.props),
@@ -462,6 +471,7 @@ const facts = (rows: Reactive.Reactive<ReadonlyArray<Fact>>) =>
       (fact) => ({
         name: Reactive.map(fact, (now) => now.name),
         value: Reactive.map(fact, (now) => now.value),
+        from: Reactive.map(fact, (now) => now.from),
       }),
     ),
   )
@@ -511,6 +521,7 @@ export const Inspector = View.connect(
       name: about((found) => found.name, "Nothing picked yet"),
       place: about((found) => found.place, ""),
       services: about((found) => found.services, ""),
+      recovers: about((found) => found.recovers, ""),
       props: yield* facts(about((found) => found.props, [])),
       state: yield* facts(about((found) => found.state, [])),
       changes: yield* pipe(

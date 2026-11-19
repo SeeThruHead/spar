@@ -42,6 +42,7 @@ import type {
   Selectors,
   Step,
 } from "./internal/journal.ts"
+import { sourced } from "./internal/inspect.ts"
 import { Outbox } from "./Outbox.ts"
 import * as Timeline from "./Timeline.ts"
 
@@ -386,6 +387,14 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const commands = Record.map(named, (handled, name) => command(name, handled))
       const log = map(current, (held) => pastOf(held).log)
 
+      const select = Struct.map(
+        selectors,
+        Struct.lambda<ToReactive<State>>((chosen) => map(state, chosen.select)),
+      )
+
+      Object.entries(select).forEach(([name, reading]) =>
+        sourced(Object(reading), `${key} . ${name}`),
+      )
       yield* inspector.register({
         key,
         base,
@@ -409,10 +418,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         log,
         viewing,
         travelTo,
-        select: Struct.map(
-          selectors,
-          Struct.lambda<ToReactive<State>>((chosen) => map(state, chosen.select)),
-        ),
+        select,
         commands,
       }
     }),
