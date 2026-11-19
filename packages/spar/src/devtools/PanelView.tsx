@@ -102,12 +102,13 @@ export const TraceView = View.make(
   {
     traceId: Props.Reactive(Schema.String),
     summary: Props.Reactive(Schema.String),
+    chains: Props.Reactive(Schema.String),
     bars: Props.Element,
     lens: Props.Reactive(Schema.String),
     onRefresh: Props.Action,
     onLens: Props.Callback(Schema.String),
   },
-  ({ traceId, summary, bars, lens, onRefresh, onLens }) => (
+  ({ traceId, summary, chains, bars, lens, onRefresh, onLens }) => (
     <section aria-label="Trace">
       <h2>Trace</h2>
       <p>
@@ -121,6 +122,13 @@ export const TraceView = View.make(
         <LensView name="stores" label="Stores" lens={lens} onLens={onLens} />{" "}
         <LensView name="backend" label="Backend" lens={lens} onLens={onLens} />
       </p>
+      <pre
+        aria-label="Chains of requests"
+        hidden={Reactive.map(chains, (text) => text === "")}
+        style={{ whiteSpace: "pre-wrap", color: "#8a4a00" }}
+      >
+        {chains}
+      </pre>
       <ol aria-label="Spans" style={{ paddingLeft: "0" }}>
         {bars}
       </ol>

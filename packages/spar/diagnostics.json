@@ -49,6 +49,13 @@
     "reportedBy": "The running app: an error's message, or an entry in the log."
   },
   {
+    "code": "SPAR_QUERY_CHAIN",
+    "kind": "run",
+    "what": "Requests ran one after another: each could start only when the one before had answered.",
+    "fix": "If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.",
+    "reportedBy": "The running app: an error's message, or an entry in the log."
+  },
+  {
     "code": "SPAR_DUPLICATE_KEY",
     "kind": "run",
     "what": "A keyed list has rows that share a key.",

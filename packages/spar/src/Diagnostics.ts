@@ -42,6 +42,11 @@ export const all = {
     what: "A component took a frame or more before its children could mount, so their queries started late.",
     fix: "Find what its Effect waits for, usually a service call that loads data, and move it to a Query the component asks for.",
   },
+  SPAR_QUERY_CHAIN: {
+    kind: "run",
+    what: "Requests ran one after another: each could start only when the one before had answered.",
+    fix: "If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.",
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",

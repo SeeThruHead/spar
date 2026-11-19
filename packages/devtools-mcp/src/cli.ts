@@ -157,7 +157,11 @@ const ofTrace = Effect.fnUntraced(function* (address: string, traceId: string, l
   const said = yield* asked(address, "get_trace", { traceId, lens })
   const spans = yield* Schema.decodeEffect(Listed)(said)
 
-  return [`trace ${traceId}, ${spans.length} spans`, waterfall(spans)].join("\n")
+  return [
+    `trace ${traceId}, ${spans.length} spans`,
+    waterfall(spans),
+    ...Spans.chainsOf(spans).map(Spans.chainText),
+  ].join("\n")
 })
 
 const ofNavigation = Effect.fnUntraced(function* (address: string, back: number, lens: string) {
@@ -168,6 +172,7 @@ const ofNavigation = Effect.fnUntraced(function* (address: string, back: number,
   return [
     `${found.route}, trace ${found.traceId}, ${found.spans.length} spans`,
     waterfall(found.spans),
+    ...found.chains,
   ].join("\n")
 })
 

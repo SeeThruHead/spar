@@ -198,8 +198,13 @@ A request that waited for another query's value draws that wait as a line before
 when the other was asked for to when this one started. Data that was already there (after a
 preload, or going back) is a short `served` span that links to the trace that loaded it.
 
+When three or more requests each waited for the one before, or when a request had the same input
+as the one it waited for, the trace panel says so above the spans with the code
+`SPAR_QUERY_CHAIN`, names the requests in order, and says which one looks avoidable. A chain of
+two with different inputs, such as a report and then its author, is not reported.
+
 An agent gets the same with `get_trace` and a `lens`, or `get_navigation` for the newest
-route change. From a shell:
+route change, which also carries the chains. From a shell:
 
 ```sh
 bun run --cwd packages/devtools-mcp cli trace --lens data

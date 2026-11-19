@@ -821,16 +821,11 @@ const noteOf = (attributes: Readonly<Record<string, string>>): string => {
 const askedBefore = (
   span: Spans.Recorded,
   ordered: ReadonlyArray<Sided>,
-): Spans.Recorded | undefined => {
-  const source = span.attributes["spar.query.after"] ?? ""
-  if (source === "" || !span.name.endsWith("/requested")) return undefined
-
-  const asked = `${source.split(" . ")[0]?.split("made from ").at(-1)}/requested`
-
-  return ordered.findLast(
-    (each) => each.span.name === asked && each.span.startedAt <= span.startedAt,
-  )?.span
-}
+): Spans.Recorded | undefined =>
+  Spans.sourceOf(
+    span,
+    ordered.map((each) => each.span),
+  )
 
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
@@ -912,8 +907,15 @@ export const TracePanel = View.taking(
 
     yield* observed(traceId, (id) => start(asked(id)))
 
+    const chains = Reactive.map(shown, ([[[id]]]) =>
+      Spans.chainsOf(Option.toArray(page).flatMap((buffer) => buffer.ofTrace(id)))
+        .map(Spans.chainText)
+        .join("\n\n"),
+    )
+
     return {
       traceId,
+      chains,
       summary: Reactive.map(bars, (all) =>
         all.length === 0 ? "No trace picked yet" : `${all.length} spans`,
       ),

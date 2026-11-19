@@ -350,6 +350,7 @@ export const Tag =
           return Effect.annotateSpans(store.commands.requested({ ...wanted, after, ...from }), {
             "spar.kind": "data",
             "spar.query.after": after ?? "",
+            "spar.query.input": wanted.key,
           })
         },
         { discard: true },

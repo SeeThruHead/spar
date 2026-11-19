@@ -291,6 +291,47 @@ describe("one log of everything that happened", () => {
     expect(Devtools.barsOf([])).toEqual([])
   })
 
+  it("a chain of requests that each waited for the one before is named, with what looks avoidable", () => {
+    const asked = (query: string, at: number, after: string, input: string): Spans.Recorded => ({
+      ...recorded(`${query}/requested`, null, at, at + 1, false),
+      attributes: { "spar.query.after": after, "spar.query.input": input },
+    })
+    const three = [
+      asked("shop/Author", 30, "made from shop/Report . value", '"ada"'),
+      asked("shop/Org", 10, "", '"acme"'),
+      asked("shop/Report", 20, "shop/Org . value", '"q3"'),
+      { ...recorded("Lookup", null, 21, 29, false), attributes: { "spar.query.after": "x" } },
+    ]
+
+    expect(Spans.chainsOf(three)).toEqual([
+      { requests: ["shop/Org", "shop/Report", "shop/Author"], sameInput: [] },
+    ])
+    expect(
+      Spans.chainsOf([
+        asked("shop/Report", 10, "", '"q3"'),
+        asked("shop/Author", 20, "shop/Report . value", '"ada"'),
+        asked("shop/Stock", 5, "", '"q3"'),
+      ]),
+    ).toEqual([])
+    expect(
+      Spans.chainsOf([
+        asked("shop/Report", 10, "", '"q3"'),
+        asked("shop/Notes", 20, "shop/Report . value", '"q3"'),
+        { ...recorded("shop/Old/requested", null, 1, 2, false), attributes: {} },
+        { ...asked("shop/Lost", 3, "shop/Missing . value", '"q3"') },
+      ]).map(Spans.chainText),
+    ).toEqual([
+      [
+        "[SPAR_QUERY_CHAIN] 2 requests ran one after another: shop/Report, then shop/Notes. shop/Notes had the same input as the request before it, so it did not need that answer to start.",
+        "  fix: If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.",
+        '  see: LLMS.md, section "SPAR_QUERY_CHAIN"',
+      ].join("\n"),
+    ])
+    expect(Spans.chainText({ requests: ["a", "b", "c"], sameInput: [] })).toContain(
+      "3 requests ran one after another: a, then b, then c.\n",
+    )
+  })
+
   it("a span belongs to one lens, by what made it", () => {
     expect(Spans.lensOf(made({}), "backend")).toBe("backend")
     expect(Spans.lensOf(made({ "spar.kind": "view" }), "page")).toBe("rendering")

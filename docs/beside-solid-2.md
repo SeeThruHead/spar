@@ -64,10 +64,12 @@ to "read ALL async sources before using any". In Spar `ask` returns at once, so 
 component always start together, and the only way to make a waterfall is to wait in a component's
 Effect, which is what the two Spar checks look for.
 
-What Solid's check does that Spar's do not: it names the whole chain with the time of each link,
-from the running app, without anyone opening a trace. Spar has the same facts in its trace but no
-diagnostic that says "these three requests ran one after another". That would be one more code,
-raised from the `spar.query.after` chain. It is not built.
+Spar now reports a chain too (`SPAR_QUERY_CHAIN`): three or more requests that each waited for
+the one before, or two where the second had the same input as the first and so did not need its
+answer. It is worked out from the spans of a trace, so it shows in the trace panel and comes
+back from the agents' navigation tool. What Solid's check still does that Spar's does not: it
+gives the time of each link, and it warns from the running app without anyone asking for a
+trace.
 
 What Spar's check does that Solid's does not, as far as the package shows: it stops the build
 before the code runs.

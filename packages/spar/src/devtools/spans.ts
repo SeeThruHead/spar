@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Schema, Tracer } from "effect"
 import * as Cell from "../internal/cell.ts"
+import * as Diagnostics from "../Diagnostics.ts"
 
 export const Recorded = Schema.Struct({
   name: Schema.String,
@@ -30,6 +31,71 @@ export const lensOf = (span: Recorded, where: "page" | "backend"): Lens | "other
 
 export const inLens = (lens: string, span: Recorded, where: "page" | "backend"): boolean =>
   lens === "all" || lensOf(span, where) === lens
+
+const requestedSuffix = "/requested"
+
+const isRequest = (span: Recorded): boolean => span.name.endsWith(requestedSuffix)
+
+const queryOf = (span: Recorded): string => span.name.slice(0, -requestedSuffix.length)
+
+export const sourceOf = (
+  span: Recorded,
+  ordered: ReadonlyArray<Recorded>,
+): Recorded | undefined => {
+  const from = span.attributes["spar.query.after"] ?? ""
+  if (from === "" || !isRequest(span)) return undefined
+
+  const asked = `${from.split(" . ")[0]?.split("made from ").at(-1)}${requestedSuffix}`
+
+  return ordered.findLast((each) => each.name === asked && each.startedAt <= span.startedAt)
+}
+
+export type Chain = {
+  readonly requests: ReadonlyArray<string>
+  readonly sameInput: ReadonlyArray<string>
+}
+
+const upTo = (span: Recorded, ordered: ReadonlyArray<Recorded>): ReadonlyArray<Recorded> => {
+  const source = sourceOf(span, ordered)
+
+  return source === undefined ? [span] : [...upTo(source, ordered), span]
+}
+
+const sameInputAsSource = (span: Recorded, ordered: ReadonlyArray<Recorded>): boolean => {
+  const input = span.attributes["spar.query.input"]
+  if (input === undefined) return false
+
+  return sourceOf(span, ordered)?.attributes["spar.query.input"] === input
+}
+
+const worthSaying = (chain: Chain): boolean =>
+  chain.requests.length >= 3 || chain.sameInput.length > 0
+
+export const chainsOf = (spans: ReadonlyArray<Recorded>): ReadonlyArray<Chain> => {
+  const ordered = spans
+    .filter(isRequest)
+    .toSorted((left, right) => left.startedAt - right.startedAt)
+  const sources = new Set(ordered.flatMap((span) => sourceOf(span, ordered)?.spanId ?? []))
+
+  return ordered
+    .filter((span) => !sources.has(span.spanId))
+    .map((leaf) => upTo(leaf, ordered))
+    .map((links) => ({
+      requests: links.map(queryOf),
+      sameInput: links.filter((link) => sameInputAsSource(link, ordered)).map(queryOf),
+    }))
+    .filter(worthSaying)
+}
+
+const avoidable = (names: ReadonlyArray<string>): string =>
+  names.length === 0
+    ? ""
+    : ` ${names.join(" and ")} had the same input as the request before it, so it did not need that answer to start.`
+
+export const chainText = (chain: Chain): string =>
+  Diagnostics.text("SPAR_QUERY_CHAIN", {
+    said: `${chain.requests.length} requests ran one after another: ${chain.requests.join(", then ")}.${avoidable(chain.sameInput)}`,
+  })
 
 const millis = (nanos: bigint): number => Number(nanos / 1000n) / 1000
 

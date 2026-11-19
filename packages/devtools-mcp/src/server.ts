@@ -379,11 +379,12 @@ export const Navigation = Schema.Struct({
   route: Schema.NullOr(Schema.String),
   traceId: Schema.NullOr(Schema.String),
   spans: Schema.Array(Spans.Recorded),
+  chains: Schema.Array(Schema.String),
 })
 
 const GetNavigation = Tool.make("get_navigation", {
   description:
-    "The newest route change and every span of its trace: the route, its trace id and the spans as get_trace gives them. Give `back` to count route changes back from the newest (1 is the one before), and `lens` to keep one kind of span. The route is null when the app has not changed route yet.",
+    "The newest route change and every span of its trace: the route, its trace id and the spans as get_trace gives them. Give `back` to count route changes back from the newest (1 is the one before), and `lens` to keep one kind of span. `chains` names any run of requests that each waited for the one before (SPAR_QUERY_CHAIN), whatever the lens. The route is null when the app has not changed route yet.",
   parameters: Schema.Struct({
     back: Schema.optional(Schema.Int),
     lens: Schema.optional(Spans.Lens),
@@ -393,11 +394,14 @@ const GetNavigation = Tool.make("get_navigation", {
 
 const navigationOf = (page: Page, back: number, lens: Spans.Lens) => {
   const route = page.moments.filter((each) => each.kind === "route").at(-1 - back)
-  if (route === undefined) return { route: null, traceId: null, spans: [] }
+  if (route === undefined) return { route: null, traceId: null, spans: [], chains: [] }
+
+  const whole = page.spans.filter((span) => span.traceId === route.traceId)
 
   return {
     route: route.name,
     traceId: route.traceId,
+    chains: Spans.chainsOf(whole).map(Spans.chainText),
     spans: page.spans.filter(
       (span) => span.traceId === route.traceId && Spans.inLens(lens, span, "page"),
     ),

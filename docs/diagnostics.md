@@ -69,6 +69,14 @@ Fix: Find what its Effect waits for, usually a service call that loads data, and
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_QUERY_CHAIN
+
+Requests ran one after another: each could start only when the one before had answered.
+
+Fix: If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_DUPLICATE_KEY
 
 A keyed list has rows that share a key.
