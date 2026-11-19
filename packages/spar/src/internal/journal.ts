@@ -29,6 +29,7 @@ export class Refused extends Data.TaggedClass("Refused")<{ readonly reason: stri
 
 export type Action<State, Payload> = {
   readonly encode: (input: unknown) => Effect.Effect<Schema.Json, Schema.SchemaError>
+  readonly payload: () => Schema.Json
   readonly decode: (payload: Schema.Json) => Effect.Effect<Payload, Schema.SchemaError>
   readonly attempt: (
     payload: Schema.Json,

@@ -100,6 +100,9 @@ describe("a store asked to fork", () => {
       const { tally, inspected } = yield* addedTwice(10)
       const back = yield* inspected.hold
 
+      expect(inspected.actions().map((action) => action.name)).toEqual(["added"])
+      expect(JSON.stringify(inspected.actions())).toContain('"by"')
+
       yield* inspected.forkAt(1)
       expect(yield* tally.select.count.get).toBe(1)
       expect((yield* tally.log.get).map((entry) => entry.seq)).toEqual([1])
@@ -244,6 +247,7 @@ describe("forking the running program", () => {
         log: Reactive.succeed([]),
         viewing: Reactive.succeed(null),
         travelTo: () => Effect.void,
+        actions: () => [],
         hold: Effect.succeed(Effect.void),
         forkAt: (seq) => Ref.update(forkedAt, (all) => [...all, seq]),
         load: () => Effect.void,

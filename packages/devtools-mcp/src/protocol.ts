@@ -8,6 +8,7 @@ export const Snapshot = Schema.Struct({
   store: Schema.String,
   state: Schema.String,
   log: Store.Entries,
+  actions: Schema.Array(Schema.Struct({ name: Schema.String, payload: Schema.Json })),
   viewing: Schema.NullOr(Schema.Int),
 })
 

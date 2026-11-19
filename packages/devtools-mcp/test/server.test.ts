@@ -137,6 +137,8 @@ describe("the devtools server for agents", () => {
         "step",
         "count_moments",
         "diff_states",
+        "get_actions",
+        "run_actions",
       ])
 
       yield* tally.commands.added({ by: 1 })
@@ -335,6 +337,22 @@ describe("the devtools server for agents", () => {
       expect(back.said).toMatchObject([{ current: true }, { current: false, moments: 3 }])
       expect(yield* tally.state.get).toEqual({ count: 7 })
       expect((yield* mcp.call("list_branches", {})).said).toEqual(back.said)
+
+      const actions = yield* mcp.call("get_actions", { store: "test/Tally" })
+
+      expect(actions.said).toMatchObject([{ name: "added" }])
+      expect(JSON.stringify(actions.said)).toContain('"by"')
+
+      const several = yield* mcp.call("run_actions", {
+        store: "test/Tally",
+        actions: [
+          { action: "added", payload: { by: 100 } },
+          { action: "added", payload: { by: -100 } },
+        ],
+      })
+
+      expect(stateOf(several.said)).toEqual({ count: 7 })
+      expect((yield* mcp.call("get_actions", { store: "none" })).failed).toBe(true)
 
       const changed = yield* mcp.call("diff_states", { store: "test/Tally", from: 1, to: 3 })
 

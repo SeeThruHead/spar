@@ -108,6 +108,7 @@ export type Inspected = {
   readonly log: Reactive<ReadonlyArray<Entry>>
   readonly viewing: Reactive<number | null>
   readonly travelTo: (seq: number | null) => Effect.Effect<void>
+  readonly actions: () => ReadonlyArray<{ readonly name: string; readonly payload: Schema.Json }>
   readonly hold: Effect.Effect<Effect.Effect<void>>
   readonly forkAt: (seq: number) => Effect.Effect<void>
   readonly load: (
@@ -171,6 +172,7 @@ export const action = <Payload, Encoded, State>(
 
   return {
     encode: Schema.encodeUnknownEffect(json),
+    payload: () => Schema.decodeUnknownSync(Schema.Json)(Schema.toJsonSchemaDocument(json)),
     decode,
     attempt,
     reducer: (payload) =>
@@ -496,6 +498,8 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         log,
         viewing,
         travelTo,
+        actions: () =>
+          Record.toEntries(named).map(([name, handled]) => ({ name, payload: handled.payload() })),
         hold,
         forkAt,
         load,

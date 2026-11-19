@@ -145,6 +145,25 @@ const RunAction = Tool.make("run_action", {
   failure: Schema.String,
 })
 
+const GetActions = Tool.make("get_actions", {
+  description:
+    "A store's actions: each one's name and the JSON Schema of the payload it takes. Read this before run_action.",
+  parameters: Schema.Struct({ store }),
+  success: Schema.Array(Schema.Struct({ name: Schema.String, payload: Schema.Json })),
+  failure: Schema.String,
+})
+
+const RunActions = Tool.make("run_actions", {
+  description:
+    "Carry out several of a store's actions in order, each exactly as the app would. Stops at the first that cannot be carried out. Returns the state after.",
+  parameters: Schema.Struct({
+    store,
+    actions: Schema.Array(Schema.Struct({ action: Schema.String, payload: Schema.Json })),
+  }),
+  success: Schema.String,
+  failure: Schema.String,
+})
+
 const LoadLog = Tool.make("load_log", {
   description:
     "Replay a log of actions from the store's first state and show the result, without changing the live state. travel_to with null returns to live.",
@@ -335,6 +354,8 @@ export const Tools = Toolkit.make(
   Step,
   CountMoments,
   DiffStates,
+  GetActions,
+  RunActions,
 )
 
 const ToolHandlers = Tools.toLayer(
@@ -403,6 +424,16 @@ const ToolHandlers = Tools.toLayer(
           page.spans.filter(
             (span) => span.traceId === traceId && Spans.inLens(lens ?? "all", span, "page"),
           ),
+        ),
+      get_actions: ({ store: key }) => Effect.map(found(key), (now) => now.actions),
+      run_actions: ({ store: key, actions }) =>
+        Effect.andThen(
+          Effect.forEach(
+            actions,
+            ({ action, payload }) => pages.ask({ _tag: "Run", store: key, action, payload }),
+            { discard: true },
+          ),
+          Effect.map(found(key), (now) => now.state),
         ),
       list_branches: () => Effect.map(pages.page, (page) => page.branches),
       fork: () =>
