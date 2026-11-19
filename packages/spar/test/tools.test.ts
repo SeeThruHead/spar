@@ -162,6 +162,9 @@ const backend: typeof globalThis.fetch = Object.assign(
   { preconnect: () => undefined },
 )
 
+const traceShown = (): string | null | undefined =>
+  screen.getByLabelText("Trace").querySelector("small")?.textContent
+
 const spans = (): ReadonlyArray<string> =>
   [...screen.getByLabelText("Spans").querySelectorAll("li")].map((item) =>
     [
@@ -207,9 +210,19 @@ describe("devtools an app did not ask for", () => {
         ).toEqual(["true", "false", "false"])
         yield* Testing.click("button", "Later")
         yield* shows("1", "hi", "At 2")
+
+        const second = traceShown()
+
         yield* Testing.click("button", "Earlier")
         yield* Testing.click("button", "Earlier")
         yield* shows("0", "hi", "At 1")
+        yield* Testing.eventually(() => expect(traceShown()).not.toBe(second))
+
+        const first = traceShown()
+
+        expect([first?.length, second?.length]).toEqual([32, 32])
+        yield* Testing.click("button", "Trace 1")
+        expect(traceShown()).toBe(first)
         yield* Testing.click("button", "Back to now")
         yield* shows("1", "later", "Now")
         yield* Testing.click("button", "Earlier")
@@ -334,6 +347,23 @@ describe("devtools an app did not ask for", () => {
         )
 
         const drawn = spans()
+        const [waitedLine, bar] = [
+          ...(screen
+            .getByLabelText("Spans")
+            .querySelector('li[data-where="page"]')
+            ?.querySelectorAll<HTMLElement>("div > div") ?? []),
+        ]
+
+        expect([
+          waitedLine?.getAttribute("data-waited"),
+          waitedLine?.style.left,
+          waitedLine?.style.width,
+        ]).toEqual(["0.00%", bar?.style.left, "0.00%"])
+        expect(bar?.style.left).toMatch(/^\d+\.\d\d%$/)
+        expect(bar?.style.width).toMatch(/^\d+\.\d\d%$/)
+        expect(
+          screen.getByLabelText("Spans").querySelector("li small:nth-of-type(2)")?.textContent,
+        ).toMatch(/^\d+\.\d ms$/)
 
         expect(drawn.filter((span) => span.startsWith("page"))).toEqual([
           "page on click no 0px",
