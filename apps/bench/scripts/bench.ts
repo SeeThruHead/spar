@@ -328,6 +328,22 @@ const megabytes = (bytes: number): string => `${(bytes / 1_048_576).toFixed(1)} 
 
 const kilobytes = (bytes: number): string => `${(bytes / 1024).toFixed(1)} kB`
 
+const timesSolid = (value: number, solid: number): string =>
+  solid > 0 ? `${(value / solid).toFixed(2)}× Solid` : "Solid not measured"
+
+const relative = (
+  results: ReadonlyArray<Result>,
+  measured: (result: Result) => number,
+  shown: (value: number) => string,
+): ReadonlyArray<string> => {
+  const solid = results.find((result) => result.framework === "solid")
+  const base = solid === undefined ? 0 : measured(solid)
+
+  return results.map(
+    (result) => `${timesSolid(measured(result), base)}<br>${shown(measured(result))}`,
+  )
+}
+
 const row = (label: string, cells: ReadonlyArray<string>): string =>
   `| ${label} | ${cells.join(" | ")} |`
 
@@ -342,7 +358,9 @@ const report = (results: ReadonlyArray<Result>, browserVersion: string): string 
     `after ${warmups} warm-up runs, from the click until the next frame after the DOM reached its final state.`,
     "Lower is better. Rerun with `bun run bench` at the repo root, which also writes docs/benchmarks.html with the graphs.",
     "",
-    "Change one row among 10,000 is the suite chosen for Spar's model, where one store action should end in one text node changing. It is timed twice: to the next frame like the rest, and until the DOM changed, which leaves out the browser's own layout and paint of 10,000 rows. Solid wins it by a wide margin, because it sets one signal. In Spar the store action builds a new array of 10,000 rows and the keyed list is given all of them, so it still walks every key, but it now only compares them and rewrites the one row that changed. Startup is the time from the start of navigation until the app's first button is in the page, from a local server.",
+    "Each cell leads with the result against Solid's in the same run (Solid is 1.00×), with the measurement under it. The CI pool hands out different machines from week to week, so compare the ratios across weeks, not the milliseconds.",
+    "",
+    "Change one row among 10,000 is the suite chosen for Spar's model, where one store action should end in one text node changing. It is timed twice: to the next frame like the rest, and until the DOM changed, which leaves out the browser's own layout and paint of 10,000 rows. Solid sets one signal. In Spar the store action replaces the row with `Store.withRow`, so the keyed list rewrites that row without walking the other 9,999; what is left is the command itself (its span, its journal entry, the fiber that runs it). Startup is the time from the start of navigation until the app's first button is in the page, from a local server.",
     "",
     row(
       "Operation",
@@ -355,32 +373,32 @@ const report = (results: ReadonlyArray<Result>, browserVersion: string): string 
     ...operations.map((operation) =>
       row(
         operation.label,
-        results.map((result) => ms(result.timings[operation.id]?.median ?? 0)),
+        relative(results, (result) => result.timings[operation.id]?.median ?? 0, ms),
       ),
     ),
     row(
       "Heap after 1,000 rows",
-      results.map((result) => megabytes(result.heapAfter1k)),
+      relative(results, (result) => result.heapAfter1k, megabytes),
     ),
     row(
       "Heap after 10,000 rows",
-      results.map((result) => megabytes(result.heapAfter10k)),
+      relative(results, (result) => result.heapAfter10k, megabytes),
     ),
     row(
       "Typical frame while scrolling 10,000 rows",
-      results.map((result) => ms(result.typicalFrameAt10k)),
+      relative(results, (result) => result.typicalFrameAt10k, ms),
     ),
     row(
       "Slowest frame while scrolling 10,000 rows",
-      results.map((result) => ms(result.slowestFrameAt10k)),
+      relative(results, (result) => result.slowestFrameAt10k, ms),
     ),
     row(
       "Startup, until the app is in the page",
-      results.map((result) => ms(result.startup)),
+      relative(results, (result) => result.startup, ms),
     ),
     row(
       "JavaScript shipped (gzip)",
-      results.map((result) => kilobytes(result.bundleBytes)),
+      relative(results, (result) => result.bundleBytes, kilobytes),
     ),
     "",
   ].join("\n")
