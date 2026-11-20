@@ -190,61 +190,6 @@ export const MissingPageView = View.make("MissingPageView", { path: Schema.Strin
   </section>
 ))
 
-export const ServerRecordView = View.make(
-  "ServerRecordView",
-  { text: Props.Reactive(Schema.String) },
-  ({ text }) => <p aria-label="Server record">{text}</p>,
-)
-
-export const AgentPageView = View.make(
-  "AgentPageView",
-  {
-    record: Props.Element,
-    notes: Props.Element,
-    name: Props.Reactive(Schema.String),
-    status: Props.Reactive(Schema.String),
-    project: Props.Reactive(Schema.String),
-    tags: Props.Reactive(Schema.String),
-    pinLabel: Props.Reactive(Schema.String),
-    idle: Props.Reactive(Schema.Boolean),
-    onPin: Props.Action,
-    home: Router.Link,
-  },
-  (props) => (
-    <section>
-      <p>
-        <a
-          href={props.home.href}
-          onClick={props.home.onClick}
-          onPointerenter={props.home.onIntent}
-          onFocus={props.home.onIntent}
-        >
-          All agents
-        </a>
-      </p>
-      <h1>{props.name}</h1>
-      <dl>
-        <dt>Status</dt>
-        <dd>{props.status}</dd>
-        <dt>Project</dt>
-        <dd>{props.project}</dd>
-        <dt>Tags</dt>
-        <dd>{props.tags}</dd>
-      </dl>
-      {props.record}
-      {props.notes}
-      <button
-        type="button"
-        class="spar-button spar-quiet"
-        disabled={props.idle}
-        onClick={props.onPin}
-      >
-        {props.pinLabel}
-      </button>
-    </section>
-  ),
-)
-
 export const AgentLoadingView = View.make("AgentLoadingView", { id: Schema.String }, ({ id }) => (
   <p role="status">Loading agent {id}</p>
 ))

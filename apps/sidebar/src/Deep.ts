@@ -1,6 +1,6 @@
 import { Effect, Layer, Schema } from "effect"
 import { Query, Router } from "spar"
-import { RecordQuery } from "./AgentPage.ts"
+import { RecordQuery } from "./AgentPage.tsx"
 import { Found, ServerUnreachable } from "./api.ts"
 import { Server } from "./server/Server.ts"
 

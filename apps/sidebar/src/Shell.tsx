@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { Handle, Router, View, compose, withEffect, withStore } from "spar"
 import { Toast } from "@spar/ui"
-import { AgentPage } from "./AgentPage.ts"
+import { AgentPage } from "./AgentPage.tsx"
 import { deepExample, orgRoute, reportRoute } from "./Deep.ts"
 import { DeepLoadingView } from "./DeepLoadingView.tsx"
 import { Notes } from "./Notes.tsx"
