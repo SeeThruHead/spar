@@ -65,7 +65,7 @@
       - text: Note
       - textbox "Note"
       - paragraph: Kept in Scratchpad
-      - paragraph
+      - alert
       - button "Add note"
   - region "Counter":
     - heading "Counter" [level=2]
@@ -130,6 +130,6 @@
     - text: What should it work on?
     - textbox "What should it work on?"
     - paragraph: A short name for the task
-    - paragraph
+    - alert
     - button "Start agent"
   - button "Close"

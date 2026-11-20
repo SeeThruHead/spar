@@ -78,7 +78,7 @@
       - text: Note
       - textbox "Note"
       - paragraph: Kept in Notes on this agent
-      - paragraph
+      - alert
       - button "Add note"
   - button "Pin to the top"
   - region "Scratchpad":
@@ -90,7 +90,7 @@
       - text: Note
       - textbox "Note"
       - paragraph: Kept in Scratchpad
-      - paragraph
+      - alert
       - button "Add note"
   - region "Counter":
     - heading "Counter" [level=2]

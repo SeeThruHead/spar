@@ -69,7 +69,7 @@
       - text: Note
       - textbox "Note"
       - paragraph: Kept in Scratchpad
-      - paragraph
+      - alert
       - button "Add note"
   - region "Counter":
     - heading "Counter" [level=2]
