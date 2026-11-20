@@ -1,6 +1,5 @@
 import { Duration, Effect, Option, Schema } from "effect"
-import { Events, Reactive, Store, View } from "spar"
-import { ResetCounterView } from "./ResetCounterView.tsx"
+import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
@@ -58,32 +57,8 @@ export const resetAfterDelay = Store.after(
     ),
 )
 
-const told = (refused: Option.Option<Store.Refusal>): string =>
+export const told = (refused: Option.Option<Store.Refusal>): string =>
   Option.match(refused, {
     onNone: () => "Nothing has been refused",
     onSome: (refusal) => `${refusal.action} was not accepted: ${refusal.reason}`,
   })
-
-const ResetCounterPanel = View.connect(
-  Effect.fnUntraced(function* () {
-    const store = yield* ResetCounterStore
-
-    yield* Events.onWindow("keydown", (event) =>
-      event.key === "+" ? store.commands.incremented() : [],
-    )
-
-    return {
-      count: store.select.count,
-      status: Reactive.map(store.select.resetting, (resetting) =>
-        resetting ? "Resetting" : "Counting",
-      ),
-      resetDuration: Reactive.map(store.select.resetDuration, String),
-      refused: Reactive.map(store.refused, told),
-      onIncrement: store.commands.incremented(),
-      onReset: store.commands.resetClicked(),
-      onDuration: store.commands.resetDurationChanged,
-    }
-  }),
-)(ResetCounterView)
-
-export const ResetCounter = ResetCounterStore.with(ResetCounterPanel, [resetAfterDelay])
