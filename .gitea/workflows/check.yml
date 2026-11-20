@@ -63,8 +63,6 @@ jobs:
         run: bun run moon run sidebar:devtools
       - name: Run the sidebar app against its backend and follow one trace through both
         run: bun run moon run sidebar:traced
-      - name: Build the docs site and check its diagrams can be read on a narrow screen
-        run: bun run moon run docs:look
       - name: Walk the site at phone and desktop sizes, in dark and light, and follow a link in a doc page
         run: bun run moon run site:look
       - name: A server-rendered page is taken over without remaking its nodes

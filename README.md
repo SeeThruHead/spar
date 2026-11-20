@@ -34,7 +34,7 @@ This repo is private and nothing here is published.
 - [The devtools beside Foldkit's](docs/devtools-compared.md)
 - [What is not done](docs/gaps.md)
 
-`bun run --cwd apps/docs dev` serves the same pages as a site on http://127.0.0.1:4183.
+`bun run --cwd apps/site dev` serves the same pages as a site built with Spar on http://127.0.0.1:4190.
 
 ## Run
 

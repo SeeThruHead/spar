@@ -63,9 +63,10 @@ passing test hides its console output.
 - `apps/sidebar`: the proof app, a port of a real Foldkit screen, with Gherkin scenarios.
 - `apps/ssr`: a small page rendered on a server and taken over in the browser, with a browser test
   that checks none of the server's nodes are made again.
-- `apps/docs`: turns `docs/*.md` into a static site (`bun run --cwd apps/docs dev`, port 4183), with
-  code highlighted and Mermaid diagrams drawn at build time; `docs:look` fails if diagram text
-  would be under 13px on a narrow screen.
+- `apps/site`: the docs site, built with Spar itself and server-rendered (`bun run --cwd apps/site
+  dev`, port 4190), with code highlighted and Mermaid diagrams drawn at build time; the build fails
+  if diagram text would be under 13px on a phone, and `site:look` walks it at phone and desktop
+  sizes in dark and light. It deploys to spar.sthloc.vip from `.gitea/workflows/site.yml`.
 - `apps/bench`: the same table app in Spar, Solid and Foldkit, with the leak and memory checks.
 
 ## How it starts

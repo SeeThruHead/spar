@@ -92,19 +92,6 @@
         "typescript": "7.0.2",
       },
     },
-    "apps/docs": {
-      "name": "@spar/docs",
-      "devDependencies": {
-        "@effect/tsgo": "0.67.7",
-        "@spar/lint": "workspace:*",
-        "@types/bun": "1.4.3",
-        "mermaid": "12.3.0",
-        "oxfmt": "0.73.0",
-        "oxlint": "1.91.0",
-        "playwright": "1.65.1",
-        "typescript": "7.0.2",
-      },
-    },
     "apps/sidebar": {
       "name": "@spar/sidebar",
       "dependencies": {
@@ -653,8 +640,6 @@
     "@spar/demo": ["@spar/demo@workspace:apps/demo"],
 
     "@spar/devtools-mcp": ["@spar/devtools-mcp@workspace:packages/devtools-mcp"],
-
-    "@spar/docs": ["@spar/docs@workspace:apps/docs"],
 
     "@spar/lint": ["@spar/lint@workspace:packages/lint"],
 
