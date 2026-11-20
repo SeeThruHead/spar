@@ -117,14 +117,6 @@ const isLayerOption = Schema.is(
   }),
 )
 
-const isMember = Schema.is(
-  Schema.Struct({
-    type: Schema.Literal("MemberExpression"),
-    object: Named,
-    property: Schema.Struct({ name: Schema.String }),
-  }),
-)
-
 const isRelative = (path: string): boolean => path.startsWith(".")
 
 const fileFor = (from: string, path: string, known: ReadonlySet<string>): string | null => {
@@ -233,16 +225,6 @@ const declaredNamed = (
         ),
   )
 
-const memberNames = (node: {
-  readonly object: { readonly name: string }
-  readonly property: { readonly name: string }
-}): ReadonlyArray<string> => {
-  if (!isCapital(node.object.name)) return []
-  if (!isCapital(node.property.name)) return [node.object.name]
-
-  return [node.object.name, `${node.object.name}.${node.property.name}`]
-}
-
 const providedBy = (
   world: World,
   file: string,
@@ -250,7 +232,6 @@ const providedBy = (
   followed: ReadonlySet<string>,
 ): ReadonlyArray<string> =>
   everyNode(layer).flatMap((node) => {
-    if (isMember(node)) return memberNames(node)
     if (!isName(node) || followed.has(`${file}#${node.name}`)) return []
 
     const named = isCapital(node.name) ? [node.name] : []
