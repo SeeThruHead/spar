@@ -197,7 +197,12 @@ export const SiteView = View.make(
         <search class="search">
           <label>
             <span class="search-label">Search the docs</span>
-            <input type="search" value={props.text} onInput={props.onSearch} />
+            <input
+              type="search"
+              placeholder="Search the docs"
+              value={props.text}
+              onInput={props.onSearch}
+            />
           </label>
           <div class={{ "search-panel": true, open: props.searching }}>
             <p role="status">{props.summary}</p>
