@@ -239,6 +239,7 @@ describe("forking the running program", () => {
       const registry = yield* Devtools.Registry
 
       yield* Testing.mount(Desk)
+      yield* shows("0", "")
       yield* registry.fork
       expect(yield* branches).toEqual([["Main", null, 0, true]])
     }).pipe(Effect.provide(layer)),
