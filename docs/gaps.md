@@ -51,6 +51,14 @@ Built since, and smaller than they sound, but not done:
   drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
+- **What a JSX child needs is not in its parent's type.** TypeScript gives every JSX expression one
+  type, so a child component drawn as a tag in a view can need a service its parent's type does
+  not show. `App.mount` still checks the top component; a missing service for a child shows when
+  that child mounts, not at compile time.
+- **The bundle is large and starts slower than Solid's.** The benchmark app ships 68 kB gzipped
+  (Solid 6 kB, React 68 kB) and is on the page in 13.6 ms (Solid 4.9 ms). About 35 kB is the floor
+  any Effect front end pays; the start-up time is the browser parsing and running that bundle, not
+  any one slow function (`docs/benchmarks.md`).
 
 The joined trace has been looked up in Tempo: run with `OTLP_ENDPOINT` set, one form submit in the
 proof app came back from Tempo as one trace with spans from the page and from the backend under one
