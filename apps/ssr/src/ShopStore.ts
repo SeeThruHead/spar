@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Model, Store } from "spar"
+import { Store } from "spar"
 
 export const Item = Schema.Struct({ id: Schema.String, name: Schema.String })
 
@@ -11,7 +11,7 @@ type State = typeof State.Type
 
 const initialState: State = { items: [] }
 
-export class ShopStore extends Model.Tag<ShopStore>()("ssr/ShopStore", {
+export class ShopStore extends Store.Tag<ShopStore>()("ssr/ShopStore", {
   state: State,
   initialState,
   actions: {

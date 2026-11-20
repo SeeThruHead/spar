@@ -1,5 +1,5 @@
 import { Duration, Effect, FiberHandle, Schema } from "effect"
-import { Model, Store } from "spar"
+import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Int,
@@ -10,7 +10,7 @@ type State = typeof State.Type
 
 const initialState: State = { count: 0, resetting: false }
 
-export class CounterStore extends Model.Tag<CounterStore>()("Counter", {
+export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
   state: State,
   initialState,
   actions: {

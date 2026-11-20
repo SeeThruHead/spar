@@ -4,14 +4,13 @@ import { KeyValueStore } from "effect/persistence"
 import { Store, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
-import * as Model from "../src/Model.ts"
 import * as State from "../src/State.ts"
 
 const Counting = Schema.Struct({ count: Schema.Int, resetting: Schema.Boolean })
 
 type Counting = typeof Counting.Type
 
-class CounterModel extends Model.Tag<CounterModel>()("test/CounterModel", {
+class CounterModel extends Store.Tag<CounterModel>()("test/CounterModel", {
   state: Counting,
   initialState: { count: 0, resetting: false },
   actions: {
@@ -120,6 +119,10 @@ describe("a store on one state", () => {
         count: 7,
         resetting: false,
       })
+      yield* inspected?.travelTo(0) ?? Effect.void
+      expect(yield* counter.select.count.get).toBe(0)
+      yield* inspected?.travelTo(null) ?? Effect.void
+      expect(yield* counter.select.count.get).toBe(6)
       yield* inspected?.forkAt(2) ?? Effect.void
       expect(yield* counter.select.count.get).toBe(3)
       expect(inspected?.actions().map((action) => action.name)).toEqual([

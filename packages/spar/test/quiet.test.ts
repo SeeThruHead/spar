@@ -64,7 +64,7 @@ const Shown = compose(
   }),
 )(MarkView)
 
-const layer = Layer.provide(Page.layer(), SecureRandom.layerWebCrypto)
+const layer = Layer.provide(Page.layer, SecureRandom.layerWebCrypto)
 
 describe("a change touches only what it changed", () => {
   it.live("a binding whose value did not change is not written again, even the first time", () =>

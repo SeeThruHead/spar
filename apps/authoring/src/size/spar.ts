@@ -1,11 +1,11 @@
 import { Effect, Layer, Schema } from "effect"
-import { Model, State, Store } from "spar"
+import { State, Store } from "spar"
 
 const CounterState = Schema.Struct({ count: Schema.Int })
 
 type CounterState = typeof CounterState.Type
 
-class Counter extends Model.Tag<Counter>()("size/Counter", {
+class Counter extends Store.Tag<Counter>()("size/Counter", {
   state: CounterState,
   initialState: { count: 0 },
   actions: {

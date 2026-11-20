@@ -24,7 +24,7 @@ This repo is private and nothing here is published.
   a query declared beside the component that uses it, and everything loading at once
 - [Getting started](docs/getting-started.md)
 - [State, events that interleave, and server data](docs/state-and-server-data.md): UI state or
-  store state, stores as state machines, queries as stores, beside Foldkit and Treflex
+  store state, work that takes time as Effects, queries as stores, beside Foldkit and Treflex
 - [Principles](docs/principles.md): what each rule is and what it rules out
 - [API](docs/api.md): every module with an example
 - [Recipes](docs/recipes.md): timers, sockets, offline, dialogs, testing, tracing

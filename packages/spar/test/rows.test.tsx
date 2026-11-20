@@ -105,7 +105,7 @@ describe("a row a store changed with Store.withRow", () => {
 
         yield* store.commands.replaced({ at: 0, id: "z" })
         yield* Testing.eventually(() => expect(labels()).toEqual(["Z", "Bee", "Gamma"]))
-      }).pipe(Effect.provide(Listed.layer())),
+      }).pipe(Effect.provide(Listed.layer)),
   )
 
   it.live("asks for the key of the changed row only, with withRow or in a copy", () =>
@@ -126,6 +126,6 @@ describe("a row a store changed with Store.withRow", () => {
       yield* store.commands.renamedInACopy({ at: 2, label: "Sea" })
       yield* Testing.eventually(() => expect(labels()).toEqual(["Alpha", "Bee", "Sea"]))
       expect(keysSince(copied)).toBe(1)
-    }).pipe(Effect.provide(Listed.layer())),
+    }).pipe(Effect.provide(Listed.layer)),
   )
 })

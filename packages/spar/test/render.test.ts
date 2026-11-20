@@ -75,7 +75,7 @@ class LoadFailed extends Schema.TaggedError<LoadFailed, { readonly brand: unique
   },
 ) {}
 
-const layer = Layer.mergeAll(Board.layer(), Probe.layer).pipe(
+const layer = Layer.mergeAll(Board.layer, Probe.layer).pipe(
   Layer.provide(SecureRandom.layerWebCrypto),
 )
 

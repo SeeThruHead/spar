@@ -32,7 +32,7 @@ with a Schema for each payload, and named selectors with a Schema for what each 
 
 ```ts
 import { Schema } from "effect"
-import { Model, Store } from "spar"
+import { Store } from "spar"
 
 const State = Schema.Struct({ count: Schema.Finite })
 
@@ -40,7 +40,7 @@ type State = typeof State.Type
 
 const initialState: State = { count: 0 }
 
-export class CounterStore extends Model.Tag<CounterStore>()("demo/counter/CounterStore", {
+export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/CounterStore", {
   state: State,
   initialState,
   actions: {

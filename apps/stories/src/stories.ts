@@ -1,5 +1,5 @@
 import { Effect, Schema, pipe } from "effect"
-import { Form, Model, Reactive, Store, UiState, View, compose } from "spar"
+import { Form, Reactive, Store, UiState, View, compose } from "spar"
 import { Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
   ControlsView,
@@ -21,7 +21,7 @@ const Profile = Schema.Struct({
 
 const idle = Reactive.succeed(false)
 
-class Saved extends Model.Tag<Saved>()("stories/Saved", {
+class Saved extends Store.Tag<Saved>()("stories/Saved", {
   state: Schema.String,
   initialState: "nothing yet",
   actions: {

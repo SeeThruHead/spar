@@ -44,7 +44,7 @@ const database = Effect.succeed<State>({ items: ["<rice>", "beans"] })
 
 const onServer = Shelf.layerFrom(database).pipe(Layer.provide(SecureRandom.layerWebCrypto))
 
-const inBrowser = Shelf.layer().pipe(Layer.provide(SecureRandom.layerWebCrypto))
+const inBrowser = Shelf.layer.pipe(Layer.provide(SecureRandom.layerWebCrypto))
 
 const sentPage = (document_: string) =>
   Effect.acquireRelease(

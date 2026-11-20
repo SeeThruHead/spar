@@ -40,6 +40,7 @@ export class Kept<A> implements Cell.Cell<A> {
   readonly inner: Cell.Cell<A>
   readonly tree: Tree
   readonly first: Cell.Cell<A>
+  readonly live: Cell.Cell<A>
   readonly past = Cell.make<Past<A> | undefined>(undefined)
 
   constructor(path: Path, name: string, schema: Schema.Codec<A, unknown>, initial: A, tree: Tree) {
@@ -48,6 +49,7 @@ export class Kept<A> implements Cell.Cell<A> {
     this.schema = schema
     this.inner = Cell.make(initial)
     this.first = Cell.make(initial)
+    this.live = Cell.make(initial)
     this.tree = tree
   }
 
@@ -60,18 +62,38 @@ export class Kept<A> implements Cell.Cell<A> {
   }
 
   showAt(seq: number): void {
-    this.write(reached(this.past.read(), seq)?.value ?? this.first.read())
+    this.display(reached(this.past.read(), seq)?.value ?? this.first.read())
   }
 
   forkAt(seq: number): void {
     this.past.write(reached(this.past.read(), seq))
+    this.live.write(this.past.read()?.value ?? this.first.read())
   }
 
   read(): A {
     return this.inner.read()
   }
 
+  current(): A {
+    return this.live.read()
+  }
+
+  saved(): () => void {
+    const past = this.past.read()
+    const live = this.live.read()
+
+    return () => {
+      this.past.write(past)
+      this.write(live)
+    }
+  }
+
   write(value: A): void {
+    this.live.write(value)
+    this.display(value)
+  }
+
+  display(value: A): void {
     if (Object.is(this.inner.read(), value)) return
 
     this.inner.write(value)
@@ -158,7 +180,11 @@ export class Tree {
   }
 
   root(): Place {
-    return this.enter(this, () => []).place
+    const { place } = this.enter(this, () => [])
+
+    this.taken.delete(placeKey(place.path))
+
+    return place
   }
 
   release(kept: AnyKept): void {
@@ -242,6 +268,10 @@ export class Tree {
 
   snapshot(): Snapshot {
     return [...this.kept.values()].flatMap((kept) => Option.toArray(kept.entry()))
+  }
+
+  uiSnapshot(): Snapshot {
+    return this.snapshot().filter((entry) => entry.path.length > 0)
   }
 
   put(path: Path, name: string, value: Schema.Json): boolean {

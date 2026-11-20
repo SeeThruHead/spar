@@ -72,7 +72,7 @@ export const update: {
 )
 
 export const snapshot: Effect.Effect<Internal.Snapshot> = Effect.map(Effect.service(Tree), (tree) =>
-  tree.snapshot(),
+  tree.uiSnapshot(),
 )
 
 export const restore = (taken: Internal.Snapshot): Effect.Effect<void> =>

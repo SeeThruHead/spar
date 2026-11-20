@@ -23,7 +23,6 @@ import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Events from "./Events.ts"
-import * as Model from "./Model.ts"
 import * as Store from "./Store.ts"
 import * as Timeline from "./Timeline.ts"
 import * as UiState from "./UiState.ts"
@@ -330,8 +329,8 @@ export const Tag =
         ),
       },
     }
-    const base = Model.Tag<Self>()(key, definition)
-    type Held = Model.Shape<State<A, E>, typeof definition.actions, typeof definition.selectors>
+    const base = Store.Tag<Self>()(key, definition)
+    type Held = Store.Shape<State<A, E>, typeof definition.actions, typeof definition.selectors>
     type Runner = {
       readonly loads: FiberMap.FiberMap<string>
       readonly drops: FiberMap.FiberMap<string>
@@ -666,7 +665,7 @@ export const Tag =
       return store
     })
     const startedAt = (storeKey: string) =>
-      Effect.flatMap(Model.made(storeKey, definition, Effect.succeed(initialState)), running)
+      Effect.flatMap(Store.made(storeKey, definition, Effect.succeed(initialState)), running)
 
     return class extends base {
       static readonly live = Layer.effect(base, Effect.flatMap(startedAt(key), adopted))

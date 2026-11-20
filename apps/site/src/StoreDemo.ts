@@ -1,5 +1,5 @@
 import { Effect, FiberHandle, Schema } from "effect"
-import { Model, Reactive, Store, compose, withStore } from "spar"
+import { Reactive, Store, compose, withStore } from "spar"
 import { StoreDemoView } from "./StoreDemoView.tsx"
 
 const State = Schema.Struct({
@@ -9,7 +9,7 @@ const State = Schema.Struct({
 
 type State = typeof State.Type
 
-export class CounterStore extends Model.Tag<CounterStore>()("site/Counter", {
+export class CounterStore extends Store.Tag<CounterStore>()("site/Counter", {
   state: State,
   initialState: { count: 0, resetting: false },
   actions: {

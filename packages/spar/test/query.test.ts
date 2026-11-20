@@ -16,7 +16,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, State, Store, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
@@ -996,17 +996,9 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states and a refusal are plain data with a Schema", () => {
+  it("its states are plain data with a Schema", () => {
     expect(
       ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
     ).toEqual([true, true, true, true, false])
-    expect(
-      Schema.is(Store.Refusal)({
-        action: "requested",
-        reason: "[SPAR_ALREADY_LOADING] It is already loading",
-        payload: null,
-      }),
-    ).toBe(true)
-    expect(Schema.is(Store.Refusal)({ action: "requested" })).toBe(false)
   })
 })

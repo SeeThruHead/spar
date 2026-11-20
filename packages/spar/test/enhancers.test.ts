@@ -20,7 +20,6 @@ import {
   Tags,
   Toolbar,
   Unnamed,
-  resetAfterDelay,
   withHover,
 } from "./composed.tsx"
 import { Dialog, Greeter, Numbered, Resettable, Ten } from "./inference.tsx"
@@ -34,26 +33,25 @@ const shop = Layer.succeed(Shop, {
   ordersOf: (userId: string) => Effect.succeed(userId === "ada" ? ["tea", "ink"] : ["pen"]),
 })
 
-const orders = Layer.mergeAll(SessionStore.layer(), OrdersQuery.live).pipe(Layer.provideMerge(shop))
+const orders = Layer.mergeAll(SessionStore.layer, OrdersQuery.live).pipe(Layer.provideMerge(shop))
 
 const withTree = Layer.sync(UiState.Tree, UiState.makeTree)
 
 describe("a component composed from enhancers, its view last and inline", () => {
-  it.live("reads a store, sends its commands, and is refused while resetting", () =>
+  it.live("reads a store, sends its commands, and ignores a second reset while one runs", () =>
     Effect.gen(function* () {
       yield* Testing.mount(ResetCounter)
       yield* Testing.click("button", "Add 1")
       yield* shows("Count", "1")
       yield* Testing.click("button", "Reset after a delay")
-      yield* Testing.click("button", "Add 1")
-      yield* Testing.eventually(() =>
-        expect(screen.getByRole("alert").textContent).toBe("it is not accepted while resetting"),
-      )
+      yield* shows("Phase", "resetting")
+      yield* Testing.click("button", "Reset after a delay")
+      yield* shows("Phase", "idle")
       yield* shows("Count", "0")
       yield* Effect.sync(() => fireEvent.keyDown(window, { key: "a" }))
       yield* Effect.sync(() => fireEvent.keyDown(window, { key: "+" }))
       yield* shows("Count", "1")
-    }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
+    }).pipe(Effect.provide(Layer.merge(CounterStore.layer, withTree))),
   )
 
   it.live("names the view that drew the button in the span of its click, with no devtools on", () =>
@@ -68,7 +66,7 @@ describe("a component composed from enhancers, its view last and inline", () => 
       const click = buffer.recent().find((span) => span.name === "on click")
 
       expect(click?.attributes["spar.view"]).toBe("ResetCounter")
-    }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
+    }).pipe(Effect.provide(Layer.merge(CounterStore.layer, withTree))),
   )
 
   it.live("renders child components in JSX, each with its own open state and nothing wired", () =>
@@ -176,7 +174,7 @@ describe("a component composed from enhancers, its view last and inline", () => 
       expect(yield* Ref.get(calls)).toBe(1)
       expect(screen.getByRole("status", { name: "Counted" })).toBe(output)
       expect(screen.getByRole("button", { name: "More" })).toBe(button)
-    }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
+    }).pipe(Effect.provide(Layer.merge(CounterStore.layer, withTree))),
   )
 
   it.live(

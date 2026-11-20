@@ -180,7 +180,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
         ...before,
         remembered: [
           ...before.remembered,
-          { moment: { ...noted, seq }, ui: tree.snapshot(), stores: Object.fromEntries(reached) },
+          { moment: { ...noted, seq }, ui: tree.uiSnapshot(), stores: Object.fromEntries(reached) },
         ].slice(-keepMoments),
       })
     })
@@ -204,7 +204,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
 
     const travelTo = Effect.fnUntraced(function* (seq: number | null) {
       const before = past.read()
-      const live = before.viewing === null ? trees.read().snapshot() : before.live
+      const live = before.viewing === null ? trees.read().uiSnapshot() : before.live
       const found = Array.findFirst(before.remembered, (kept) => kept.moment.seq === seq)
 
       yield* Option.match(found, {
@@ -228,7 +228,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
     const parked = (before: Past, resume: Effect.Effect<void>): Parked => ({
       ...before.branch,
       remembered: before.remembered,
-      ui: before.viewing === null ? trees.read().snapshot() : before.live,
+      ui: before.viewing === null ? trees.read().uiSnapshot() : before.live,
       resume,
     })
 
@@ -314,7 +314,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       moments: Reactive.map(fromCell(past), (now) => now.remembered.map((kept) => kept.moment)),
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
       travelTo,
-      uiState: () => trees.read().snapshot(),
+      uiState: () => trees.read().uiSnapshot(),
       setUi: (path, name, value) => trees.read().put(path, name, value),
       follow: (tree) => trees.write(tree),
     }).pipe(

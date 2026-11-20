@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from "effect"
-import { Model, Outbox, Store } from "spar"
+import { Outbox, Store } from "spar"
 import { MailApi } from "../server/MailApi.ts"
 
 export const Reply = Schema.Struct({
@@ -20,7 +20,7 @@ type State = typeof State.Type
 
 const initialState: State = { nextId: 1, replies: [] }
 
-export class MailStore extends Model.Tag<MailStore>()("demo/mail/MailStore", {
+export class MailStore extends Store.Tag<MailStore>()("demo/mail/MailStore", {
   state: State,
   initialState,
   actions: {

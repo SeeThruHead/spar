@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from "effect"
-import { Model, Outbox, Store } from "spar"
+import { Outbox, Store } from "spar"
 import {
   Agent,
   AgentId,
@@ -50,7 +50,7 @@ const withAgent = (board: Board, id: AgentId, change: (agent: Agent) => Agent): 
   agents: board.agents.map((found) => (found.id === id ? change(found) : found)),
 })
 
-export class BoardStore extends Model.Tag<BoardStore>()("sidebar/BoardStore", {
+export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
   state: Board,
   initialState,
   actions: {

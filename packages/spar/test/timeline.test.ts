@@ -66,7 +66,7 @@ const BesideDesk = Beside.with(
   )(DeskView),
 )
 
-const layer = Layer.mergeAll(Tally.layer(), Router.Router.layerMemory("/")).pipe(
+const layer = Layer.mergeAll(Tally.layer, Router.Router.layerMemory("/")).pipe(
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
   Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),

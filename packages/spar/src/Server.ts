@@ -12,7 +12,6 @@ import { partsOf, replacements, unmarked } from "./internal/parts.ts"
 import type { Part, Replacement } from "./internal/parts.ts"
 import { OnServer } from "./internal/server.ts"
 import { Tree, UiTree } from "./internal/uiTree.ts"
-import type { Entry as UiEntry } from "./internal/uiTree.ts"
 import type { NoProps } from "./App.ts"
 import { Inspector } from "./Store.ts"
 import type { Inspected } from "./Store.ts"
@@ -24,18 +23,6 @@ export type Rendered = { readonly html: string; readonly state: Dehydrated }
 
 type Options<R, LayerError> = {
   readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>>, LayerError>
-}
-
-const isStore = (keys: ReadonlySet<string>, entry: UiEntry): boolean => {
-  if (entry.path.length > 0) return false
-
-  return keys.has(entry.name)
-}
-
-const uiOf = (tree: Tree, stores: Held<ReadonlyArray<Inspected>>) => {
-  const keys = new Set(stores.read().map((store) => store.key))
-
-  return tree.snapshot().filter((entry) => !isStore(keys, entry))
 }
 
 const encodedOf = (store: Inspected) =>
@@ -134,7 +121,7 @@ export const render = <R, LayerError = never>(
       html,
       state: {
         stores: Object.fromEntries(states),
-        ui: uiOf(tree, stores),
+        ui: tree.uiSnapshot(),
         trace: { traceId: span.traceId, spanId: span.spanId },
       },
     }
@@ -274,7 +261,7 @@ export const renderInPieces = <R, LayerError = never>(
         options.close,
         stateScript({
           stores: Object.fromEntries(states),
-          ui: uiOf(tree, stores),
+          ui: tree.uiSnapshot(),
           trace: { traceId: span.traceId, spanId: span.spanId },
           pieces: true,
         }),

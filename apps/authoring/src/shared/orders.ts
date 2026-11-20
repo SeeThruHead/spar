@@ -1,5 +1,5 @@
 import { Context, Effect, Schema } from "effect"
-import { Model, Query, Store } from "spar"
+import { Query, Store } from "spar"
 
 export const Order = Schema.Struct({ id: Schema.String, total: Schema.Finite })
 
@@ -17,7 +17,7 @@ export class OrdersQuery extends Query.Tag<OrdersQuery>()("Orders", {
 
 type Session = { readonly userId: string }
 
-export class SessionStore extends Model.Tag<SessionStore>()("Session", {
+export class SessionStore extends Store.Tag<SessionStore>()("Session", {
   state: Schema.Struct({ userId: Schema.String }),
   initialState: { userId: "ada" },
   actions: {

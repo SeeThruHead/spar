@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Model, Query, Store } from "spar"
+import { Query, Store } from "spar"
 import { ServerUnreachable, User } from "./api.ts"
 import { Server } from "./server/Server.ts"
 
@@ -24,7 +24,7 @@ const initialState: State = { selected: [], csv: null, problem: "" }
 const toggled = (selected: ReadonlyArray<number>, id: number): ReadonlyArray<number> =>
   selected.includes(id) ? selected.filter((other) => other !== id) : [...selected, id]
 
-export class PeopleStore extends Model.Tag<PeopleStore>()("sidebar/People", {
+export class PeopleStore extends Store.Tag<PeopleStore>()("sidebar/People", {
   state: State,
   initialState,
   actions: {

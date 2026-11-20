@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Model, Store } from "spar"
+import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
@@ -11,7 +11,7 @@ type State = typeof State.Type
 
 const initialState: State = { count: 0, resetting: false, resetDuration: 2 }
 
-export class ResetCounterStore extends Model.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
+export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
   state: State,
   initialState,
   actions: {

@@ -1,5 +1,5 @@
 import { Context, Duration, Effect, Layer, Schema, pipe } from "effect"
-import { Model, Reactive, Store, compose } from "spar"
+import { Reactive, Store, compose } from "spar"
 import { ToastView, ToastsView } from "./ToastView.tsx"
 
 const Tone = Schema.Literals(["info", "success", "problem"])
@@ -16,7 +16,7 @@ const stays = Duration.seconds(6)
 
 const idOf = (number: number): string => `toast-${number}`
 
-class ToastStore extends Model.Tag<ToastStore>()("spar/ui/ToastStore", {
+class ToastStore extends Store.Tag<ToastStore>()("spar/ui/ToastStore", {
   state: State,
   initialState: { made: 0, showing: [] },
   actions: {

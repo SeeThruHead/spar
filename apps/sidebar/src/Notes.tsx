@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Events, For, Form, Model, Reactive, Store, compose, withProps, withStore } from "spar"
+import { Events, For, Form, Reactive, Store, compose, withProps, withStore } from "spar"
 import { SubmitButton, TextField } from "@spar/ui"
 
 const Note = Schema.Struct({ id: Schema.Int, text: Schema.String })
@@ -13,7 +13,7 @@ type State = typeof State.Type
 const counted = (state: State): string =>
   state.notes.length === 1 ? "1 note" : `${state.notes.length} notes`
 
-export class NotesStore extends Model.Tag<NotesStore>()("sidebar/Notes", {
+export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", {
   state: State,
   initialState: { notes: [] },
   actions: {

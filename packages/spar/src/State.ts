@@ -10,6 +10,7 @@ import type { Kept, Snapshot, Trace, Tree, Written } from "./internal/uiTree.ts"
 export type { Snapshot, Written } from "./internal/uiTree.ts"
 
 export type Slot<A> = {
+  readonly name: string
   readonly value: Reactive<A>
   readonly pick: <B>(part: (value: A) => B) => Reactive<B>
   readonly set: (name: string, next: A, payload?: Schema.Json) => Effect.Effect<void>
@@ -19,7 +20,9 @@ export type Slot<A> = {
     payload?: Schema.Json,
   ) => Effect.Effect<void>
   readonly showAt: (seq: number | null) => Effect.Effect<void>
+  readonly show: (value: A) => Effect.Effect<void>
   readonly forkAt: (seq: number) => Effect.Effect<void>
+  readonly hold: Effect.Effect<Effect.Effect<void>>
 }
 
 export type Service = {
@@ -144,6 +147,7 @@ const slotIn = (tree: Tree) =>
     yield* followOtherTabs(saving, tabs, path, schema, kept)
 
     return {
+      name: kept.name,
       value: fromCell(kept),
       pick: (part) => {
         const held = Cell.make(part(kept.read()))
@@ -154,9 +158,11 @@ const slotIn = (tree: Tree) =>
       },
       set,
       update: (name, change, payload) =>
-        Effect.suspend(() => set(name, change(kept.read()), payload)),
+        Effect.suspend(() => set(name, change(kept.current()), payload)),
       showAt: (seq) => Effect.sync(() => kept.showAt(seq ?? Number.POSITIVE_INFINITY)),
+      show: (value) => Effect.sync(() => kept.display(value)),
       forkAt: (seq) => Effect.sync(() => kept.forkAt(seq)),
+      hold: Effect.sync(() => Effect.sync(kept.saved())),
     }
   })
 

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Model, Store } from "spar"
+import { Store } from "spar"
 
 export const Todo = Schema.Struct({
   id: Schema.String,
@@ -20,7 +20,7 @@ const initialState: State = { nextId: 1, todos: [] }
 
 const Target = Schema.Struct({ id: Schema.String })
 
-export class TodoStore extends Model.Tag<TodoStore>()("demo/todos/TodoStore", {
+export class TodoStore extends Store.Tag<TodoStore>()("demo/todos/TodoStore", {
   state: TodoState,
   initialState,
   actions: {

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Model, Store } from "spar"
+import { Store } from "spar"
 import { exclaimEveryTenth, makeRows, swapSecondAndSecondLast } from "../shared/rows.ts"
 import type { Row as Shared } from "../shared/rows.ts"
 
@@ -25,7 +25,7 @@ const Count = Schema.Struct({ count: Schema.Int })
 
 const Target = Schema.Struct({ id: Schema.Int })
 
-export class TableStore extends Model.Tag<TableStore>()("bench/TableStore", {
+export class TableStore extends Store.Tag<TableStore>()("bench/TableStore", {
   state: State,
   initialState,
   actions: {
