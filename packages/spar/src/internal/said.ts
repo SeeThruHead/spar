@@ -1,4 +1,4 @@
-export type Kind = "build" | "run" | "refusal" | "types" | "tools"
+export type Kind = "build" | "run" | "types" | "tools"
 
 export type Diagnostic = {
   readonly kind: Kind
@@ -22,16 +22,6 @@ export const atRun = {
     what: "A part of the page crashed.",
     fix: "Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.",
   },
-  SPAR_SENT_AGAIN: {
-    kind: "run",
-    what: "The same command, with the same payload, was sent again while the work the first one started was still running.",
-    fix: "If the second send is a mistake, such as a second press of Pay, declare the reaction with Store.afterLeading, which refuses the command while the first run lasts, or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.",
-  },
-  SPAR_OLDER_ANSWER: {
-    kind: "run",
-    what: "What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.",
-    fix: "If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.",
-  },
   SPAR_DUPLICATE_CALL: {
     kind: "run",
     what: "The same request was made again while an identical one was still on its way.",
@@ -52,16 +42,6 @@ export const atRun = {
     what: "The log holds an action this store does not define.",
     fix: "Load the log into the version of the store that wrote it, or add the action back.",
   },
-  SPAR_UNREADABLE_SAVE: {
-    kind: "run",
-    what: "What was saved for a store on this device could not be read.",
-    fix: "Clear the saved data, or read it with the version that wrote it. If the state's Schema changed, give the store's durable options a new version.",
-  },
-  SPAR_ABANDONED_ACTION: {
-    kind: "run",
-    what: "An earlier tab asked a store for an action and closed before it was done, and this version cannot carry it out, so it was dropped.",
-    fix: "Nothing to do for the dropped action. To keep such actions across versions, keep the action's name and payload Schema readable by the new version.",
-  },
   SPAR_COMPONENT_OUTSIDE_A_VIEW: {
     kind: "run",
     what: "A component was written in JSX that is not drawn by a component, so it has no services to run with.",
@@ -76,21 +56,6 @@ export const atRun = {
     kind: "run",
     what: "A test expected something and the screen never showed it.",
     fix: "Check the role and name asked for against what the view draws, and that the data it needs was provided in the test's layer.",
-  },
-  SPAR_ALREADY_LOADING: {
-    kind: "refusal",
-    what: "It is already loading",
-    fix: "Nothing: one request runs for each input at a time, and the second was not needed.",
-  },
-  SPAR_LATE_ANSWER: {
-    kind: "refusal",
-    what: "This answers an earlier request",
-    fix: "Nothing: a newer request was made for the same input, and its answer is the one kept.",
-  },
-  SPAR_IN_USE_AGAIN: {
-    kind: "refusal",
-    what: "It is in use again",
-    fix: "Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.",
   },
 } as const satisfies Readonly<Record<string, Diagnostic>>
 
@@ -111,7 +76,7 @@ export const locationIn = (stack: string | undefined, skip: number): string =>
     })
     .at(skip) ?? ""
 
-export const guide = (code: string): string => `LLMS.md, section "${code}"`
+const guide = (code: string): string => `LLMS.md, section "${code}"`
 
 export type Where = {
   readonly said?: string

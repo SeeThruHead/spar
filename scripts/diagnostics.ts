@@ -6,8 +6,6 @@ const root = new URL("..", import.meta.url).pathname
 const reportedBy: Readonly<Record<Diagnostics.Kind, string>> = {
   build: "The build (the Vite or Bun plugin), with the file, line and column.",
   run: "The running app: an error's message, or an entry in the log.",
-  refusal:
-    "A store, as the reason a command was refused. It is in the log and on the command's span.",
   types: "The TypeScript compiler, in the text of a type error.",
   tools: "The agents' server, as the reason a tool call failed.",
 }
@@ -43,7 +41,7 @@ const section = (found: (typeof all)[number]): string =>
 
 const page = `# Diagnostics
 
-Every error, refusal and lint finding Spar reports has a code that does not change. A report is
+Every error and lint finding Spar reports has a code that does not change. A report is
 the code and what happened, where it happened when that is known, the fix, and a pointer to its
 section here:
 

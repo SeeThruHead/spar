@@ -521,7 +521,7 @@ happened in.
 
 ## Diagnostics
 
-`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, refusal, types or tools),
+`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, types or tools),
 what happened and the fix; `Diagnostics.text(code, { said, in, at })` formats one report in the
 agent format. It is also importable as `spar/diagnostics`, the same list is written to
 `packages/spar/diagnostics.json`, and the reference page is

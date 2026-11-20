@@ -12,7 +12,7 @@ describe("something Spar noticed", () => {
       const scope = yield* Effect.scope
       const page = { parent: undefined, label: "PageView", at: "", scope, tree: Trees.makeTree() }
 
-      yield* noticed("SPAR_SENT_AGAIN", "shop/Till/paid", "Paid twice.").pipe(
+      yield* noticed("SPAR_DUPLICATE_CALL", "shop/Till/paid", "Paid twice.").pipe(
         Effect.provideService(ViewScope, {
           parent: page,
           label: "PayView",
@@ -30,7 +30,7 @@ describe("something Spar noticed", () => {
           "noticed",
           "shop/Till/paid",
           {
-            code: "SPAR_SENT_AGAIN",
+            code: "SPAR_DUPLICATE_CALL",
             said: "Paid twice.",
             in: "PageView > PayView",
             at: "/src/PayView.tsx:4:1",
