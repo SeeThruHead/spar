@@ -60,7 +60,10 @@ Built since, and smaller than they sound, but not done:
 - **The bundle is large and starts slower than Solid's.** The benchmark app ships 68 kB gzipped
   (Solid 6 kB, React 68 kB) and is on the page in 13.6 ms (Solid 4.9 ms). About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not
-  any one slow function (`docs/benchmarks.md`).
+  any one slow function (`docs/benchmarks.md`). `bun run --cwd apps/bench startup` profiles it:
+  on sthdev, Spar waits about 4.7 ms longer than Solid while its 200 kB bundle (minified) loads and
+  compiles, then runs about 9 ms of script under the profiler against Solid's 1 ms, spread across
+  Effect's module set-up and the first mount. Nothing in it waits on a timer or a frame.
 
 The joined trace has been looked up in Tempo: run with `OTLP_ENDPOINT` set, one form submit in the
 proof app came back from Tempo as one trace with spans from the page and from the backend under one

@@ -16,6 +16,7 @@
     "nav-leaks": "bun scripts/nav-leaks.ts",
     "one-row-dev": "bun scripts/one-row-dev.ts",
     "cpu": "vite build --config vite.spar.config.ts --minify false --outDir ../../dist-readable/spar && bun scripts/cpu.ts",
+    "startup": "bun run build && bun scripts/startup-profile.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
