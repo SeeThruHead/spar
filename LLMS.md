@@ -164,6 +164,11 @@ App state is what the app knows: the agents, the notes, the cart. It lives in a 
 a Schema for the state, named actions with pure reducers, and named selectors. It changes only
 through `store.commands.<action>(payload)`, and every command is an entry in the store's log.
 
+Keep in the state only what cannot be worked out from the rest. A total, a count, a "has any",
+a filtered or sorted list is a selector over the state, never a field that every reducer has to
+remember to update: `total: Store.selector(Schema.Int, (state: State) => state.counts.reduce((sum, c) => sum + c.count, 0))`.
+A second copy of a value is a value that can disagree with the first.
+
 A store does not have to be declared at the root. `SomeStore.with(Component)` makes one unit of a
 store and the component that uses it. Mount that unit twice and there are two stores, each with
 its own state, each registered in the same root registry the devtools read. So it is still model,
