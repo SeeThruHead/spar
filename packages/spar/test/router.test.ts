@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
 import { Context, Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
-import { Handle, Props, Router, Timeline, View, compose, withProps } from "spar"
+import { Handle, Markup, Props, Router, Timeline, View, compose, withProps, withStore } from "spar"
+import { jsx } from "spar/jsx-runtime"
+import * as Cell from "../src/internal/cell.ts"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import {
@@ -18,6 +20,28 @@ import {
 } from "./routes.tsx"
 
 const home = Router.route("/")
+
+const linked = Markup.trusted(
+  [
+    '<a href="/threads/inside">In</a>',
+    '<a href="https://elsewhere.test/x">Out</a>',
+    '<a href="#part">Part</a>',
+    '<a href="/settings/billing" target="_blank">New tab</a>',
+    '<a href="/report.csv" download>Save</a>',
+    '<a href="/?page=2#top">Next page</a>',
+    '<a href="/threads/other#top">Other</a>',
+    "<p>Plain words</p>",
+  ].join(" "),
+)
+
+const click = (name: string, init: MouseEventInit = {}) =>
+  Effect.flatMap(Testing.find("link", name), (link) =>
+    Effect.sync(() => fireEvent.click(link, init)),
+  )
+
+const Article = compose(withStore(Router.Router, (router) => ({ onClick: router.followLinks })))(
+  (props) => jsx("article", { onClick: props.onClick, markup: linked }),
+)
 const thread = Router.route("/threads/:id", Schema.Struct({ id: Schema.String }))
 const search = Router.route(
   "/search/:kind",
@@ -396,6 +420,58 @@ describe("the router", () => {
       expect(wentBack.mock.calls).toHaveLength(1)
       scrolled.mockRestore()
       wentBack.mockRestore()
+    }).pipe(Effect.provide(Layer.fresh(Router.Router.layerBrowser))),
+  )
+
+  it.live("links inside trusted markup go in place, and the browser keeps the rest", () =>
+    Effect.gen(function* () {
+      const router = yield* Router.Router
+      const prevented = Cell.make<ReadonlyArray<string>>([])
+      const record = (event: Event) => {
+        const anchor = event.target instanceof Element ? event.target.closest("a") : null
+
+        prevented.write([...prevented.read(), `${anchor?.textContent}:${event.defaultPrevented}`])
+        event.preventDefault()
+      }
+
+      yield* Effect.acquireRelease(
+        Effect.sync(() => window.addEventListener("click", record)),
+        () => Effect.sync(() => window.removeEventListener("click", record)),
+      )
+      yield* Effect.sync(() => window.history.replaceState(null, "", "/"))
+      yield* Testing.mount(Article)
+      yield* click("Out")
+      yield* click("Part")
+      yield* click("New tab")
+      yield* click("Save")
+      yield* click("In", { ctrlKey: true })
+      yield* Effect.flatMap(Testing.findText("Plain words"), (words) =>
+        Effect.sync(() => {
+          fireEvent.click(words)
+          fireEvent.click(words.firstChild ?? words)
+        }),
+      )
+      expect((yield* router.location.get).pathname).toBe("/")
+      yield* click("Next page")
+      yield* Testing.eventually(() => expect(window.location.search).toBe("?page=2"))
+      yield* click("Other")
+      yield* Testing.eventually(() => expect(window.location.pathname).toBe("/threads/other"))
+      yield* click("In")
+      yield* Testing.eventually(() => expect(window.location.pathname).toBe("/threads/inside"))
+
+      expect((yield* router.location.get).pathname).toBe("/threads/inside")
+      expect(prevented.read()).toEqual([
+        "Out:false",
+        "Part:false",
+        "New tab:false",
+        "Save:false",
+        "In:false",
+        "undefined:false",
+        "undefined:false",
+        "Next page:true",
+        "Other:true",
+        "In:true",
+      ])
     }).pipe(Effect.provide(Layer.fresh(Router.Router.layerBrowser))),
   )
 

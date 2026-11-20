@@ -46,6 +46,15 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
 
   const docsWide = await wide(page)
 
+  await page.evaluate(() => Reflect.set(window, "stayed", true))
+  await page.locator("article.prose").getByRole("link", { name: "Principles" }).first().click()
+  await page.getByRole("heading", { level: 1, name: "Principles" }).waitFor({ timeout: 5000 })
+
+  const reloaded = (await page.evaluate(() => Reflect.get(window, "stayed"))) !== true
+
+  await page.goBack()
+  await page.getByRole("heading", { level: 1, name: "Getting started" }).waitFor({ timeout: 5000 })
+
   await page
     .getByRole("navigation", { name: "Documentation" })
     .getByRole("link", { name: "API", exact: true })
@@ -55,7 +64,11 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await page.getByRole("status").getByText("place").waitFor({ timeout: 5000 })
   await shot(page, size, "search")
 
-  return [...homeWide, ...docsWide]
+  return [
+    ...homeWide,
+    ...docsWide,
+    ...(reloaded ? [`${size.name}: a link inside a doc page reloaded the page`] : []),
+  ]
 }
 
 const walked = async (

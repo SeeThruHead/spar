@@ -351,6 +351,11 @@ reaches every `ask` on the way, and throws the result away. The queries are real
 stay in their stores, so the click finds the data there. Leave `onIntent` off a link whose page
 should not be preloaded. `router.preload(route, params)` does the same from code.
 
+Links you did not write as JSX, such as the ones in trusted markup rendered from markdown, follow
+in place when their container has `onClick={router.followLinks}`. A plain click on a link to this
+site goes through the router; a link to another site, one with `target` or `download`, a link to
+a heading on the same page, and a click with a modifier key are left to the browser.
+
 ### Loading a page's code when it is first shown
 
 ```ts

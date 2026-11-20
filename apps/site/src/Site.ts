@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, pipe } from "effect"
-import { Markup, Props, Reactive, Router, UiState, View, compose, withProps } from "spar"
+import { Markup, Props, Reactive, Router, UiState, View, compose, withProps, withStore } from "spar"
 import type { Heading, Hit, Page } from "./api.ts"
 import { Loads } from "./Loads.ts"
 import { groups } from "./nav.ts"
@@ -91,6 +91,7 @@ const DocPage = compose(
       busy: Reactive.map(page.loading, String),
     }
   }),
+  withStore(Router.Router, (router) => ({ onLink: router.followLinks })),
 )(DocView)
 
 const Home = compose(
@@ -106,6 +107,7 @@ const Home = compose(
       refusals: yield* View.child(Refusals, {}),
       start: router.link(docRoute, { slug: "getting-started" }),
       principles: router.link(docRoute, { slug: "principles" }),
+      onLink: router.followLinks,
     }
   }),
 )(HomeView)

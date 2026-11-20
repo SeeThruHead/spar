@@ -75,8 +75,9 @@ export const DocView = View.make(
     headings: Props.Element,
     problem: Props.Reactive(Schema.String),
     busy: Props.Reactive(Schema.String),
+    onLink: Props.Handler("click"),
   },
-  ({ groups, body, headings, problem, busy }) => (
+  ({ groups, body, headings, problem, busy, onLink }) => (
     <div class="doc">
       <nav class="doc-nav" aria-label="Documentation">
         {groups}
@@ -85,7 +86,7 @@ export const DocView = View.make(
         <p class="problem" role="alert">
           {problem}
         </p>
-        <article class="prose" markup={body} />
+        <article class="prose" markup={body} onClick={onLink} />
       </main>
       <nav class="doc-toc" aria-label="On this page">
         <h2>On this page</h2>
@@ -105,8 +106,9 @@ export const HomeView = View.make(
     refusals: Props.Element,
     start: Router.Link,
     principles: Router.Link,
+    onLink: Props.Handler("click"),
   },
-  ({ before, between, after, loads, refusals, start, principles }) => (
+  ({ before, between, after, loads, refusals, start, principles, onLink }) => (
     <main class="home">
       <header class="lead">
         <h1>Spar</h1>
@@ -139,11 +141,11 @@ export const HomeView = View.make(
           </a>
         </p>
       </header>
-      <article class="prose" markup={before} />
+      <article class="prose" markup={before} onClick={onLink} />
       {loads}
-      <article class="prose" markup={between} />
+      <article class="prose" markup={between} onClick={onLink} />
       {refusals}
-      <article class="prose" markup={after} />
+      <article class="prose" markup={after} onClick={onLink} />
     </main>
   ),
 )

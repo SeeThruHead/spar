@@ -11,7 +11,7 @@ export type UiWrite = {
 
 export type Action = Effect.Effect<void> | UiWrite | ReadonlyArray<Action>
 
-type Before = "preventDefault" | "stopPropagation" | "followLink"
+type Before = "preventDefault" | "stopPropagation" | "followLink" | "followLinkInside"
 
 export type Modified<Event> = {
   readonly [ModifiedTypeId]: Before
@@ -54,6 +54,24 @@ const isPlainClick = (event: Event): boolean => {
   return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
 }
 
+export const anchorUnder = (event: Event): HTMLAnchorElement | null =>
+  event.target instanceof Element ? event.target.closest("a[href]") : null
+
+const onlyScrolls = (anchor: HTMLAnchorElement): boolean => {
+  if (anchor.hash === "") return false
+  if (anchor.pathname !== window.location.pathname) return false
+
+  return anchor.search === window.location.search
+}
+
+const staysInTheApp = (anchor: HTMLAnchorElement | null): anchor is HTMLAnchorElement => {
+  if (anchor === null) return false
+  if (anchor.origin !== window.location.origin) return false
+  if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) return false
+
+  return !onlyScrolls(anchor)
+}
+
 const takesOver: Readonly<Record<Before, (event: Event) => boolean>> = {
   preventDefault: (event) => {
     event.preventDefault()
@@ -67,6 +85,14 @@ const takesOver: Readonly<Record<Before, (event: Event) => boolean>> = {
   },
   followLink: (event) => {
     if (!isPlainClick(event)) return false
+
+    event.preventDefault()
+
+    return true
+  },
+  followLinkInside: (event) => {
+    if (!isPlainClick(event)) return false
+    if (!staysInTheApp(anchorUnder(event))) return false
 
     event.preventDefault()
 

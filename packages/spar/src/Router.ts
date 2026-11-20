@@ -13,7 +13,7 @@ import {
 } from "effect"
 import type { Scope } from "effect"
 import * as Handle from "./Handle.ts"
-import { modify } from "./internal/action.ts"
+import { anchorUnder, modify } from "./internal/action.ts"
 import type { Modified } from "./internal/action.ts"
 import { inContext } from "./internal/context.ts"
 import * as Dom from "./internal/dom.ts"
@@ -244,8 +244,16 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
     { startImmediately: true },
   )
 
+  const visit = (url: string): Effect.Effect<void> =>
+    Effect.andThen(driver.visit(url), follow).pipe(named("go"))
   const go = <Params>(target: Route<Params>, params: Params): Effect.Effect<void> =>
-    Effect.andThen(driver.visit(target.build(params)), follow).pipe(named("go"))
+    visit(target.build(params))
+  const followed = (event: MouseEvent): Effect.Effect<void> =>
+    Effect.forEach(
+      Option.toArray(Option.fromNullOr(anchorUnder(event))),
+      (anchor) => visit(`${anchor.pathname}${anchor.search}${anchor.hash}`),
+      { discard: true },
+    )
 
   return {
     location: fromCell(location),
@@ -260,6 +268,7 @@ const fromDriver = Effect.fnUntraced(function* (driver: Driver) {
       onIntent: preload(target.build(params)),
     }),
     preload: <Params>(target: Route<Params>, params: Params) => preload(target.build(params)),
+    followLinks: modify("followLinkInside", followed),
   }
 })
 
@@ -340,6 +349,7 @@ export class Router extends Context.Service<
     readonly back: Effect.Effect<void>
     readonly link: <Params>(target: Route<Params>, params: Params) => Link
     readonly preload: <Params>(target: Route<Params>, params: Params) => Effect.Effect<void>
+    readonly followLinks: Modified<MouseEvent>
   }
 >()("spar/Router") {
   static readonly layerMemory = (initial: string) =>
