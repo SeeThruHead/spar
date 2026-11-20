@@ -20,6 +20,7 @@ import type { Component } from "./View.ts"
 
 export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Effect<Add, E, R>) & {
   readonly fields?: Fields
+  readonly services?: ReadonlyArray<string>
 }
 
 type Outside<R> = Exclude<R, Scope.Scope | ViewScope>
@@ -46,13 +47,30 @@ const applied = (steps: ReadonlyArray<Step>, outer: Props) =>
 const fieldsOf = (steps: ReadonlyArray<Step>): Fields =>
   Object.assign({}, ...steps.map((step) => step.fields ?? {}))
 
-const shown = (name: string, fields: Fields, view: (props: Props) => Element, props: Props) =>
+const servicesOf = (steps: ReadonlyArray<Step>): ReadonlyArray<string> =>
+  steps.flatMap((step) => step.services ?? [])
+
+export const uses = (services: ReadonlyArray<string>): Enhancer<unknown, unknown> =>
+  Object.assign(() => Effect.succeed({}), { services })
+
+const isNamedView = (view: (props: Props) => Element): boolean =>
+  Predicate.hasProperty(view, "displayName")
+
+const shown = (
+  name: string,
+  fields: Fields,
+  services: ReadonlyArray<string>,
+  view: (props: Props) => Element,
+  props: Props,
+) =>
   Effect.flatMap(Effect.context(), (context) =>
     ViewScope.use((mounted) =>
       Effect.map(
-        drawingIn(context, () => drawn(name, fields, props, view(props))),
+        drawingIn(context, () =>
+          isNamedView(view) ? view(props) : drawn(name, fields, props, view(props)),
+        ),
         (element) => {
-          placed(() => pathOf(mounted), [])
+          placed(() => pathOf(mounted), services)
 
           return element
         },
@@ -70,7 +88,9 @@ const made = (
   const mount = (outer: Props) =>
     Effect.withSpan(
       inViewScope(
-        Effect.flatMap(applied(steps, outer), (props) => shown(name, fields, view, props)),
+        Effect.flatMap(applied(steps, outer), (props) =>
+          shown(name, fields, servicesOf(steps), view, props),
+        ),
         name,
         at,
       ),

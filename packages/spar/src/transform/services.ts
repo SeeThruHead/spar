@@ -70,24 +70,68 @@ const yieldedIn = (node: unknown, declared: ReadonlyMap<string, unknown>): Reado
     })
   })
 
+const isComposeCall = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("CallExpression"),
+    callee: Schema.Struct({ type: Schema.Literal("Identifier"), name: Schema.Literal("compose") }),
+    arguments: Schema.NonEmptyArray(Node),
+  }),
+)
+
+const isEnhancerCall = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("CallExpression"),
+    callee: Schema.Struct({ name: Schema.Literals(["withStore", "withQuery"]) }),
+    arguments: Schema.Array(Schema.Unknown),
+  }),
+)
+
+const givenTo = (argument: unknown): ReadonlyArray<string> => {
+  if (!isEnhancerCall(argument)) return []
+
+  return serviceName(argument.arguments[argument.callee.name === "withStore" ? 0 : 1])
+}
+
+type Edit = { readonly at: number; readonly end: number; readonly text: string }
+
+const listed = (services: ReadonlyArray<string>): string =>
+  services.map((name) => `"${name}"`).join(",")
+
 export const describeServices = (file: string, source: string): string => {
   const program: unknown = parseSync(file, source).program
   const nodes = everyNode(program)
   const declared = new Map(
     nodes.flatMap((node) => (isDeclared(node) ? [[node.id.name, node.init] as const] : [])),
   )
-  const calls = nodes.flatMap((node) => (isComponentCall(node) ? [node] : []))
+  const connected: ReadonlyArray<Edit> = nodes.flatMap((node) => {
+    if (!isComponentCall(node)) return []
 
-  return calls
-    .toSorted((left, right) => right.callee.start - left.callee.start)
-    .reduce((text, call) => {
-      const services = Array.dedupe(call.arguments.flatMap((given) => yieldedIn(given, declared)))
-      const listed = services.map((name) => `"${name}"`).join(",")
-      const made = `View.described([${listed}]).${call.callee.property.name}`
+    const services = Array.dedupe(node.arguments.flatMap((given) => yieldedIn(given, declared)))
 
-      return `${text.slice(0, call.callee.start)}${made}${text.slice(call.callee.end)}`
-    }, source)
+    return [
+      {
+        at: node.callee.start,
+        end: node.callee.end,
+        text: `View.described([${listed(services)}]).${node.callee.property.name}`,
+      },
+    ]
+  })
+  const composed: ReadonlyArray<Edit> = nodes.flatMap((node) => {
+    if (!isComposeCall(node)) return []
+
+    const services = Array.dedupe(
+      node.arguments.flatMap((given) => [...givenTo(given), ...yieldedIn(given, declared)]),
+    )
+    const first = node.arguments[0].start
+
+    return [{ at: first, end: first, text: `__sparUses([${listed(services)}]), ` }]
+  })
+  const edited = [...connected, ...composed]
+    .toSorted((left, right) => right.at - left.at)
+    .reduce((text, edit) => `${text.slice(0, edit.at)}${edit.text}${text.slice(edit.end)}`, source)
+
+  return composed.length === 0 ? edited : `import { uses as __sparUses } from "spar"; ${edited}`
 }
 
 export const mentionsComponents = (source: string): boolean =>
-  source.includes("View.connect(") || source.includes("View.taking(")
+  source.includes("View.connect(") || source.includes("View.taking(") || source.includes("compose(")

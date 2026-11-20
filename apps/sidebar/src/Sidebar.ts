@@ -1,5 +1,16 @@
 import { Effect, Option, Schema, pipe } from "effect"
-import { Events, Form, Outbox, Props, Reactive, Router, UiState, View } from "spar"
+import {
+  Events,
+  Form,
+  Outbox,
+  Props,
+  Reactive,
+  Router,
+  UiState,
+  View,
+  compose,
+  withProps,
+} from "spar"
 import type { Action } from "spar"
 import { Dialog, Menu, Select, Toast } from "@spar/ui"
 import { BoardStore } from "./BoardStore.ts"
@@ -58,14 +69,16 @@ const Named = Schema.Struct({
 
 const noProject = "none"
 
-const AgentRow = View.taking(
-  {
-    agent: Props.Reactive(Agent),
-    id: Schema.String,
-    editing: Props.State(Editing),
-    dragging: Dragging,
-  },
-  Effect.fnUntraced(function* (props) {
+const rowFields = {
+  agent: Props.Reactive(Agent),
+  id: Schema.String,
+  editing: Props.State(Editing),
+  dragging: Dragging,
+}
+
+const AgentRow = compose(
+  withProps(rowFields),
+  Effect.fnUntraced(function* (props: Schema.Struct<typeof rowFields>["Type"]) {
     const store = yield* BoardStore
     const router = yield* Router.Router
     const id = AgentId.make(props.id)
@@ -99,14 +112,16 @@ const AgentRow = View.taking(
   }),
 )(AgentRowView)
 
-const SectionPanel = View.taking(
-  {
-    section: Props.Reactive(Section),
-    sectionKey: Schema.String,
-    editing: Props.State(Editing),
-    dragging: Dragging,
-  },
-  Effect.fnUntraced(function* (props) {
+const sectionFields = {
+  section: Props.Reactive(Section),
+  sectionKey: Schema.String,
+  editing: Props.State(Editing),
+  dragging: Dragging,
+}
+
+const SectionPanel = compose(
+  withProps(sectionFields),
+  Effect.fnUntraced(function* (props: Schema.Struct<typeof sectionFields>["Type"]) {
     const store = yield* BoardStore
     const space = SpaceId.make(props.sectionKey)
     const rows = yield* pipe(
@@ -149,9 +164,13 @@ const SectionPanel = View.taking(
   }),
 )(SectionView)
 
-const StartForm = View.taking(
-  { editing: Props.State(Editing), onClose: Props.Action },
-  Effect.fnUntraced(function* ({ onClose }) {
+const formFields = { editing: Props.State(Editing), onClose: Props.Action }
+
+type FormProps = Schema.Struct<typeof formFields>["Type"]
+
+const StartForm = compose(
+  withProps(formFields),
+  Effect.fnUntraced(function* ({ onClose }: FormProps) {
     const store = yield* BoardStore
     const toasts = yield* Toast.Toasts
     const form = yield* Form.make(Named, { name: "" })
@@ -175,9 +194,9 @@ const StartForm = View.taking(
   }),
 )(NameFormView)
 
-const ProjectForm = View.taking(
-  { editing: Props.State(Editing), onClose: Props.Action },
-  Effect.fnUntraced(function* ({ onClose }) {
+const ProjectForm = compose(
+  withProps(formFields),
+  Effect.fnUntraced(function* ({ onClose }: FormProps) {
     const store = yield* BoardStore
     const form = yield* Form.make(Named, { name: "" })
 
@@ -208,9 +227,9 @@ const editedAgent = Effect.fnUntraced(function* (editing: UiState.UiState<Editin
   )
 })
 
-const TagsForm = View.taking(
-  { editing: Props.State(Editing), onClose: Props.Action },
-  Effect.fnUntraced(function* ({ editing, onClose }) {
+const TagsForm = compose(
+  withProps(formFields),
+  Effect.fnUntraced(function* ({ editing, onClose }: FormProps) {
     const store = yield* BoardStore
     const agent = yield* editedAgent(editing)
     const tags = Option.match(agent, { onNone: () => "", onSome: (found) => found.tags.join(", ") })
@@ -236,9 +255,9 @@ const TagsForm = View.taking(
   }),
 )(NameFormView)
 
-const MoveForm = View.taking(
-  { editing: Props.State(Editing), onClose: Props.Action },
-  Effect.fnUntraced(function* ({ editing, onClose }) {
+const MoveForm = compose(
+  withProps(formFields),
+  Effect.fnUntraced(function* ({ editing, onClose }: FormProps) {
     const store = yield* BoardStore
     const agent = yield* editedAgent(editing)
     const spaces = yield* store.select.spaces.get
@@ -315,7 +334,7 @@ const dialogs = Effect.fnUntraced(function* (editing: UiState.UiState<Editing>) 
   ]
 })
 
-export const Sidebar = View.connect(
+export const Sidebar = compose(
   Effect.fnUntraced(function* () {
     const store = yield* BoardStore
     const outbox = yield* Outbox.Outbox

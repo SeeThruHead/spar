@@ -236,7 +236,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
     ...(live === "" ? [] : [`back at now the filter was "${live}"`]),
     ...(highlighted === "SidebarView" ? [] : [`hovering highlighted "${highlighted}"`]),
     ...(picked === "SidebarView" ? [] : [`picking gave "${picked}"`]),
-    ...(where.endsWith("SidebarView") ? [] : [`the picked component was at "${where}"`]),
+    ...(where === "Shell / Sidebar" ? [] : [`the picked component was at "${where}"`]),
     ...(propsShown.includes("filter") ? [] : [`its props were shown as: ${propsShown}`]),
     ...(services.includes("BoardStore") ? [] : [`its services were shown as: ${services}`]),
     ...(changed.includes('"triage"') ? [] : [`the change list said: ${changed}`]),

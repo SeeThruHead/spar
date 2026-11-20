@@ -29,6 +29,34 @@ export const Counter = View.connect(
 export const Plain = View.connect(() => Effect.succeed({}))(PlainView)
 `
 
+const composed = `import { compose, withStore, withQuery } from "spar"
+
+const withAgent = Effect.fnUntraced(function* (props) {
+  const outbox = yield* Outbox.Outbox
+
+  return { outbox }
+})
+
+export const Sidebar = compose(
+  withStore(BoardStore, (store) => ({ board: store.select.board })),
+  withQuery("record", RecordQuery, (props) => props.name),
+  withAgent,
+  withStore(store, (found) => found),
+)((props) => <nav />)
+`
+
+describe("naming the services a composed component uses, for the inspector", () => {
+  it("puts them first in its enhancers, from withStore, withQuery and what its own enhancers yield", () => {
+    const described = describeServices("Sidebar.tsx", composed)
+
+    expect(described).toContain(
+      `compose(\n  __sparUses(["BoardStore","RecordQuery","Outbox.Outbox"]), withStore(BoardStore`,
+    )
+    expect(described.startsWith(`import { uses as __sparUses } from "spar"; import`)).toBe(true)
+    expect(described.split("\n")).toHaveLength(composed.split("\n").length)
+  })
+})
+
 describe("naming the services a component uses, for the inspector", () => {
   it("rewrites each component to say which service tags its Effect yields", () => {
     const described = describeServices("Thread.ts", source)

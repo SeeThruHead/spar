@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef, pipe } from "effect"
-import { Props, Reactive, UiState, View } from "spar"
+import { Props, Reactive, UiState, View, compose, uses, withHandlers } from "spar"
 import * as Testing from "spar/testing"
 import { fragment } from "../src/internal/element.ts"
 import {
@@ -89,7 +89,29 @@ const idOf = (node: Element | null): number => Number(node?.getAttribute(mark))
 const onPage = (): ReadonlySet<number> =>
   new Set([...document.querySelectorAll(`[${mark}]`)].map((node) => idOf(node)))
 
+const calm: "calm" | "loud" = "calm"
+
+const NamedBadge = compose(
+  uses(["Clock"]),
+  withHandlers(() => ({ text: "named badge", tone: calm })),
+)(BadgeView)
+
 describe("what the inspector knows about a composed component", () => {
+  it.live("with a named view at the end: that view's name, and the services it uses", () =>
+    inspected(
+      Effect.fnUntraced(function* (inspector) {
+        yield* Testing.mount(NamedBadge)
+
+        const seen = Option.getOrThrow(inspector.find(idOf(yield* Testing.findText("named badge"))))
+
+        expect([seen.name, seen.placed]).toEqual([
+          "Badge",
+          Option.some({ path: ["NamedBadge"], services: ["Clock"] }),
+        ])
+      }),
+    ),
+  )
+
   it.live("its name, its props with their Schema, and where it is in the tree", () =>
     inspected(
       Effect.fnUntraced(function* (inspector) {

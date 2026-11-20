@@ -3,6 +3,7 @@ export {
   For,
   Show,
   compose,
+  uses,
   withEffect,
   withHandlers,
   withKey,
