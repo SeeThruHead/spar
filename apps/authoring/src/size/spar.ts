@@ -1,21 +1,15 @@
-import { Effect, Schema } from "effect"
-import { Store } from "spar"
+import { Effect, Layer, Schema } from "effect"
+import { Model, State, Store } from "spar"
 
-const State = Schema.Struct({
-  count: Schema.Int,
-  phase: Schema.Literals(["idle", "resetting"]),
-})
+const CounterState = Schema.Struct({ count: Schema.Int })
 
-type State = typeof State.Type
+type CounterState = typeof CounterState.Type
 
-const initialState: State = { count: 0, phase: "idle" }
-
-class Counter extends Store.Tag<Counter>()("size/Counter", {
-  state: State,
-  initialState,
+class Counter extends Model.Tag<Counter>()("size/Counter", {
+  state: CounterState,
+  initialState: { count: 0 },
   actions: {
-    incremented: Store.action(Schema.Void, (state: State): State => ({
-      ...state,
+    incremented: Store.action(Schema.Void, (state: CounterState): CounterState => ({
       count: state.count + 1,
     })),
   },
@@ -28,4 +22,4 @@ const program = Effect.gen(function* () {
   return yield* counter.commands.incremented()
 })
 
-Effect.runFork(Effect.provide(program, Counter.layer()))
+Effect.runFork(Effect.provide(program, Counter.layer.pipe(Layer.provide(State.layer))))
