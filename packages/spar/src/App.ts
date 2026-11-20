@@ -117,6 +117,7 @@ const started = <R, LayerError>(
     overlays: overlayRoot,
     context: Effect.context<Exclude<R, Frame>>(),
   }).pipe(
+    Effect.tap(() => Effect.sync(() => Dom.markTaken(options.target, Pieces.taken))),
     Effect.flatMap(({ scope, overlays, context }) => {
       const claim = existing(options.target)
       const hydrating = Cell.make(claim !== undefined)
@@ -158,7 +159,10 @@ const started = <R, LayerError>(
         Effect.sync(() => adopters.write(new Map([...adopters.read(), [key, adopt]]))),
     }),
     Effect.provideService(Pieces.Expected, fromCell(expecting)),
-    Effect.provideService(Seed, state.stores),
+    Effect.provideService(
+      Seed,
+      Pieces.seededWith(state.stores, Pieces.arrivedEarly(Dom.waitingPieces(Pieces.holder))),
+    ),
     (app) =>
       Option.match(installed.read(), { onNone: () => app, onSome: (hook) => hook.wrap(app) }),
     Effect.scoped,

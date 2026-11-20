@@ -477,8 +477,16 @@ piece to the query's store (the store's log shows it as `streamed`), the views u
 browser asks the backend for nothing. The whole response is one render in one trace. The server
 code chooses per page which of the two to call.
 
+Each data piece is followed by the page drawn again on the server with that data, as finished
+HTML in a `<template>` with a one-line script that puts it in the root (`#root`, or the `root`
+option's selector). That script does nothing once the app has started taking the page over (the
+root is marked `data-spar-taken`), so the server's HTML never lands on a page the app is drawing.
+So a slow or blocked bundle still leaves the reader with the finished page, and when the bundle
+does arrive, the pieces that came before it are applied before its first draw, so it takes over
+the finished page as it is.
+
 What to know: the client script must be `async`, or the browser runs it only after the last
-piece. Without JavaScript the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
+piece. With scripts turned off entirely the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
 server is done, and whatever is still missing then is asked for by the browser. That covers a
 query first asked for by a component that only mounts once data is there (a row of a loaded
 list), which the server does not run. If the connection drops part way, the document ends without that last piece; the browser
@@ -1087,7 +1095,7 @@ sequenceDiagram
 
 `Server.render(Component, { layer })` runs the same component on a server and gives its HTML
 and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
-trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then each query's data as it lands (`docs/routing-and-data.md`). Loading parts (`View.pending`)
+trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the page drawn again as finished HTML (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
 
@@ -2625,8 +2633,9 @@ Built since, and smaller than they sound, but not done:
   wins, and when the swap is shown).
 - **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
-- **A page sent in pieces fills in only with JavaScript.** `Server.renderInPieces` sends the page
-  as first drawn and then each query's data; it does not send finished HTML for a piece.
+- **A page sent in pieces is redrawn whole.** Each piece of finished HTML is the whole page drawn
+  again, not only the part that changed, and it needs scripts turned on (a one-line script, not
+  the app's bundle).
 - **An event's span names its view only with the devtools on.** The renderer does not know
   which view drew a node; the inspector does.
 - **A query's default stale time is 0,** so a preload that finishes before the click, or a page

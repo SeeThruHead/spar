@@ -263,8 +263,16 @@ piece to the query's store (the store's log shows it as `streamed`), the views u
 browser asks the backend for nothing. The whole response is one render in one trace. The server
 code chooses per page which of the two to call.
 
+Each data piece is followed by the page drawn again on the server with that data, as finished
+HTML in a `<template>` with a one-line script that puts it in the root (`#root`, or the `root`
+option's selector). That script does nothing once the app has started taking the page over (the
+root is marked `data-spar-taken`), so the server's HTML never lands on a page the app is drawing.
+So a slow or blocked bundle still leaves the reader with the finished page, and when the bundle
+does arrive, the pieces that came before it are applied before its first draw, so it takes over
+the finished page as it is.
+
 What to know: the client script must be `async`, or the browser runs it only after the last
-piece. Without JavaScript the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
+piece. With scripts turned off entirely the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
 server is done, and whatever is still missing then is asked for by the browser. That covers a
 query first asked for by a component that only mounts once data is there (a row of a loaded
 list), which the server does not run. If the connection drops part way, the document ends without that last piece; the browser

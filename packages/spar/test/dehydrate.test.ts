@@ -273,6 +273,40 @@ describe("a page sent in pieces", () => {
       expect(pieces).not.toContain("test/Shelf")
       expect(pieces).not.toContain('{"stores":{}}')
       expect(pieces).not.toContain('"test/Price":{"entries":{}}')
+
+      const drawn = parts.filter((part) => part.startsWith("<template data-spar-piece>"))
+
+      expect(drawn.length).toBe(piecesOf(parts).length - 1)
+      expect(drawn.at(-1)).toContain('<output aria-label="Orders status">loaded</output>')
+      expect(drawn.at(-1)).toContain('<output aria-label="Orders count">3</output>')
+      expect(drawn.at(-1)).toContain('document.querySelector("#root")')
+      expect(drawn.at(-1)).toContain('!r.hasAttribute("data-spar-taken")')
+    }),
+  )
+
+  it.live("pieces that arrived before the app started are in its first draw", () =>
+    Effect.gen(function* () {
+      const parts = yield* Stream.runCollect(sentInPieces)
+      const holder = yield* sentPage(`<div id="root">${parts[1]}</div>${parts[3]}`)
+      const target = holder.querySelector("div") ?? holder
+      const asked = yield* Layer.build(Asked.layer)
+      const inPage = Layer.merge(Catalog.live, Price.live).pipe(
+        Layer.provide(Layer.succeedContext(asked)),
+        Layer.provide(SecureRandom.layerWebCrypto),
+        Layer.merge(Router.Router.layerMemory("/orders")),
+      )
+
+      yield* Effect.acquireRelease(
+        Effect.sync(() => Reflect.set(globalThis, "__sparPieces", piecesOf(parts))),
+        () => Effect.sync(() => Reflect.deleteProperty(globalThis, "__sparPieces")),
+      )
+      yield* Effect.forkScoped(App.hydrate(Routed, { target, layer: inPage }), {
+        startImmediately: true,
+      })
+      yield* Testing.eventually(() => expect(target.hasAttribute("data-spar-taken")).toBe(true))
+      yield* Testing.eventually(() => expect(ordersStatus()).toBe("loaded"))
+      expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("3")
+      expect(yield* Ref.get(Context.get(asked, Asked))).toEqual([])
     }),
   )
 

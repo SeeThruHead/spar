@@ -467,6 +467,12 @@ export const boxAround = (attribute: string, id: number): Box | null => {
   }
 }
 
+export const markTaken = (target: Element, attribute: string): void => {
+  target.setAttribute(attribute, "")
+}
+
+export const waitingPieces = (name: string): unknown => Reflect.get(globalThis, name)
+
 export const takePieces = (name: string, onPiece: (piece: unknown) => void): void => {
   const waiting: unknown = Reflect.get(globalThis, name)
 

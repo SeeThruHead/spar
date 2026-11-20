@@ -1,6 +1,6 @@
 import { engine, launch } from "@spar/browsers"
 import { Schema } from "effect"
-import type { Page } from "playwright"
+import type { Browser, Page } from "playwright"
 import { Server } from "spar"
 import { Recorded } from "spar/devtools/spans"
 import { start } from "./site.ts"
@@ -219,6 +219,49 @@ const takenInPieces = async (page: Page): Promise<void> => {
   await page.getByRole("heading", { name: "Corner shop" }).waitFor()
 }
 
+const withoutTheBundle = async (browser: Browser): Promise<void> => {
+  const page = await browser.newPage({ viewport: { width: 820, height: 900 } })
+
+  await page.route("**/client.js", (route) => route.abort())
+  await page.goto(`${origin}/slow/cheese`)
+  await said(page, "Supplier", "Valley dairy")
+  await said(page, "Supplier status", "loaded")
+
+  const taken = await page.locator("#root[data-spar-taken]").count()
+
+  await page.close()
+  if (taken !== 0) throw new Error("A page whose bundle never loaded was marked as taken over")
+}
+
+const bundleAfterTheStream = async (browser: Browser): Promise<void> => {
+  const page = await browser.newPage({ viewport: { width: 820, height: 900 } })
+  const broke = new Promise<never>((_resolve, reject) => {
+    page.on("pageerror", reject)
+  })
+
+  await page.route("**/client.js", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    await route.continue()
+  })
+
+  const checked = (async () => {
+    await page.goto(`${origin}/slow/cheese`, { waitUntil: "commit" })
+    await said(page, "Supplier", "Valley dairy")
+    await page.locator("#root[data-ready]").waitFor({ timeout: 10_000 })
+    await said(page, "Supplier status", "loaded")
+    await page.waitForTimeout(200)
+
+    const again = await asked(page)
+
+    if (again !== 0)
+      throw new Error(`The browser asked again ${again} times after taking over a finished page`)
+    await page.getByRole("link", { name: "Back to the shop" }).click()
+    await page.getByRole("heading", { name: "Corner shop" }).waitFor()
+  })()
+
+  await Promise.race([checked, broke]).finally(() => page.close())
+}
+
 const run = async (): Promise<void> => {
   const browser = await launch()
   const page = await browser.newPage({ viewport: { width: 820, height: 900 } })
@@ -229,7 +272,9 @@ const run = async (): Promise<void> => {
   await Promise.race([
     walk(page)
       .then(() => routed(page))
-      .then(() => takenInPieces(page)),
+      .then(() => takenInPieces(page))
+      .then(() => withoutTheBundle(browser))
+      .then(() => bundleAfterTheStream(browser)),
     broke,
   ]).finally(() => browser.close())
 }
@@ -257,5 +302,5 @@ if (!opening.includes("<title>Corner shop</title>") || opening.includes("Cheese"
 
 await run().finally(() => server.stop(true))
 console.log(
-  `Server rendering passed in ${engine()}: the document opens before the page is drawn, the page arrives complete with its state, its nodes are kept, the browser starts from the server stores, the takeover is in the trace of the render, and a routed page arrives with what its queries loaded, asks for none of it again, and goes on to other pages without a new document, each navigation one trace with the server; and a page with a slow query is sent as first drawn, with the slow data following as a piece that the browser takes without asking again`,
+  `Server rendering passed in ${engine()}: the document opens before the page is drawn, the page arrives complete with its state, its nodes are kept, the browser starts from the server stores, the takeover is in the trace of the render, and a routed page arrives with what its queries loaded, asks for none of it again, and goes on to other pages without a new document, each navigation one trace with the server; and a page with a slow query is sent as first drawn, with the slow data following as a piece that the browser takes without asking again; with the app's bundle blocked the slow data still shows, drawn by the server, and a bundle that arrives after the stream takes over the finished page without asking again`,
 )

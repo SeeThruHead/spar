@@ -145,7 +145,36 @@ const changedSince = (
 ): ReadonlyArray<readonly [string, Schema.Json]> =>
   now.filter(([key, held]) => haveEntries(held) && sent[key] !== Formatter.formatJson(held))
 
+const redrawn = Effect.fnUntraced(function* (
+  element: Element,
+  stores: Held<ReadonlyArray<Inspected>>,
+) {
+  const registered = stores.read()
+  const draw = yield* Scope.make()
+  const html = yield* Scope.provide(toHtml(element), draw)
+
+  yield* Scope.close(draw, Exit.void)
+  yield* Effect.sync(() => stores.write(registered))
+
+  return html
+})
+
+type Drawing = { readonly element: Element; readonly root: string }
+
+const piecesFor = (
+  drawing: Drawing,
+  stores: Held<ReadonlyArray<Inspected>>,
+  changed: ReadonlyArray<readonly [string, Schema.Json]>,
+) =>
+  changed.length === 0
+    ? Effect.succeed([])
+    : Effect.map(redrawn(drawing.element, stores), (html) => [
+        Pieces.script({ stores: Object.fromEntries(changed) }),
+        Pieces.html(drawing.root, html),
+      ])
+
 const followed = <E>(
+  drawing: Drawing,
   stores: Held<ReadonlyArray<Inspected>>,
   queue: Queue.Queue<string, E | Cause.Done>,
   sent: Readonly<Record<string, string>>,
@@ -160,13 +189,12 @@ const followed = <E>(
         const changed = changedSince(sent, now)
         const busy = yield* stillLoading(stores)
 
-        yield* Effect.forEach(
-          changed.length === 0 ? [] : [Pieces.script({ stores: Object.fromEntries(changed) })],
-          (chunk) => Queue.offer(queue, chunk),
-          { discard: true },
+        yield* Effect.flatMap(piecesFor(drawing, stores, changed), (chunks) =>
+          Queue.offerAll(queue, chunks),
         )
 
         return yield* followed(
+          drawing,
           stores,
           queue,
           {
@@ -184,6 +212,7 @@ export const renderInPieces = <R, LayerError = never>(
     readonly close: string
     readonly script: string
     readonly end: string
+    readonly root?: string
   },
 ): Stream.Stream<string, LayerError> =>
   Stream.callback<string, LayerError>((queue) => {
@@ -210,6 +239,7 @@ export const renderInPieces = <R, LayerError = never>(
         options.script,
       ])
       yield* followed(
+        { element, root: options.root ?? "#root" },
         stores,
         queue,
         Object.fromEntries(states.map(([key, held]) => [key, Formatter.formatJson(held)])),
