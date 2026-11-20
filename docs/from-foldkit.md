@@ -9,7 +9,7 @@ Both are built on Effect and both keep app state changes explicit and replayable
 | Commands returned from `update`                      | `Store.after(action, effect)` and `Store.outbox(action, send)` beside the store          |
 | `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                    |
 | `h.div([...], [...])`                                | JSX                                                                                      |
-| Subscriptions as a function of the Model             | Streams in the component's Effect, released on unmount                                   |
+| Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                  |
 | Submodels and OutMessages                            | Components and props; a child's handlers are Effects the parent passes in                |
 | Routes from parser combinators                       | `Router.route(path, Schema)` values and `Router.outlet`                                  |
 | `foldkit/story` and `foldkit/scene`                  | Stores tested as services; components tested with `spar/testing` by role                 |

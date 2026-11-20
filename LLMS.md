@@ -2038,33 +2038,36 @@ outbox, or a form's submit (which ignores a second submit while the first is run
 
 # Coming from React
 
-| React                                             | Spar                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------ |
-| A component function that runs on every render    | A view that runs once, plus one Effect that runs once on mount           |
-| `useState`                                        | `UiState.make` for screen state, a store for app state                   |
-| `useEffect` with a dependency array and a cleanup | Effect code in the component's scope; cleanup is the scope closing       |
-| `useMemo`, `useCallback`, `memo`                  | Not needed: nothing re-runs                                              |
-| `useContext`                                      | Services in the Effect's requirements, provided as layers at `App.mount` |
-| `{cond && <X />}`, `cond ? <A /> : <B />`         | `Reactive.when(X, props)` in the Effect                                  |
-| `{items.map((item) => <Row key={item.id} />)}`    | `Reactive.mapBy((item) => item.id, Row, toProps)` in the Effect          |
-| `useRef` and `ref`                                | `Handle.make` and `ref={handle}`                                         |
-| Error boundaries                                  | `View.recover` for expected errors (typed), `View.crash` for defects     |
-| Suspense                                          | `View.pending(Placeholder)`                                              |
-| Portals                                           | `View.portal`                                                            |
-| React Router                                      | `Router.route`, `Router.outlet`, `router.link`                           |
-| Redux and middleware                              | `Store.Tag`, `Store.after`, `Store.outbox`                               |
-| Testing Library                                   | `spar/testing` (it uses the same queries by role)                        |
+| React                                             | Spar                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| A component function that runs on every render    | `compose(...enhancers)((props) => <jsx />)`: the enhancers run once on mount, the view once  |
+| Higher-order components, recompose                | Enhancers: plain functions from the props so far to an Effect of more props                  |
+| `useState`                                        | `withUiState(name, Schema, initial)` for screen state, a store for app state                 |
+| `useEffect` with a dependency array and a cleanup | `withEffect(...)`: Effect code in the component's scope; cleanup is the scope closing        |
+| `useMemo`, `useCallback`, `memo`                  | Not needed: nothing re-runs                                                                  |
+| `useContext`                                      | `withStore(Store, ...)` and services in the enhancers' requirements, provided at `App.mount` |
+| `useQuery`                                        | `withQuery(name, TheQuery, (props) => input)`                                                |
+| `{cond && <X />}`, `cond ? <A /> : <B />`         | `<Show when={props.open}>...</Show>`                                                         |
+| `{items.map((item) => <Row key={item.id} />)}`    | `<For each={props.items} by={(item) => item.id}>{(item) => <Row item={item} />}</For>`       |
+| `useRef` and `ref`                                | `Handle.make` and `ref={handle}`                                                             |
+| Error boundaries                                  | `View.recover` for expected errors (typed), `View.crash` for defects                         |
+| Suspense                                          | `View.pending(Placeholder)`                                                                  |
+| Portals                                           | `View.portal`                                                                                |
+| React Router                                      | `Router.route`, `Router.outlet`, `router.link`                                               |
+| Redux and middleware                              | `Store.Tag`, `Store.after`, `Store.afterLatest`, `Store.afterLeading`, `Store.outbox`        |
+| Testing Library                                   | `spar/testing` (it uses the same queries by role)                                            |
 
 ### Things that will feel different
 
-- **JSX holds no logic.** A view cannot map, branch or fetch. The build step rejects JSX inside an
-  expression. Lists, conditionals and children that need services are built in the component's
-  Effect and handed to the view as elements.
+- **The view only draws.** It cannot fetch or run an Effect, and the build rejects `.map` and
+  ternaries over JSX inside it. Lists are `For`, conditions are `Show`, data comes from enhancers.
 - **Props are not reactive by themselves.** A changing value is a `Reactive<A>` and you pass that.
   A plain prop is fixed for the life of the component.
-- **A connected component is not a tag.** `<Counter />` does not compile if `Counter` needs a
-  service; mount it with `View.child(Counter, props)` in the parent's Effect. This is what keeps
-  errors and services in the types.
+- **Children are tags, as in React.** `<Dropdown label="Sort by" items={...} onPick={...} />`
+  inside a view, each keeping its own UI state with nothing wired. A component that can still
+  fail is not a tag until `View.recover` handles the failure, so errors stay in the types.
+- **A text input's value is UI state or a form field.** Binding it to a store selector or query
+  data does not compile, because whatever changes that value would replace what is being typed.
 - **Handlers are values.** `onClick={store.commands.reset()}` is an Effect, not a callback. A
   function is only needed when the handler reads the event.
 - **Event names follow the DOM.** `onKeydown`, not `onKeyDown`.
@@ -2081,7 +2084,7 @@ Both are built on Effect and both keep app state changes explicit and replayable
 | Commands returned from `update`                      | `Store.after(action, effect)` and `Store.outbox(action, send)` beside the store          |
 | `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                    |
 | `h.div([...], [...])`                                | JSX                                                                                      |
-| Subscriptions as a function of the Model             | Streams in the component's Effect, released on unmount                                   |
+| Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                  |
 | Submodels and OutMessages                            | Components and props; a child's handlers are Effects the parent passes in                |
 | Routes from parser combinators                       | `Router.route(path, Schema)` values and `Router.outlet`                                  |
 | `foldkit/story` and `foldkit/scene`                  | Stores tested as services; components tested with `spar/testing` by role                 |
@@ -2284,6 +2287,45 @@ Read from the README of Solid Router's main branch, whose 1.0 line targets Solid
 Two things Solid Router does that bear on Spar's list of open cases. Preloaded data is fresh for
 a few seconds by itself, which is the behaviour the default stale time of 0 lacks. And a
 mutation's answer brings the refreshed data with it, where Spar asks again.
+
+
+# Spar beside Treflex
+
+Treflex is a runtime for front-end state and the work that runs on it (requests, timers, live
+connections, multi-step flows), with Solid-style signals and bindings for React and Solid. This
+page sets its model beside Spar's, from Treflex's own README and reference (`actions.md`,
+`restart-and-records.md`). Both keep work out of components; they differ in where the work lives
+and how two pieces of work on the same thing relate.
+
+| Question                      | Treflex                                                                                                           | Spar                                                                                                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | On a store (`Store.Tag`): a reducer per action, and reactions (`Store.after`) for the async work                                                                                           |
+| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; reactions send further actions                                                                                                                 |
+| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the reaction's requirements, provided as layers; a test provides other layers                                                                                           |
+| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other, on purpose; each command is decided at once against the current state                                                                                           |
+| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `Store.afterLeading` refuses the repeat with a reason; `Store.afterLatest` stops the one running                                                                                           |
+| Is it running?                | `inFlight(action, owner)`                                                                                         | A phase in the state (`phases`, `Store.during`), so "busy" is state the view and the reducers can read                                                                                     |
+| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | A guard or a phase refuses it, says why, and the refusal is in the log and on `store.refused`                                                                                              |
+| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | Durable stores replay their log on the device; a command recorded just before a reload is carried out by the next tab, or reported as abandoned; the outbox resends what was not confirmed |
+| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its reactions stop with its scope                                                                                                               |
+| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, refusals, UI state and routes, each with its trace; time travel and forks in the devtools                                                                        |
+
+### What each makes impossible
+
+- **Treflex:** an entity changing under an action while that action waits (the hold), and work
+  stopping because its view went away.
+- **Spar:** a command that waits on another (there is no way to write one), state that changes
+  outside a reducer, a busy flag nobody resets (busy is a phase the state machine leaves), and an
+  older answer landing over a newer one (`Store.afterLatest`, queries numbering their requests).
+
+### Where they differ in spirit
+
+Treflex makes the action the unit: it holds its entity, runs step by step, and the runtime can
+pause, cancel, record and restore it between steps. Spar makes the state the unit: every change is
+one action that the reducer accepts or refuses at once, and async work is a reaction that reports
+back as more actions. Treflex queues a second click behind the first; Spar answers it at once,
+either by refusing it (with the reason shown) or by letting the state machine's current phase
+decide what it means.
 
 
 # Diagnostics
