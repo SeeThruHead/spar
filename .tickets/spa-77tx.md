@@ -17,3 +17,7 @@ tags: [goal7, site]
 **2026-11-20T07:12:04Z**
 
 Done: per-page title (Events.title in the app, the server writes it in the document's head; look.ts checks both). Devtools switch already existed (cookie toggle). Left: parallel-loading example's trace beside it, video, dark mode check.
+
+**2026-11-20T07:13:51Z**
+
+Dark mode check done: look.ts measures text contrast (AA 4.5:1, through a canvas so modern colour formats are read right) on home and docs in dark and on docs in light, with screenshots; all pass.

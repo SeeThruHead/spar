@@ -24,6 +24,41 @@ const wide = async (page: Page): Promise<ReadonlyArray<string>> => {
   return overflow > 1 ? [`${page.url()} is ${overflow}px wider than the screen`] : []
 }
 
+const lowContrast = async (page: Page): Promise<ReadonlyArray<string>> => {
+  await page.addScriptTag({ path: `${root}scripts/contrast.js` })
+
+  const found: unknown = await page.evaluate(() => {
+    const measure: unknown = Reflect.get(globalThis, "lowContrast")
+
+    return typeof measure === "function" ? Reflect.apply(measure, undefined, []) : ["not measured"]
+  })
+
+  return Array.isArray(found) ? found.map(String) : ["not measured"]
+}
+
+const dark = async (page: Page, origin: string, size: Size): Promise<ReadonlyArray<string>> => {
+  await page.emulateMedia({ colorScheme: "dark" })
+
+  const found = await ["/", "/docs/getting-started"].reduce<Promise<ReadonlyArray<string>>>(
+    (all, path) =>
+      all.then(async (done) => {
+        await page.goto(`${origin}${path}`)
+        await ready(page)
+        await shot(page, size, `dark${path.replaceAll("/", "-")}`)
+
+        return [
+          ...done,
+          ...(await lowContrast(page)).map((line) => `${size.name} dark ${path}: ${line}`),
+        ]
+      }),
+    Promise.resolve([]),
+  )
+
+  await page.emulateMedia({ colorScheme: "light" })
+
+  return found
+}
+
 const diagramText = (page: Page): Promise<number> =>
   page.evaluate(() => {
     const svg = document.querySelector("figure.diagram svg")
@@ -94,11 +129,20 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await shot(page, size, "search")
 
   const drawn = await diagrams(page, origin, size)
+  const night = await dark(page, origin, size)
+  const day = await (async () => {
+    await page.goto(`${origin}/docs/getting-started`)
+    await ready(page)
+
+    return (await lowContrast(page)).map((line) => `${size.name} light: ${line}`)
+  })()
 
   return [
     ...homeWide,
     ...docsWide,
     ...drawn,
+    ...night,
+    ...day,
     ...(reloaded ? [`${size.name}: a link inside a doc page reloaded the page`] : []),
     ...(titled === "Principles · Spar"
       ? []
