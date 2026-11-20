@@ -3,7 +3,8 @@ import * as Verify from "@alchemy.run/domain/Verify"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { describe, expect, it } from "@effect/vitest"
 import * as Domain from "@alchemy.run/domain"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
+import { CounterAggregate } from "../src/adapter/counter.ts"
 import {
   Counter,
   CounterModel,
@@ -57,5 +58,30 @@ describe("the reset counter as a domain aggregate", () => {
           "ResetInProgress",
         ])
       }).pipe(Effect.provide(CounterModel.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory)))),
+  )
+
+  it.effect("read through the adapter, its state and its last rejection are reactive values", () =>
+    Effect.gen(function* () {
+      const counter = yield* CounterAggregate
+
+      yield* counter.send(new Increment({ counterId: "two" }))
+      yield* counter.send(new Reset({ counterId: "two" }))
+      yield* counter.send(new Increment({ counterId: "two" }))
+
+      const state = yield* counter.state.get
+      const refused = yield* counter.refused.get
+
+      expect([state, Option.map(refused, (rejection) => rejection._tag)]).toEqual([
+        { count: 1, phase: "resetting" },
+        Option.some("ResetInProgress"),
+      ])
+    }).pipe(
+      Effect.provide(
+        CounterAggregate.layer.pipe(
+          Layer.provide(CounterModel.layer(Layer.empty)),
+          Layer.provide(Domain.InMemory),
+        ),
+      ),
+    ),
   )
 })
