@@ -506,12 +506,9 @@ touch the page.
 
 ```mermaid
 flowchart TB
-  given[Props given] --> effect[Component Effect]
-  services[Services] --> effect
-  effect --> props[View props]
-  props --> view[Pure view]
-  view --> page[DOM nodes]
-  values[Reactive values] -.-> page
+  given[Props and services] --> made[Enhancers]
+  made --> view[View]
+  view -->|reactive values bind| page[DOM nodes]
 ```
 
 ### 1. Set up once, bind at the leaf

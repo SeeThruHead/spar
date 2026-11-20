@@ -24,6 +24,31 @@ const wide = async (page: Page): Promise<ReadonlyArray<string>> => {
   return overflow > 1 ? [`${page.url()} is ${overflow}px wider than the screen`] : []
 }
 
+const diagramText = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    const svg = document.querySelector("figure.diagram svg")
+    const label = svg?.querySelector("text, .nodeLabel, .messageText, .edgeLabel")
+    if (!(svg instanceof SVGSVGElement) || label === null || label === undefined) return 0
+
+    const font = Number.parseFloat(getComputedStyle(label).fontSize)
+
+    return (font * svg.getBoundingClientRect().width) / svg.viewBox.baseVal.width
+  })
+
+const diagrams = async (page: Page, origin: string, size: Size): Promise<ReadonlyArray<string>> => {
+  await page.goto(`${origin}/docs/principles`)
+  await ready(page)
+
+  const figure = page.locator("figure.diagram").first()
+
+  await figure.scrollIntoViewIfNeeded()
+  await figure.screenshot({ path: `${root}artifacts/${size.name}-diagram.png` })
+
+  const text = await diagramText(page)
+
+  return text >= 13 ? [] : [`${size.name}: the principles diagram's text is ${text.toFixed(1)}px`]
+}
+
 const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyArray<string>> => {
   await page.goto(`${origin}/`)
   await ready(page)
@@ -64,9 +89,12 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await page.getByRole("status").getByText("place").waitFor({ timeout: 5000 })
   await shot(page, size, "search")
 
+  const drawn = await diagrams(page, origin, size)
+
   return [
     ...homeWide,
     ...docsWide,
+    ...drawn,
     ...(reloaded ? [`${size.name}: a link inside a doc page reloaded the page`] : []),
   ]
 }

@@ -370,6 +370,20 @@ a.spar-button {
   overflow-wrap: normal;
 }
 
+.prose figure.diagram {
+  margin: 1.25rem 0;
+  padding: 0.5rem 0;
+  background: #ffffff;
+  border-radius: var(--spar-radius);
+}
+
+.prose figure.diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 200px);
+}
+
 .prose table {
   display: block;
   max-inline-size: 100%;

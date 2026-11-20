@@ -1,6 +1,6 @@
 ---
 id: spa-n0q9
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-20T01:03:13Z

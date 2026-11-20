@@ -1,6 +1,8 @@
 import type { Heading, Page } from "../src/api.ts"
 import { entries } from "../src/nav.ts"
 import type { Content, Section } from "../server/content.ts"
+import { drawing } from "./diagrams.ts"
+import type { Drawing } from "./diagrams.ts"
 import { highlight, unescaped } from "./highlight.ts"
 
 const root = new URL("..", import.meta.url).pathname
@@ -74,9 +76,10 @@ const titleOf = (html: string, fallback: string): string => {
   return found === null ? fallback : plain(found[1] ?? "")
 }
 
-const pageOf = async (source: (typeof sources)[number]): Promise<Page> => {
+const pageOf = async (drawn: Drawing, source: (typeof sources)[number]): Promise<Page> => {
   const markdown = await Bun.file(source.file).text()
-  const raw = withLinks(withHighlighting(Bun.markdown.html(markdown)))
+  const withFigures = await drawn.withDiagrams(Bun.markdown.html(markdown), source.slug)
+  const raw = withLinks(withHighlighting(withFigures))
 
   return {
     slug: source.slug,
@@ -87,7 +90,13 @@ const pageOf = async (source: (typeof sources)[number]): Promise<Page> => {
 }
 
 export const built = async (): Promise<Content> => {
-  const pages = await Promise.all(sources.map(pageOf))
+  const drawn = await drawing()
+  const pages = await sources
+    .reduce<Promise<ReadonlyArray<Page>>>(
+      (all, source) => all.then(async (done) => [...done, await pageOf(drawn, source)]),
+      Promise.resolve([]),
+    )
+    .finally(() => drawn.close())
 
   return {
     pages,
