@@ -14,6 +14,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import { TestClock } from "effect/testing"
 import { Outbox, Reactive } from "spar"
@@ -86,6 +87,35 @@ describe("Outbox", () => {
       expect(yield* mail.most).toBe(1)
       expect(yield* outbox.pending.get).toBe(1)
     }).pipe(Effect.provide(KeyValueStore.layerMemory)),
+  )
+
+  it.effect(
+    "a channel queues typed payloads after what was already waiting, each with its key",
+    () =>
+      Effect.gen(function* () {
+        const outbox = yield* started(patient)
+        const sent = yield* Ref.make<ReadonlyArray<readonly [string, string]>>([])
+
+        yield* outbox.persist({ ...entry("waiting", 5), payload: { text: "from before" } })
+
+        const queued = yield* Outbox.channel(
+          "mail",
+          Schema.Struct({ text: Schema.String }),
+          ({ text }, key) => Ref.update(sent, (all) => [...all, [text, key] as const]),
+        ).pipe(
+          Effect.provideService(Outbox.Outbox, outbox),
+          Effect.provide(SecureRandom.layerWebCrypto),
+        )
+
+        yield* queued({ text: "one" })
+        yield* queued({ text: "two" })
+        yield* TestClock.adjust("1 second")
+
+        const done = yield* Ref.get(sent)
+
+        expect(done.map(([text]) => text)).toEqual(["from before", "one", "two"])
+        expect(new Set(done.map(([, key]) => key)).size).toBe(3)
+      }).pipe(Effect.provide(KeyValueStore.layerMemory)),
   )
 
   it.effect(

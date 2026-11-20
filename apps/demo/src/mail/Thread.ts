@@ -1,7 +1,7 @@
 import { Effect, pipe, Schema } from "effect"
 import { Events, Outbox, Reactive, UiState, View, compose, withProps } from "spar"
 import { MailApi, ThreadLoadFailed } from "../server/MailApi.ts"
-import { MailStore } from "./MailStore.ts"
+import { MailStore, Replies } from "./MailStore.ts"
 import type { Reply } from "./MailStore.ts"
 import {
   MailView,
@@ -15,6 +15,7 @@ import {
 const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
   const api = yield* MailApi
   const store = yield* MailStore
+  const sending = yield* Replies
   const outbox = yield* Outbox.Outbox
   const thread = yield* api.loadThread(id)
   const menuOpen = yield* UiState.make("menuOpen", Schema.Boolean, false)
@@ -54,7 +55,7 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
     replies,
     unsent: outbox.pending,
     onSend: [
-      Effect.flatMap(draft.get, (text) => store.commands.replySent({ threadId: id, text })),
+      Effect.flatMap(draft.get, (text) => sending.send({ threadId: id, text })),
       UiState.set(draft, ""),
     ],
   }
