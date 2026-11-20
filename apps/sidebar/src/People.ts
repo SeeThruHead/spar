@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Query, Store } from "spar"
+import { Model, Query, Store } from "spar"
 import { ServerUnreachable, User } from "./api.ts"
 import { Server } from "./server/Server.ts"
 
@@ -14,16 +14,17 @@ export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
 const State = Schema.Struct({
   selected: Schema.Array(Schema.Int),
   csv: Schema.NullOr(Schema.String),
+  problem: Schema.String,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { selected: [], csv: null }
+const initialState: State = { selected: [], csv: null, problem: "" }
 
 const toggled = (selected: ReadonlyArray<number>, id: number): ReadonlyArray<number> =>
   selected.includes(id) ? selected.filter((other) => other !== id) : [...selected, id]
 
-export class PeopleStore extends Store.Tag<PeopleStore>()("sidebar/People", {
+export class PeopleStore extends Model.Tag<PeopleStore>()("sidebar/People", {
   state: State,
   initialState,
   actions: {
@@ -31,18 +32,19 @@ export class PeopleStore extends Store.Tag<PeopleStore>()("sidebar/People", {
       ...state,
       selected: toggled(state.selected, id),
     })),
-    exportRequested: Store.action(
-      Schema.Void,
-      (state: State): State => state,
-      (state) => (state.selected.length === 0 ? "Select at least one person first" : null),
-    ),
+    nothingToExport: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      problem: "Select at least one person first",
+    })),
     exported: Store.action(Schema.String, (state: State, csv: string): State => ({
       ...state,
       csv,
+      problem: "",
     })),
   },
   selectors: {
     selected: Store.selector(Schema.Array(Schema.Int), (state: State) => state.selected),
+    problem: Store.selector(Schema.String, (state: State) => state.problem),
     csv: Store.selector(Schema.String, (state: State) => state.csv ?? ""),
     download: Store.selector(Schema.String, (state: State) =>
       state.csv === null ? "" : `data:text/csv;charset=utf-8,${encodeURIComponent(state.csv)}`,
@@ -55,11 +57,13 @@ export const csvOf = (users: ReadonlyArray<User>, selected: ReadonlyArray<number
 
 const lineOf = (user: User): string => `${user.name},${user.email}`
 
-export const exportsCsv = Store.after(
-  PeopleStore.actions.exportRequested,
-  Effect.fnUntraced(function* (_payload, state: State, send) {
-    const loaded = yield* UsersQuery.read()
+export const exportCsv = Effect.fn("People.exportCsv")(function* () {
+  const people = yield* PeopleStore
+  const selected = yield* people.select.selected.get
 
-    yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
-  }),
-)
+  if (selected.length === 0) return yield* people.commands.nothingToExport()
+
+  const loaded = yield* UsersQuery.read()
+
+  yield* people.commands.exported(csvOf(loaded ?? [], selected))
+})

@@ -3415,7 +3415,7 @@ Server data in a query store, a second store for the selection, and Export CSV a
 
 ```ts
 import { Effect, Schema } from "effect"
-import { Query, Store } from "spar"
+import { Model, Query, Store } from "spar"
 import { ServerUnreachable, User } from "./api.ts"
 import { Server } from "./server/Server.ts"
 
@@ -3430,16 +3430,17 @@ export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
 const State = Schema.Struct({
   selected: Schema.Array(Schema.Int),
   csv: Schema.NullOr(Schema.String),
+  problem: Schema.String,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { selected: [], csv: null }
+const initialState: State = { selected: [], csv: null, problem: "" }
 
 const toggled = (selected: ReadonlyArray<number>, id: number): ReadonlyArray<number> =>
   selected.includes(id) ? selected.filter((other) => other !== id) : [...selected, id]
 
-export class PeopleStore extends Store.Tag<PeopleStore>()("sidebar/People", {
+export class PeopleStore extends Model.Tag<PeopleStore>()("sidebar/People", {
   state: State,
   initialState,
   actions: {
@@ -3447,18 +3448,19 @@ export class PeopleStore extends Store.Tag<PeopleStore>()("sidebar/People", {
       ...state,
       selected: toggled(state.selected, id),
     })),
-    exportRequested: Store.action(
-      Schema.Void,
-      (state: State): State => state,
-      (state) => (state.selected.length === 0 ? "Select at least one person first" : null),
-    ),
+    nothingToExport: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      problem: "Select at least one person first",
+    })),
     exported: Store.action(Schema.String, (state: State, csv: string): State => ({
       ...state,
       csv,
+      problem: "",
     })),
   },
   selectors: {
     selected: Store.selector(Schema.Array(Schema.Int), (state: State) => state.selected),
+    problem: Store.selector(Schema.String, (state: State) => state.problem),
     csv: Store.selector(Schema.String, (state: State) => state.csv ?? ""),
     download: Store.selector(Schema.String, (state: State) =>
       state.csv === null ? "" : `data:text/csv;charset=utf-8,${encodeURIComponent(state.csv)}`,
@@ -3471,14 +3473,16 @@ export const csvOf = (users: ReadonlyArray<User>, selected: ReadonlyArray<number
 
 const lineOf = (user: User): string => `${user.name},${user.email}`
 
-export const exportsCsv = Store.after(
-  PeopleStore.actions.exportRequested,
-  Effect.fnUntraced(function* (_payload, state: State, send) {
-    const loaded = yield* UsersQuery.read()
+export const exportCsv = Effect.fn("People.exportCsv")(function* () {
+  const people = yield* PeopleStore
+  const selected = yield* people.select.selected.get
 
-    yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
-  }),
-)
+  if (selected.length === 0) return yield* people.commands.nothingToExport()
+
+  const loaded = yield* UsersQuery.read()
+
+  yield* people.commands.exported(csvOf(loaded ?? [], selected))
+})
 ```
 
 ## apps/sidebar/src/PeoplePanel.tsx
@@ -3486,10 +3490,10 @@ export const exportsCsv = Store.after(
 The people table, composed, its rows in a For.
 
 ```tsx
-import { Option } from "effect"
+import { Effect } from "effect"
 import { For, Reactive, compose, withHandlers, withQuery, withStore } from "spar"
-import type { Query, Store } from "spar"
-import { PeopleStore, UsersQuery, exportsCsv } from "./People.ts"
+import type { Query } from "spar"
+import { PeopleStore, UsersQuery, exportCsv } from "./People.ts"
 
 const statusOf = (status: Query.Status): string =>
   ({
@@ -3499,8 +3503,11 @@ const statusOf = (status: Query.Status): string =>
     failed: "Could not load",
   })[status]
 
-const told = (refused: Option.Option<Store.Refusal>): string =>
-  Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
+const withExport = Effect.fnUntraced(function* () {
+  const services = yield* Effect.context<PeopleStore | UsersQuery>()
+
+  return { onExport: Effect.provideContext(exportCsv(), services) }
+})
 
 const PeoplePanel = compose(
   withQuery("users", UsersQuery, () => undefined),
@@ -3512,10 +3519,10 @@ const PeoplePanel = compose(
     count: Reactive.map(people.select.selected, (selected) => `${selected.length} selected`),
     csv: people.select.csv,
     download: people.select.download,
-    refused: Reactive.map(people.refused, told),
+    problem: people.select.problem,
     onToggle: (id: number) => people.commands.toggled(id),
-    onExport: people.commands.exportRequested(),
   })),
+  withExport,
 )((props) => (
   <section class="people" aria-label="People">
     <h2>People</h2>
@@ -3561,7 +3568,7 @@ const PeoplePanel = compose(
       </button>
     </p>
     <p>
-      <output aria-label="Export problem">{props.refused}</output>
+      <output aria-label="Export problem">{props.problem}</output>
     </p>
     <output class="csv" aria-label="Exported CSV">
       {props.csv}
@@ -3574,7 +3581,7 @@ const PeoplePanel = compose(
   </section>
 ))
 
-export const People = UsersQuery.beside(PeopleStore.with(PeoplePanel, [exportsCsv]))
+export const People = UsersQuery.beside(PeopleStore.with(PeoplePanel))
 ```
 
 ## apps/sidebar/test/people.test.ts
@@ -3586,16 +3593,17 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Ref } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Timeline } from "spar"
-import { PeopleStore, UsersQuery, csvOf, exportsCsv } from "../src/People.ts"
+import { State, Timeline } from "spar"
+import { PeopleStore, UsersQuery, csvOf, exportCsv } from "../src/People.ts"
 import { people } from "../src/api.ts"
 import { Server } from "../src/server/Server.ts"
 
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    PeopleStore.layer([exportsCsv]).pipe(
+    PeopleStore.layer.pipe(
       Layer.provideMerge(UsersQuery.live),
+      Layer.provideMerge(State.layer),
       Layer.provide(
         Layer.mergeAll(
           Server.layer,
@@ -3629,8 +3637,12 @@ describe("people: server data in a store, used by another store's action", () =>
       yield* store.commands.toggled(124)
       yield* store.commands.toggled(121)
       yield* store.commands.toggled(124)
-      yield* Effect.withSpan(store.commands.exportRequested(), "a click on Export CSV")
-      yield* Effect.yieldNow
+      const clicked = yield* Effect.withSpan(
+        Effect.flatMap(Effect.currentSpan, (span) =>
+          Effect.as(Effect.provide(exportCsv(), built), span.traceId),
+        ),
+        "a click on Export CSV",
+      )
 
       expect(yield* store.select.csv.get).toBe(
         "name,email\nAda Lovelace,ada@example.com\nAlan Turing,alan@example.com",
@@ -3638,28 +3650,20 @@ describe("people: server data in a store, used by another store's action", () =>
       expect(yield* store.select.download.get).toContain("data:text/csv;charset=utf-8,name%2Cemail")
 
       const moments = yield* Ref.get(noted)
-      const asked = moments.find((seen) => seen.name === "sidebar/People/exportRequested")
       const made = moments.find((seen) => seen.name === "sidebar/People/exported")
 
-      expect(asked?.traceId).toHaveLength(32)
-      expect(made?.traceId).toBe(asked?.traceId)
+      expect(clicked).toHaveLength(32)
+      expect(made?.traceId).toBe(clicked)
     }),
   )
 
-  it.effect("with nobody selected the export is refused, and nothing is produced", () =>
+  it.effect("with nobody selected the export says so, and nothing is produced", () =>
     Effect.gen(function* () {
-      const { store } = yield* opened
+      const { built, store } = yield* opened
 
-      yield* store.commands.exportRequested()
-      yield* Effect.yieldNow
+      yield* Effect.provide(exportCsv(), built)
 
-      expect(yield* store.refused.get).toEqual(
-        Option.some({
-          action: "exportRequested",
-          reason: "Select at least one person first",
-          payload: null,
-        }),
-      )
+      expect(yield* store.select.problem.get).toBe("Select at least one person first")
       expect([yield* store.select.csv.get, yield* store.select.download.get]).toEqual(["", ""])
     }),
   )

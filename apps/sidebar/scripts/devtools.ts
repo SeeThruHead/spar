@@ -137,11 +137,11 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const loadedBy = await log.locator("ol li", { hasText: "sidebar/Users" }).allInnerTexts()
 
   await log
-    .locator("ol li", { hasText: "exportRequested" })
+    .locator("ol li", { hasText: "PeoplePanel/exported" })
     .last()
     .getByRole("button", { name: /^Trace / })
     .click()
-  await page.getByLabel("Spans").locator("li", { hasText: "exported" }).first().waitFor()
+  await page.getByLabel("Spans").locator("li", { hasText: "People.exportCsv" }).first().waitFor()
   await page.getByLabel("Trace", { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${root}artifacts/devtools-export.png` })
 

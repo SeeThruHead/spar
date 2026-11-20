@@ -46,12 +46,17 @@ const made = Effect.fnUntraced(function* <
   const state = yield* State.current
   const initial = yield* start
   const slot = yield* state.slot([key], definition.state, initial)
+  const recorder = yield* Timeline.Recorder
   const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = definition.actions
   const run = (name: string, handled: Action<State, unknown>, payload: Schema.Json) =>
     Effect.flatMap(Effect.orDie(handled.reducer(payload)), (reduce) =>
       Effect.andThen(
         slot.update(name, reduce, payload),
-        Timeline.note("command", `${key}/${name}`, () => payload),
+        Effect.provideService(
+          Timeline.note("command", `${key}/${name}`, () => payload),
+          Timeline.Recorder,
+          recorder,
+        ),
       ),
     )
   const commands = Record.map(
