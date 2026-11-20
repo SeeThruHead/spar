@@ -1,7 +1,6 @@
-import { Effect, Option, Schema, pipe } from "effect"
-import { Query, Reactive, Store, View } from "spar"
+import { Effect, Schema } from "effect"
+import { Query, Store } from "spar"
 import { ServerUnreachable, User } from "./api.ts"
-import { PeopleView, PersonRowView } from "./PeopleView.tsx"
 import { Server } from "./server/Server.ts"
 
 export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
@@ -64,49 +63,3 @@ export const exportsCsv = Store.after(
     yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
   }),
 )
-
-const statusOf = (status: Query.Status): string =>
-  ({
-    waiting: "Waiting",
-    loading: "Loading",
-    loaded: "Loaded",
-    failed: "Could not load",
-  })[status]
-
-const told = (refused: Option.Option<Store.Refusal>): string =>
-  Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
-
-const PeoplePanel = View.connect(
-  Effect.fnUntraced(function* () {
-    const users = yield* UsersQuery.ask()
-    const people = yield* PeopleStore
-
-    return {
-      status: Reactive.map(users.status, statusOf),
-      rows: yield* pipe(
-        Reactive.map(users.value, (loaded) => loaded ?? []),
-        Reactive.mapBy(
-          (user: User) => String(user.id),
-          PersonRowView,
-          (user, id) => ({
-            id,
-            name: Reactive.map(user, (now) => now.name),
-            email: Reactive.map(user, (now) => now.email),
-            selected: Reactive.map(people.select.selected, (selected) =>
-              selected.includes(Number(id)),
-            ),
-            onToggle: people.commands.toggled(Number(id)),
-          }),
-        ),
-      ),
-      count: Reactive.map(people.select.selected, (selected) => `${selected.length} selected`),
-      csv: people.select.csv,
-      download: people.select.download,
-      refused: Reactive.map(people.refused, told),
-      onExport: people.commands.exportRequested(),
-      onRefresh: users.refetch,
-    }
-  }),
-)(PeopleView)
-
-export const People = UsersQuery.beside(PeopleStore.with(PeoplePanel, [exportsCsv]))
