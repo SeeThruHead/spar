@@ -360,7 +360,7 @@ const drawEntry = <A>(
 ): Entry<A> => {
   const owner = Cell.owner()
   const cell = Cell.make(item)
-  const span = createSpan(rows.draw(key, fromCell(cell)), { ...place, owner })
+  const span = createSpan(rows.draw(key, fromCell(cell), item), { ...place, owner })
 
   return {
     start: span.start,

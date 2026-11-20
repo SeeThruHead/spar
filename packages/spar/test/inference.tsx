@@ -74,6 +74,28 @@ export const Numbered = compose(
   </ul>
 ))
 
+const Month = Schema.Literals(["2026-01", "2026-02"])
+
+type Month = typeof Month.Type
+
+export const Months = compose(
+  withUiState("highlighted", Month, "2026-01"),
+  withHandlers((props) => ({
+    bars: [{ month: "2026-01" as const }, { month: "2026-02" as const }],
+    onEnter: (month: Month) => UiState.set(props.highlighted, month),
+  })),
+)((props) => (
+  <ul>
+    <For each={props.bars} by={(bar) => bar.month}>
+      {(_bar, month) => (
+        <li>
+          <button onFocus={props.onEnter(month)}>{month}</button>
+        </li>
+      )}
+    </For>
+  </ul>
+))
+
 export const Ten = compose(
   withHandlers(() => ({ a: "ten" })),
   withHandlers((props) => ({ b: props.a })),
