@@ -1290,6 +1290,15 @@ nobody recording it does nothing. Store commands, `UiState.set` and `update`, an
 report themselves; use it for data arriving from a server. Each note carries the trace and span it
 happened in.
 
+### Diagnostics
+
+`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, refusal, types or tools),
+what happened and the fix; `Diagnostics.text(code, { said, in, at })` formats one report in the
+agent format. It is also importable as `spar/diagnostics`, the same list is written to
+`packages/spar/diagnostics.json`, and the reference page is
+[Diagnostics](diagnostics.md). Tools that read Spar's output (an agent, a CI step) match on the
+code.
+
 ### Devtools
 
 The devtools are not part of an app. In development the Vite plugin adds them:
