@@ -3,6 +3,7 @@ import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
 import { drawingIn } from "./internal/drawing.ts"
+import { placedHere } from "./internal/placed.ts"
 import { fragment, keyed, portal as portalTo } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { Frame, OverlayLayer } from "./internal/frame.ts"
@@ -22,7 +23,7 @@ export type Component<Props, E = never, R = never, ViewProps = never> = {
   readonly "~requirements"?: (requirements: R) => R
   readonly view: View<ViewProps> & Declared
   readonly mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>
-}
+} & ([E] extends [never] ? (props: Props) => Element : unknown)
 
 export type Declared = {
   readonly displayName: string
@@ -34,10 +35,21 @@ export type Mountable<Props, E = never, R = never, ViewProps = never> =
   | (View<Props> & View<ViewProps> & Declared)
   | Component<Props, E, R, ViewProps>
 
-const component = <Props, E, R, ViewProps>(
+type Anything = object | string | number | boolean | bigint | symbol | null | undefined
+
+export function component<Props, E, R, ViewProps>(
   view: View<ViewProps> & Declared,
   mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>,
-): Component<Props, E, R, ViewProps> => ({ [TypeId]: TypeId, view, mount })
+): Component<Props, E, R, ViewProps>
+export function component(
+  view: View<never> & Declared,
+  mount: (props: Anything) => Effect.Effect<Element, Anything, Scope.Scope>,
+): unknown {
+  return Object.assign(
+    (props: Anything) => placedHere(view.displayName, Effect.orDie(mount(props))),
+    { [TypeId]: TypeId, view, mount },
+  )
+}
 
 const viewOf = <Props, E, R, ViewProps>(
   mountable: Mountable<Props, E, R, ViewProps>,

@@ -2,8 +2,6 @@ import { Effect, Predicate, Record } from "effect"
 import type { Context, Schema } from "effect"
 import type { Scope } from "effect"
 import type { Action } from "./internal/action.ts"
-import { TypeId } from "./internal/component.ts"
-import { inContext } from "./internal/context.ts"
 import { drawingIn, drawingNow, drawnHere } from "./internal/drawing.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
@@ -16,7 +14,7 @@ import * as Events from "./Events.ts"
 import type { Fields } from "./Props.ts"
 import type * as Query from "./Query.ts"
 import * as UiState from "./UiState.ts"
-import { inViewScope } from "./View.ts"
+import { component, inViewScope } from "./View.ts"
 import type { Component } from "./View.ts"
 
 export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Effect<Add, E, R>) & {
@@ -25,12 +23,8 @@ export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Eff
 
 type Outside<R> = Exclude<R, Scope.Scope | ViewScope>
 
-export type Placeable<Outer, R> = Component<Outer, never, R, Outer> & ((props: Outer) => Element)
-
-type Usable<Outer, E, R> = [E] extends [never] ? Placeable<Outer, R> : Component<Outer, E, R, Outer>
-
 type Composed<Outer, Inner, Add, E, R> = {
-  (view: (props: Inner) => Element, name?: string): Usable<Outer, E, Outside<R>>
+  (view: (props: Inner) => Element, name?: string): Component<Outer, E, Outside<R>, Outer>
   (props: Outer): Effect.Effect<Add, E, R>
 }
 
@@ -50,17 +44,6 @@ const applied = (steps: ReadonlyArray<Step>, outer: Props) =>
 
 const fieldsOf = (steps: ReadonlyArray<Step>): Fields =>
   Object.assign({}, ...steps.map((step) => step.fields ?? {}))
-
-const placedHere = (name: string, mount: Effect.Effect<Element, never, Scope.Scope>): Element => {
-  const context = drawnHere()
-
-  return keyed({
-    kind: "mounted",
-    items: succeed([name]),
-    key: (only: string) => only,
-    mount: () => inContext(mount, context),
-  })
-}
 
 const shown = (name: string, fields: Fields, view: (props: Props) => Element, props: Props) =>
   Effect.flatMap(Effect.context(), (context) =>
@@ -94,11 +77,10 @@ const made = (
       { captureStackTrace: false, attributes: { "spar.kind": "view" } },
     )
 
-  return Object.assign((outer: Props) => placedHere(name, Effect.orDie(mount(outer))), {
-    [TypeId]: TypeId,
-    view: Object.assign((props: Props) => view(props), { displayName: name, props: fields, at }),
+  return component(
+    Object.assign((props: Props) => view(props), { displayName: name, props: fields, at }),
     mount,
-  })
+  )
 }
 
 const isView = (given: unknown): given is (props: Props) => Element => typeof given === "function"

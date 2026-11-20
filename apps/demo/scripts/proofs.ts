@@ -74,7 +74,7 @@ const expectations: ReadonlyArray<Expectation> = [
     file: "mount-unhandled-error.ts",
     rule: "Mounting a component whose error nobody recovers",
     by: "types",
-    expect: "Component<unknown, ThreadLoadFailed, MailApi,",
+    expect: "mount: (props: unknown) => Effect<Element, ThreadLoadFailed",
   },
   {
     file: "pending-before-recover.ts",
@@ -152,7 +152,7 @@ const expectations: ReadonlyArray<Expectation> = [
     file: "backend-error-unhandled.ts",
     rule: "Mounting a component that calls the backend without handling the failure its contract names",
     by: "types",
-    expect: "Component<unknown, ThreadGone,",
+    expect: "mount: (props: unknown) => Effect<Element, ThreadGone",
   },
   {
     file: "store-without-a-state-schema.ts",
