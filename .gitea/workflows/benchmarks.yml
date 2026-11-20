@@ -1,0 +1,32 @@
+name: benchmarks
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1"
+
+concurrency:
+  group: benchmarks
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    runs-on: boat
+    timeout-minutes: 60
+    env:
+      MOON_CACHE_TOKEN: ${{ secrets.MOON_CACHE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Chromium for the benchmark
+        run: bun run --cwd apps/demo browser:install
+      - name: Run every benchmark (median of 10 runs each) and commit the page
+        env:
+          GITEA_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          REVISION: ${{ github.sha }}
+        run: ./scripts/ci/benchmarks

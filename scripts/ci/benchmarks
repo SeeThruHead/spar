@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${GITEA_TOKEN:?}" "${GITHUB_SERVER_URL:?}" "${GITHUB_REPOSITORY:?}" "${REVISION:?}"
+cpu="$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ *//')"
+export SPAR_BENCH_MACHINE="the CI box $(hostname) (${cpu}, $(nproc) cores), with nothing else running on it"
+bun run moon run bench:bench
+if git diff --quiet -- docs/benchmarks.md docs/benchmarks.html; then
+  echo "The benchmark page was not written (the box was busy) or did not change."
+  exit 0
+fi
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=credential.helper
+export GIT_CONFIG_VALUE_0='!f() { echo username=sth; echo "password=$GITEA_TOKEN"; }; f'
+git config user.name "spar CI"
+git config user.email "spar-ci@localhost"
+git add docs/benchmarks.md docs/benchmarks.html
+git commit -m "[skip ci] Benchmarks measured on a CI box at ${REVISION:0:7}"
+git pull --rebase "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" main
+git push "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" HEAD:main
