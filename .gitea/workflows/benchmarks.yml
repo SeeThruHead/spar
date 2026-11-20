@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   measure:
-    runs-on: boat
+    runs-on: boat-pool
     timeout-minutes: 60
     env:
       MOON_CACHE_TOKEN: ${{ secrets.MOON_CACHE_TOKEN }}
