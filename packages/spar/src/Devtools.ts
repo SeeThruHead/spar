@@ -113,15 +113,22 @@ type Past = {
 
 const main: Named = { id: 0, name: "Main", from: null }
 
+const reportsOnly: ReadonlySet<Timeline.Kind> = new Set(["waited", "noticed"])
+
+const changesState = (kind: Timeline.Kind): boolean => !reportsOnly.has(kind)
+
+const changesIn = (remembered: ReadonlyArray<Remembered>): number =>
+  remembered.filter((kept) => changesState(kept.moment.kind)).length
+
 const branchesOf = (now: Past): ReadonlyArray<Branch> =>
   Array.sort(
     [
-      { ...now.branch, moments: now.remembered.length, current: true },
+      { ...now.branch, moments: changesIn(now.remembered), current: true },
       ...now.others.map((parked) => ({
         id: parked.id,
         name: parked.name,
         from: parked.from,
-        moments: parked.remembered.length,
+        moments: changesIn(parked.remembered),
         current: false,
       })),
     ],
@@ -250,7 +257,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       return Option.match(
         Option.orElse(
           Array.findFirst(before.remembered, (kept) => kept.moment.seq === before.viewing),
-          () => Array.last(before.remembered),
+          () => Array.findLast(before.remembered, (kept) => changesState(kept.moment.kind)),
         ),
         { onNone: () => Effect.void, onSome: (kept) => forkFrom(before, kept) },
       )

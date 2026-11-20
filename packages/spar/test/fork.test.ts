@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Router, Store, UiState, compose } from "spar"
+import { Reactive, Router, Store, Timeline, UiState, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
@@ -234,12 +234,13 @@ describe("forking the running program", () => {
     }).pipe(Effect.provide(layer)),
   )
 
-  it.live("before anything has happened there is nothing to fork", () =>
+  it.live("before anything has changed there is nothing to fork, even after a report", () =>
     Effect.gen(function* () {
       const registry = yield* Devtools.Registry
 
       yield* Testing.mount(Desk)
       yield* shows("0", "")
+      yield* Timeline.note("waited", "Desk", () => ({ took: 20 }))
       yield* registry.fork
       expect(yield* branches).toEqual([["Main", null, 0, true]])
     }).pipe(Effect.provide(layer)),
