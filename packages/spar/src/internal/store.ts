@@ -177,17 +177,23 @@ export const made = Effect.fnUntraced(function* <
     Effect.flatMap(Effect.orDie(handled.reducer(payload)), (reduce) =>
       applied(name, reduce, payload),
     )
-  const commands = Record.map(
-    named,
-    (handled, name) => (input: unknown) =>
-      Effect.withSpan(
-        Effect.flatMap(Effect.orDie(handled.encode(input)), (payload) =>
-          run(name, handled, payload),
+  const commands = Record.map(named, (handled, name) => {
+    const options = {
+      captureStackTrace: false,
+      attributes: { "spar.store": key, "spar.action": name },
+    }
+
+    return (input: unknown) =>
+      Effect.suspend(() =>
+        Effect.withSpan(
+          Effect.flatMap(Effect.orDie(handled.encode(input)), (payload) =>
+            run(name, handled, payload),
+          ),
+          `${key}/${name}`,
+          options,
         ),
-        `${key}/${name}`,
-        { captureStackTrace: false, attributes: { "spar.store": key, "spar.action": name } },
-      ),
-  )
+      )
+  })
   const nameOf = new Map(
     Record.toEntries(definition.selectors).map(([name, chosen]) => [chosen, name] as const),
   )
