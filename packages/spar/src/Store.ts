@@ -28,6 +28,7 @@ import {
   Refused,
   UnknownAction,
   Unreadable,
+  brokenBy,
   inMemory,
   lastSeqOf,
   onDevice,
@@ -431,6 +432,16 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         const before = cell.read()
         const next = attempt(before.state)
         if (next instanceof Refused) return yield* turnAway(name, payload, next.reason, intent)
+
+        const broken = brokenBy(definition, {
+          before: before.state,
+          after: next,
+          action: name,
+          payload,
+        })
+        if (broken !== null) {
+          return yield* turnAway(name, payload, `it would break the rule ${broken}`, intent)
+        }
 
         const id = yield* random.uuidV7()
         const seq = yield* Ref.updateAndGet(sequence, (last) => last + 1)

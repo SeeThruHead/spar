@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": false,
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "useUnknownInCatchVariables": false,
+    "paths": {
+      "@alchemy.run/domain": ["./vendor/alchemy-domain/src/index.ts"],
+      "@alchemy.run/domain/*": ["./vendor/alchemy-domain/src/*.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

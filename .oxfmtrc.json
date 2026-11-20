@@ -8,6 +8,7 @@
     "**/dist/**",
     "**/coverage/**",
     "**/artifacts/**",
+    "**/vendor/**",
     "LLMS.md",
     "docs/benchmarks.md",
     "docs/navigation.md",

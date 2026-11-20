@@ -53,11 +53,34 @@ export type Selectors<State> = Readonly<Record<string, Selector<State, unknown>>
 
 export type Step<State> = { readonly seq: number; readonly state: State }
 
+export type Transition<State> = {
+  readonly before: State
+  readonly after: State
+  readonly action: string
+  readonly payload: Schema.Json
+}
+
+export type Rules<State> = {
+  readonly invariants?: Readonly<Record<string, (state: NoInfer<State>) => boolean>>
+  readonly transitions?: Readonly<Record<string, (step: Transition<NoInfer<State>>) => boolean>>
+}
+
 export type Definition<State, A extends Actions<State>, S extends Selectors<State>> = {
   readonly state: Schema.Codec<State, unknown>
   readonly initialState: State
   readonly actions: A
   readonly selectors: S
+  readonly invariants?: Readonly<Record<string, (state: NoInfer<State>) => boolean>>
+  readonly transitions?: Readonly<Record<string, (step: Transition<NoInfer<State>>) => boolean>>
+}
+
+export const brokenBy = <State>(rules: Rules<State>, step: Transition<State>): string | null => {
+  const broken = [
+    ...Object.entries(rules.invariants ?? {}).filter(([, holds]) => !holds(step.after)),
+    ...Object.entries(rules.transitions ?? {}).filter(([, holds]) => !holds(step)),
+  ]
+
+  return broken[0]?.[0] ?? null
 }
 
 export type Journal<State> = {
