@@ -11,20 +11,20 @@ Change one row among 10,000 is the suite chosen for Spar's model, where one stor
 
 | Operation | spar | spar-composed | solid | solid2 | react | foldkit |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create 1,000 rows | 1.38× Solid<br>37.3 ms | 1.24× Solid<br>33.7 ms | 1.00× Solid<br>27.1 ms | 1.07× Solid<br>28.9 ms | 1.38× Solid<br>37.3 ms | 1.83× Solid<br>49.5 ms |
-| Replace all 1,000 rows | 1.20× Solid<br>41.0 ms | 1.14× Solid<br>39.1 ms | 1.00× Solid<br>34.2 ms | 0.83× Solid<br>28.3 ms | 1.23× Solid<br>42.2 ms | 1.37× Solid<br>47.0 ms |
-| Update every 10th row of 1,000 | 0.90× Solid<br>9.1 ms | 1.51× Solid<br>15.3 ms | 1.00× Solid<br>10.1 ms | 0.78× Solid<br>7.9 ms | 1.04× Solid<br>10.5 ms | 1.14× Solid<br>11.5 ms |
-| Select a row among 1,000 | 1.05× Solid<br>8.1 ms | 0.83× Solid<br>6.4 ms | 1.00× Solid<br>7.7 ms | 1.10× Solid<br>8.5 ms | 1.26× Solid<br>9.7 ms | 1.77× Solid<br>13.6 ms |
-| Swap two rows of 1,000 | 1.04× Solid<br>9.6 ms | 1.24× Solid<br>11.4 ms | 1.00× Solid<br>9.2 ms | 0.98× Solid<br>9.0 ms | 3.63× Solid<br>33.4 ms | 1.46× Solid<br>13.4 ms |
-| Remove one row of 1,000 | 1.28× Solid<br>17.0 ms | 1.29× Solid<br>17.1 ms | 1.00× Solid<br>13.3 ms | 0.92× Solid<br>12.3 ms | 0.64× Solid<br>8.5 ms | 1.10× Solid<br>14.6 ms |
-| Create 10,000 rows | 1.61× Solid<br>410.1 ms | 1.41× Solid<br>360.8 ms | 1.00× Solid<br>255.4 ms | 1.20× Solid<br>306.6 ms | 1.82× Solid<br>464.8 ms | 1.68× Solid<br>428.3 ms |
-| Append 1,000 rows to 1,000 | 1.08× Solid<br>43.1 ms | 1.15× Solid<br>46.0 ms | 1.00× Solid<br>40.0 ms | 1.07× Solid<br>43.0 ms | 0.97× Solid<br>38.7 ms | 1.33× Solid<br>53.1 ms |
-| Clear 1,000 rows | 0.98× Solid<br>9.3 ms | 1.23× Solid<br>11.7 ms | 1.00× Solid<br>9.5 ms | 0.63× Solid<br>6.0 ms | 1.00× Solid<br>9.5 ms | 1.76× Solid<br>16.7 ms |
-| Change one row among 10,000, to the next frame | 1.29× Solid<br>57.6 ms | 1.09× Solid<br>48.8 ms | 1.00× Solid<br>44.8 ms | 1.00× Solid<br>44.7 ms | 1.27× Solid<br>57.1 ms | 1.06× Solid<br>47.4 ms |
-| Change one row among 10,000, until the DOM changed | 1.75× Solid<br>1.4 ms | 1.37× Solid<br>1.1 ms | 1.00× Solid<br>0.8 ms | 1.00× Solid<br>0.8 ms | 7.75× Solid<br>6.2 ms | 6.00× Solid<br>4.8 ms |
-| Heap after 1,000 rows | 1.34× Solid<br>4.5 MB | 1.38× Solid<br>4.6 MB | 1.00× Solid<br>3.3 MB | 1.11× Solid<br>3.7 MB | 1.29× Solid<br>4.3 MB | 1.76× Solid<br>5.9 MB |
-| Heap after 10,000 rows | 1.17× Solid<br>16.7 MB | 1.16× Solid<br>16.5 MB | 1.00× Solid<br>14.3 MB | 1.09× Solid<br>15.5 MB | 1.29× Solid<br>18.5 MB | 1.87× Solid<br>26.7 MB |
+| Create 1,000 rows | 1.39× Solid<br>39.1 ms | 1.28× Solid<br>36.0 ms | 1.00× Solid<br>28.1 ms | 0.89× Solid<br>24.9 ms | 1.10× Solid<br>31.0 ms | 1.52× Solid<br>42.6 ms |
+| Replace all 1,000 rows | 1.45× Solid<br>40.6 ms | 1.25× Solid<br>34.9 ms | 1.00× Solid<br>28.0 ms | 1.16× Solid<br>32.5 ms | 1.41× Solid<br>39.4 ms | 1.53× Solid<br>42.9 ms |
+| Update every 10th row of 1,000 | 0.50× Solid<br>6.2 ms | 1.02× Solid<br>12.5 ms | 1.00× Solid<br>12.3 ms | 0.72× Solid<br>8.9 ms | 0.65× Solid<br>8.0 ms | 0.92× Solid<br>11.3 ms |
+| Select a row among 1,000 | 1.81× Solid<br>11.2 ms | 1.66× Solid<br>10.3 ms | 1.00× Solid<br>6.2 ms | 0.87× Solid<br>5.4 ms | 0.56× Solid<br>3.5 ms | 2.00× Solid<br>12.4 ms |
+| Swap two rows of 1,000 | 1.94× Solid<br>17.1 ms | 1.32× Solid<br>11.6 ms | 1.00× Solid<br>8.8 ms | 0.75× Solid<br>6.6 ms | 2.73× Solid<br>24.0 ms | 1.43× Solid<br>12.6 ms |
+| Remove one row of 1,000 | 1.60× Solid<br>16.2 ms | 1.58× Solid<br>16.0 ms | 1.00× Solid<br>10.1 ms | 0.95× Solid<br>9.6 ms | 1.42× Solid<br>14.3 ms | 1.50× Solid<br>15.2 ms |
+| Create 10,000 rows | 1.24× Solid<br>318.5 ms | 1.36× Solid<br>349.4 ms | 1.00× Solid<br>256.6 ms | 1.07× Solid<br>275.3 ms | 1.59× Solid<br>409.2 ms | 1.42× Solid<br>365.2 ms |
+| Append 1,000 rows to 1,000 | 1.12× Solid<br>37.4 ms | 1.17× Solid<br>39.1 ms | 1.00× Solid<br>33.5 ms | 1.16× Solid<br>38.7 ms | 1.43× Solid<br>47.9 ms | 1.43× Solid<br>47.9 ms |
+| Clear 1,000 rows | 2.00× Solid<br>12.8 ms | 1.45× Solid<br>9.3 ms | 1.00× Solid<br>6.4 ms | 0.91× Solid<br>5.8 ms | 2.02× Solid<br>12.9 ms | 2.36× Solid<br>15.1 ms |
+| Change one row among 10,000, to the next frame | 1.20× Solid<br>48.7 ms | 1.20× Solid<br>48.7 ms | 1.00× Solid<br>40.5 ms | 1.02× Solid<br>41.4 ms | 1.49× Solid<br>60.5 ms | 1.20× Solid<br>48.7 ms |
+| Change one row among 10,000, until the DOM changed | 2.00× Solid<br>1.0 ms | 2.40× Solid<br>1.2 ms | 1.00× Solid<br>0.5 ms | 1.60× Solid<br>0.8 ms | 9.40× Solid<br>4.7 ms | 8.40× Solid<br>4.2 ms |
+| Heap after 1,000 rows | 1.37× Solid<br>4.6 MB | 1.34× Solid<br>4.5 MB | 1.00× Solid<br>3.3 MB | 1.11× Solid<br>3.7 MB | 1.29× Solid<br>4.3 MB | 1.76× Solid<br>5.9 MB |
+| Heap after 10,000 rows | 1.15× Solid<br>16.5 MB | 1.17× Solid<br>16.6 MB | 1.00× Solid<br>14.3 MB | 1.09× Solid<br>15.5 MB | 1.29× Solid<br>18.5 MB | 1.87× Solid<br>26.7 MB |
 | Typical frame while scrolling 10,000 rows | 1.00× Solid<br>16.7 ms | 1.00× Solid<br>16.7 ms | 1.00× Solid<br>16.7 ms | 1.00× Solid<br>16.7 ms | 1.00× Solid<br>16.7 ms | 1.00× Solid<br>16.7 ms |
 | Slowest frame while scrolling 10,000 rows | 1.00× Solid<br>16.8 ms | 1.00× Solid<br>16.8 ms | 1.00× Solid<br>16.8 ms | 1.00× Solid<br>16.8 ms | 1.00× Solid<br>16.8 ms | 1.00× Solid<br>16.8 ms |
-| Startup, until the app is in the page | 3.81× Solid<br>16.0 ms | 2.24× Solid<br>9.4 ms | 1.00× Solid<br>4.2 ms | 1.50× Solid<br>6.3 ms | 2.10× Solid<br>8.8 ms | 4.52× Solid<br>19.0 ms |
-| JavaScript shipped (gzip) | 9.64× Solid<br>59.0 kB | 9.60× Solid<br>58.8 kB | 1.00× Solid<br>6.1 kB | 3.86× Solid<br>23.7 kB | 11.10× Solid<br>68.0 kB | 16.09× Solid<br>98.5 kB |
+| Startup, until the app is in the page | 2.39× Solid<br>11.0 ms | 2.33× Solid<br>10.7 ms | 1.00× Solid<br>4.6 ms | 1.41× Solid<br>6.5 ms | 1.72× Solid<br>7.9 ms | 3.67× Solid<br>16.9 ms |
+| JavaScript shipped (gzip) | 9.89× Solid<br>60.6 kB | 9.87× Solid<br>60.4 kB | 1.00× Solid<br>6.1 kB | 3.86× Solid<br>23.7 kB | 11.10× Solid<br>68.0 kB | 16.09× Solid<br>98.5 kB |
