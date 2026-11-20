@@ -1,3 +1,4 @@
+import { loadavg } from "node:os"
 import { chromium } from "playwright"
 import type { Browser, Page } from "playwright"
 
@@ -474,6 +475,9 @@ const solid2Version = await versionOf("../../bench-solid2/node_modules/solid-js"
 const foldkitVersion = await versionOf("foldkit")
 const reactVersion = await versionOf("react")
 
+const mostLoad = Number(Bun.env["BENCH_MOST_LOAD"] ?? 3)
+const loadBefore = loadavg()[0] ?? 0
+
 const browser = await chromium.launch()
 const results = await frameworks
   .reduce<Promise<ReadonlyArray<Result>>>(
@@ -486,10 +490,25 @@ const results = await frameworks
     await server.stop(true)
   })
 
+const loadAfter = loadavg()[0] ?? 0
+const busiest = Math.max(loadBefore, loadAfter)
+const quiet = busiest <= mostLoad
+
 await Bun.write(`${root}artifacts/bench.json`, JSON.stringify(results, null, 2))
-await Bun.write(`${repo}docs/benchmarks.md`, report(results, browser.version()))
-await Bun.write(`${repo}docs/benchmarks.html`, page(results, browser.version()))
+await Promise.all(
+  quiet
+    ? [
+        Bun.write(`${repo}docs/benchmarks.md`, report(results, browser.version())),
+        Bun.write(`${repo}docs/benchmarks.html`, page(results, browser.version())),
+      ]
+    : [],
+)
 console.log(report(results, browser.version()))
+console.log(
+  quiet
+    ? `Load average ${busiest.toFixed(1)}: the benchmark page was written.`
+    : `Load average ${busiest.toFixed(1)} is above ${mostLoad}: these numbers are not to be quoted and the benchmark page was left as it was. Run again on a quiet machine, or set BENCH_MOST_LOAD.`,
+)
 
 const budgetRatio = 2
 const noiseFloor = 25
