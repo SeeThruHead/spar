@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Store } from "spar"
+import { Model, Store } from "spar"
 
 const State = Schema.Struct({ count: Schema.Finite })
 
@@ -7,7 +7,7 @@ type State = typeof State.Type
 
 const initialState: State = { count: 0 }
 
-export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/CounterStore", {
+export class CounterStore extends Model.Tag<CounterStore>()("demo/counter/CounterStore", {
   state: State,
   initialState,
   actions: {

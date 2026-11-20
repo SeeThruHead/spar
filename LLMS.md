@@ -1842,7 +1842,7 @@ with a Schema for each payload, and named selectors with a Schema for what each 
 
 ```ts
 import { Schema } from "effect"
-import { Store } from "spar"
+import { Model, Store } from "spar"
 
 const State = Schema.Struct({ count: Schema.Finite })
 
@@ -1850,7 +1850,7 @@ type State = typeof State.Type
 
 const initialState: State = { count: 0 }
 
-export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/CounterStore", {
+export class CounterStore extends Model.Tag<CounterStore>()("demo/counter/CounterStore", {
   state: State,
   initialState,
   actions: {
@@ -1946,7 +1946,7 @@ const program = Effect.gen(function* () {
 
   return yield* App.mount(Counter, {
     target,
-    layer: CounterStore.layer(),
+    layer: CounterStore.layer,
   })
 })
 
@@ -1974,7 +1974,7 @@ it.live("the counter counts", () =>
     const count = yield* Testing.find("status", "Count")
 
     yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(CounterStore.layer())),
+  }).pipe(Effect.provide(CounterStore.layer)),
 )
 ```
 
@@ -3203,7 +3203,7 @@ A composed component with its own enhancer (`withDraft`) and a store declared be
 
 ```tsx
 import { Effect, Schema } from "effect"
-import { Events, For, Form, Reactive, Store, compose, withProps, withStore } from "spar"
+import { Events, For, Form, Model, Reactive, Store, compose, withProps, withStore } from "spar"
 import { SubmitButton, TextField } from "@spar/ui"
 
 const Note = Schema.Struct({ id: Schema.Int, text: Schema.String })
@@ -3217,7 +3217,7 @@ type State = typeof State.Type
 const counted = (state: State): string =>
   state.notes.length === 1 ? "1 note" : `${state.notes.length} notes`
 
-export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", {
+export class NotesStore extends Model.Tag<NotesStore>()("sidebar/Notes", {
   state: State,
   initialState: { notes: [] },
   actions: {

@@ -17,7 +17,7 @@ class Sidebar extends Context.Service<Sidebar, { readonly open: UiState.UiState<
 
 export const program = App.mount(Counter, {
   target: document.body,
-  layer: Layer.merge(CounterStore.layer(), Sidebar.layer).pipe(
+  layer: Layer.merge(CounterStore.layer, Sidebar.layer).pipe(
     Layer.provide(SecureRandom.layerWebCrypto),
   ),
 })

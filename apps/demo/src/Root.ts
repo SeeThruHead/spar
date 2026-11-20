@@ -23,7 +23,7 @@ export const Root = compose(
 )(AppView)
 
 export const layer = Layer.mergeAll(
-  CounterStore.layer(),
+  CounterStore.layer,
   TodoStore.layerDurable(),
   MailStoreLive,
 ).pipe(

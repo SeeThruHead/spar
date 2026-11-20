@@ -22,7 +22,7 @@ const overHttp = Layer.effect(
 
 const fromTheServer = Layer.provide(queries, Catalogue.layerRemote(`${location.origin}/rpc`))
 
-export const layer = Layer.mergeAll(ShopStore.layer(), overHttp, fromTheServer).pipe(
+export const layer = Layer.mergeAll(ShopStore.layer, overHttp, fromTheServer).pipe(
   Layer.provide(Backend.layer),
   Layer.provideMerge(Router.Router.layerBrowser),
   Layer.provide(SecureRandom.layerWebCrypto),
