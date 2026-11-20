@@ -46,9 +46,10 @@ Built since, and smaller than they sound, but not done:
   everything code can do: a layer built by a function declaration, a component from a package, or
   a service reached only through `Effect.service` is not seen, and such a child still fails when
   it mounts. The Bun plugin checks one file at a time.
-- **The bundle is large and starts slower than Solid's.** The benchmark app loads 58.4 kB gzipped
-  at start (Solid 6.1 kB, React 68.0 kB), down from 68.6 kB once the router, the device journal
-  and diagnostic text for builds stopped shipping to apps that do not use them. About 35 kB is the floor
+- **The bundle is large and starts slower than Solid's.** The benchmark app loads 56.2 kB gzipped
+  at start (Solid 6.3 kB, React 69.6 kB), down from 68.6 kB once the router, the device journal
+  and diagnostic text for builds stopped shipping to apps that do not use them, and from 58.4 kB
+  once phases, reactions and the store's own journal were gone. About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not
   any one slow function (`docs/benchmarks.md`). `bun run --cwd apps/bench startup` profiles it:
   on sthdev, Spar waits about 4.7 ms longer than Solid while its 200 kB bundle (minified) loads and
