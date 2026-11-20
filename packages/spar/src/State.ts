@@ -65,22 +65,35 @@ const startingValue = <A, I>(
       ),
   })
 
-const savedAfter = <A, I>(
+const writtenAndSaved = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
   tabs: Tabs.Tabs,
   path: ReadonlyArray<string>,
   schema: Schema.Codec<A, I>,
-  next: A,
+  kept: Kept<A>,
+  name: string,
+  next: (now: A) => A,
+  payload?: Schema.Json,
 ): Effect.Effect<void> =>
   Option.match(saving, {
-    onNone: () => Effect.void,
+    onNone: () => Effect.suspend(() => writeTo(kept, name, next(kept.current()), payload)),
     onSome: (store) =>
       Effect.andThen(
-        Effect.orDie(
-          store.set(
-            storedKey(path),
-            Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(schema)))(next),
-          ),
+        tabs.exclusively(
+          storedKey(path),
+          Effect.suspend(() => {
+            const value = next(kept.current())
+
+            return Effect.andThen(
+              writeTo(kept, name, value, payload),
+              Effect.flatMap(
+                Effect.orDie(
+                  Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(value),
+                ),
+                (text) => Effect.orDie(store.set(storedKey(path), text)),
+              ),
+            )
+          }),
         ),
         tabs.announce(storedKey(path)),
       ),
@@ -96,8 +109,12 @@ const followOtherTabs = <A, I>(
   Effect.forEach(Option.toArray(saving), () =>
     Effect.forkScoped(
       Stream.runForEach(tabs.announced(storedKey(path)), () =>
-        Effect.flatMap(startingValue(saving, path, schema, kept.read()), (now) =>
-          writeTo(kept, "another tab", now),
+        tabs.exclusively(
+          storedKey(path),
+          Effect.flatMap(
+            Effect.suspend(() => startingValue(saving, path, schema, kept.current())),
+            (now) => writeTo(kept, "another tab", now),
+          ),
         ),
       ),
       { startImmediately: true },
@@ -117,11 +134,8 @@ const slotIn = (tree: Tree) =>
       Effect.sync(() => tree.hold(tree.root(), path.join(" / "), schema, start)),
       (held) => Effect.sync(() => tree.release(held)),
     )
-    const set = (name: string, next: A, payload?: Schema.Json) =>
-      Effect.andThen(
-        writeTo(kept, name, next, payload),
-        savedAfter(saving, tabs, path, schema, next),
-      )
+    const written = (name: string, next: (now: A) => A, payload?: Schema.Json) =>
+      writtenAndSaved(saving, tabs, path, schema, kept, name, next, payload)
 
     yield* followOtherTabs(saving, tabs, path, schema, kept)
 
@@ -135,9 +149,8 @@ const slotIn = (tree: Tree) =>
 
         return fromCell(held)
       },
-      set,
-      update: (name, change, payload) =>
-        Effect.suspend(() => set(name, change(kept.current()), payload)),
+      set: (name, next, payload) => written(name, () => next, payload),
+      update: (name, change, payload) => written(name, change, payload),
       showAt: (seq) => Effect.sync(() => kept.showAt(seq ?? Number.POSITIVE_INFINITY)),
       show: (value) => Effect.sync(() => kept.display(value)),
       forkAt: (seq) => Effect.sync(() => kept.forkAt(seq)),
