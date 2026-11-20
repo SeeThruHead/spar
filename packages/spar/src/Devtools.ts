@@ -47,6 +47,7 @@ import * as Timeline from "./Timeline.ts"
 import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
 import * as View from "./View.ts"
+import { compose, withProps } from "./Compose.ts"
 
 type OutboxService = Context.Service.Shape<typeof Outbox.Outbox>
 
@@ -348,8 +349,8 @@ const step = Effect.fnUntraced(function* (
   )
 })
 
-const StorePanel = View.taking(
-  { inspected: Props.Reactive(InspectedStore) },
+const StorePanel = compose(
+  withProps({ inspected: Props.Reactive(InspectedStore) }),
   Effect.fnUntraced(function* (props) {
     const store = yield* props.inspected.get
     const entries = yield* pipe(
@@ -404,8 +405,8 @@ const StorePanel = View.taking(
 const summaryOfDead = (dead: Outbox.Dead): string =>
   `${dead.channel} ${Formatter.formatJson(dead.payload)}: ${dead.reason}`
 
-const OutboxPanel = View.taking(
-  { outbox: OutboxShown },
+const OutboxPanel = compose(
+  withProps({ outbox: OutboxShown }),
   Effect.fnUntraced(function* ({ outbox }) {
     return {
       pending: outbox.pending,
@@ -425,7 +426,7 @@ const OutboxPanel = View.taking(
   }),
 )(OutboxView)
 
-export const Panel = View.connect(
+export const Panel = compose(
   Effect.fnUntraced(function* () {
     const registry = yield* Registry
     const outbox = yield* Effect.serviceOption(Outbox.Outbox)
@@ -462,8 +463,8 @@ const neighbour = (
 ): number | null =>
   seqs.at(Math.max((viewing === null ? seqs.length : seqs.indexOf(viewing)) + by, 0)) ?? null
 
-export const TimelinePanel = View.taking(
-  { onTrace: Props.Callback(Schema.String) },
+export const TimelinePanel = compose(
+  withProps({ onTrace: Props.Callback(Schema.String) }),
   Effect.fnUntraced(function* ({ onTrace }) {
     const registry = yield* Registry
     const stepped = Effect.fnUntraced(function* (by: -1 | 1) {
@@ -657,17 +658,13 @@ const outside = "[data-spar-devtools]"
 
 const px = (size: number): string => `${size}px`
 
-const Veil = View.taking(
-  { onMove: Props.Handler("pointermove"), onPick: Props.Handler("click") },
-  (handlers) => Effect.succeed(handlers),
+const Veil = compose(
+  withProps({ onMove: Props.Handler("pointermove"), onPick: Props.Handler("click") }),
 )(VeilView)
 
 type Outlined = { readonly name: string; readonly box: Dom.Box }
 
-const Outline = pipe(
-  View.taking(OutlineView.props, (box) => Effect.succeed(box))(OutlineView),
-  View.portal,
-)
+const Outline = pipe(compose(withProps(OutlineView.props))(OutlineView), View.portal)
 
 const facts = (rows: Reactive.Reactive<ReadonlyArray<Fact>>) =>
   pipe(
@@ -683,7 +680,7 @@ const facts = (rows: Reactive.Reactive<ReadonlyArray<Fact>>) =>
     ),
   )
 
-export const Inspector = View.connect(
+export const Inspector = compose(
   Effect.fnUntraced(function* () {
     const registry = yield* Registry
     const picking = yield* UiState.make("picking", Schema.Boolean, false)
@@ -874,8 +871,8 @@ const fromBackends = (traceId: string, ask: number) =>
 
 const decodeSpans = Schema.decodeUnknownOption(Schema.Array(Spans.Recorded))
 
-export const TracePanel = View.taking(
-  { traceId: Props.Reactive(Schema.String) },
+export const TracePanel = compose(
+  withProps({ traceId: Props.Reactive(Schema.String) }),
   Effect.fnUntraced(function* ({ traceId }) {
     const registry = yield* Registry
     const page = yield* Effect.serviceOption(Spans.SpanBuffer)
@@ -945,7 +942,7 @@ export const TracePanel = View.taking(
   }),
 )(TraceView)
 
-export const Tools = View.connect(
+export const Tools = compose(
   Effect.fnUntraced(function* () {
     const tracing = yield* UiState.make("tracing", Schema.String, "")
 
