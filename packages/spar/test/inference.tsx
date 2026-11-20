@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect"
 import {
   For,
   Reactive,
+  UiState,
   compose,
   withEffect,
   withEffectProps,
@@ -39,6 +40,20 @@ export const Greeter = compose(
   withGreeting,
   withHandlers((props) => ({ loud: props.greeting.toUpperCase() })),
 )((props) => <p>{props.loud}</p>)
+
+export const Resettable = compose(
+  withUiState("name", Schema.String, "Ada"),
+  withUiState("open", Schema.Boolean, true),
+  withHandlers((props) => ({
+    onReset: [UiState.set(props.name, ""), UiState.set(props.open, false)],
+  })),
+)((props) => (
+  <section>
+    <output aria-label="Name">{props.name}</output>
+    <output aria-label="Open">{Reactive.map(props.open, String)}</output>
+    <button onClick={props.onReset}>Reset</button>
+  </section>
+))
 
 export const Numbered = compose(
   withHandlers(() => ({

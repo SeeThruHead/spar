@@ -23,6 +23,22 @@ build time. Do not look for the escape hatch. There is not meant to be one.
 declare a query, ask for it in the component that needs it, pass values down as reactive props.
 Never fetch in a component's Effect and never wait there.
 
+Three rules that break the build most often:
+
+1. Never write a bare `(props) => ...` as an enhancer inside `compose`. Wrap it:
+   `withEffectProps((props) => Effect.gen(...))` when it runs an Effect,
+   `withHandlers((props) => ({ ... }))` when it returns plain values. A bare one makes `props`
+   `unknown` in every enhancer after it (`TS18046`), and the errors that follow (`TS2339`, an
+   `Effect<unknown, unknown, unknown>` that is not a `Handler`) all go away with the wrap.
+2. A UI write (`UiState.set`, `UiState.update`) is not an Effect, so `Effect.all`, `Effect.andThen`,
+   `Effect.tap` and `Effect.forEach` do not take it (`TS2739: Type 'UiWrite' is missing the
+   following properties from type 'Effect'`). Yield it inside `Effect.gen`, or give a handler a
+   list of actions: `onReset: [UiState.set(props.name, ""), UiState.set(props.open, false)]`.
+3. A handler (an event prop, a `withKey` action) takes an `Effect<void>` with no error and no
+   requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
+   already fits: a refusal shows in the store, not as an error.
+   Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
+
 ## The shape of an app
 
 ```

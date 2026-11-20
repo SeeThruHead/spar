@@ -22,7 +22,7 @@ import {
   resetAfterDelay,
   withHover,
 } from "./composed.tsx"
-import { Dialog, Greeter, Numbered, Ten } from "./inference.tsx"
+import { Dialog, Greeter, Numbered, Resettable, Ten } from "./inference.tsx"
 
 const text = (label: string) => screen.getByLabelText(label).textContent
 
@@ -230,6 +230,12 @@ describe("a component composed from enhancers, its view last and inline", () => 
         yield* Testing.findText("HELLO ADA")
 
         expect(Object.keys(Greeter.view.props)).toEqual(["name"])
+
+        yield* Testing.mount(Resettable)
+        yield* shows("Name", "Ada")
+        yield* Testing.click("button", "Reset")
+        yield* shows("Name", "")
+        yield* shows("Open", "false")
       }).pipe(Effect.provide(withTree)),
   )
 
