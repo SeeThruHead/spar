@@ -1254,15 +1254,15 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                                       | What it does                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed.                            |
-| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                                                 |
-| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                                               |
-| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                                           |
-| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                                                                                                            |
-| `Self.invalidate`, `Self.invalidatedBy(action)`                                | Load everything it holds again; a reaction for another store's layer that does so after that action.                                                                                                                                                                    |
-| `Self.patchedBy(action, input, patch)`                                         | A reaction for another store's layer: after that action, change the loaded value for `input(payload)` at once. With `Store.outbox` on the same action, an optimistic update; when the outbox gives up on that send, the query loads again, so the change is taken back. |
+| Function                                                                       | What it does                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed. |
+| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                      |
+| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                    |
+| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                |
+| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                                                                                 |
+| `Self.invalidate`                                                              | An Effect: load everything it holds again.                                                                                                                                                                                                   |
+| `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
 means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
@@ -1695,24 +1695,24 @@ an input, but it cannot change and it does not know where it came from.
 
 Each of these is an entry in the log and a span in the trace.
 
-| React Query                                | Spar                                                                                                                                                                                                                 |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                               |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                                        |
-| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                                    |
-| `staleTime`                                | `staleAfter`                                                                                                                                                                                                         |
-| `refetch()`                                | The handle's `refetch`                                                                                                                                                                                               |
-| Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                                                                                     |
-| A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                                                                                      |
-| `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                                                                                          |
-| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                                       |
-| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                                    |
-| Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`; if the send fails for good, the query loads what the server has |
-| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                                   |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                                |
-| Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                                 |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                                    |
-| Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log                    |
+| React Query                                | Spar                                                                                                                                                                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                      |
+| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                               |
+| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                           |
+| `staleTime`                                | `staleAfter`                                                                                                                                                                                                |
+| `refetch()`                                | The handle's `refetch`                                                                                                                                                                                      |
+| Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                                                                            |
+| A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                                                                             |
+| `invalidateQueries` after a mutation       | `TheQuery.invalidate` after the save, in the service method that saves                                                                                                                                      |
+| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                              |
+| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                           |
+| Optimistic update                          | `TheQuery.patch(input, change)` shows the change at once; an `Outbox.channel` sends it and ends with `TheQuery.invalidate`; `Outbox.givenUp(channel)` runs `TheQuery.invalidate` if the send fails for good |
+| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                          |
+| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                       |
+| Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
+| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                           |
+| Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
 
 #### A list read a page at a time
 
@@ -3877,7 +3877,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, Store, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
@@ -3978,23 +3978,6 @@ class Patient extends Query.Tag<Patient>()("test/Patient", {
   retry: Schedule.recurs(1),
 }) {}
 
-const RosterState = Schema.Struct({ renamed: Schema.Int })
-
-type RosterState = typeof RosterState.Type
-
-class Roster extends Store.Tag<Roster>()("test/Roster", {
-  state: RosterState,
-  initialState: { renamed: 0 },
-  actions: {
-    renamed: Store.action(Schema.Void, (state: RosterState) => ({ renamed: state.renamed + 1 })),
-    restocked: Store.action(
-      Schema.Struct({ to: Schema.Finite }),
-      (state: RosterState): RosterState => state,
-    ),
-  },
-  selectors: {},
-}) {}
-
 const ada: User = { id: 1, email: "ada@example.com" }
 
 const grace: User = { id: 2, email: "grace@example.com" }
@@ -4008,17 +3991,10 @@ const recording = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    Roster.layer([
-      Users.invalidatedBy(Roster.actions.renamed),
-      Stock.patchedBy(
-        Roster.actions.restocked,
-        () => undefined,
-        (_stock, { to }) => to,
-      ),
-    ]).pipe(
-      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live)),
+    Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live).pipe(
       Layer.provideMerge(Directory.layer),
       Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
+      Layer.provideMerge(State.layer),
     ),
   )
   const found = yield* Effect.provide(directory, built)
@@ -4036,7 +4012,6 @@ const opened = Effect.gen(function* () {
     noted,
     whats,
     users: yield* Effect.provide(Effect.service(Users), built),
-    roster: yield* Effect.provide(Effect.service(Roster), built),
     answer: (what: string, value: unknown) =>
       settle(what, (waiting) => Deferred.succeed(waiting.answer, value)),
     refuse: (what: string, reason: string) =>
@@ -4114,24 +4089,26 @@ describe("the natural way: a value from one place feeds a query declared in anot
       }),
   )
 
-  it.effect(
-    "another store's command can change what a query holds at once, before the server is asked",
-    () =>
-      Effect.gen(function* () {
-        const { built, whats, answer, roster } = yield* opened
-        const stock = yield* Effect.provide(Stock.ask(), built)
+  it.effect("a patch changes what a query holds at once, before the server is asked", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const stock = yield* Effect.provide(Stock.ask(), built)
+      const restocked = Effect.provide(
+        Stock.patch(undefined, () => 9),
+        built,
+      )
 
-        yield* Effect.yieldNow
-        yield* roster.commands.restocked({ to: 9 })
-        yield* Effect.yieldNow
-        expect(yield* readings(stock)).toEqual(["loading", null, null, true])
+      yield* Effect.yieldNow
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loading", null, null, true])
 
-        yield* answer("stock", 3)
-        yield* roster.commands.restocked({ to: 9 })
-        yield* Effect.yieldNow
-        expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
-        expect(yield* whats).toEqual(["stock"])
-      }),
+      yield* answer("stock", 3)
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
+      expect(yield* whats).toEqual(["stock"])
+    }),
   )
 
   it.effect("while another input loads, the last value that was loaded can still be shown", () =>
@@ -4381,19 +4358,16 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("asking again while it loads is refused and seen, not sent twice", () =>
+  it.effect("asking again while it loads is not sent twice", () =>
     Effect.gen(function* () {
-      const { built, noted, users, whats } = yield* opened
+      const { built, noted, whats } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
 
       yield* shown.refetch
       yield* Effect.yieldNow
 
       expect(yield* whats).toEqual(["users"])
-      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_ALREADY_LOADING] It is already loading"),
-      )
-      expect((yield* Ref.get(noted)).map((seen) => seen.kind)).toEqual(["command", "refused"])
+      expect((yield* Ref.get(noted)).map((seen) => seen.name)).toEqual(["test/Users/requested"])
     }),
   )
 
@@ -4612,9 +4586,6 @@ describe("server data in a store", () => {
       yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
       yield* TestClock.adjust("5 minutes")
       expect(Object.keys((yield* orders.state.get).entries)).toEqual(["1"])
-      expect(Option.map(yield* orders.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_IN_USE_AGAIN] It is in use again"),
-      )
       expect(
         (yield* Ref.get(noted)).filter((seen) => seen.name === "test/Orders/held").length,
       ).toBe(1)
@@ -4824,7 +4795,7 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("an answer to an earlier request, or to nothing that was asked, is refused", () =>
+  it.effect("an answer to an earlier request, or to nothing that was asked, is ignored", () =>
     Effect.gen(function* () {
       const { built, users } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
@@ -4834,20 +4805,18 @@ describe("server data in a store", () => {
       expect(yield* shown.status.get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
       expect(yield* shown.status.get).toBe("loading")
-      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_LATE_ANSWER] This answers an earlier request"),
-      )
+      expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
 
-  it.effect("a command in another store invalidates it, and it loads again at once", () =>
+  it.effect("invalidating it loads it again at once", () =>
     Effect.gen(function* () {
-      const { built, roster, whats, answer } = yield* opened
+      const { built, whats, answer } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
 
       yield* Effect.yieldNow
       yield* answer("users", [ada])
-      yield* roster.commands.renamed()
+      yield* Effect.provide(Users.invalidate, built)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["users", "users"])

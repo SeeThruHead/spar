@@ -18,6 +18,7 @@ import type { Scope } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import * as Events from "./Events.ts"
+import { newIn } from "./internal/givenUp.ts"
 import { events, on } from "./internal/listen.ts"
 import { fromSubscriptionRef, succeed } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -308,6 +309,19 @@ export const channel = Effect.fnUntraced(function* <A, I, E, R>(
     yield* outbox.persist({ key, channel: name, payload: json, seq })
   })
 })
+
+export const givenUp = (name: string): Stream.Stream<void, never, Outbox> =>
+  Stream.unwrap(
+    Effect.map(Effect.service(Outbox), (outbox) =>
+      outbox.dead.changes.pipe(
+        Stream.mapAccum(
+          (): ReadonlySet<string> => new Set(),
+          (seen, now: ReadonlyArray<Dead>) => newIn(seen, now, name),
+        ),
+        Stream.map(Function.constVoid),
+      ),
+    ),
+  )
 
 const holdLock = (locks: LockManager): Effect.Effect<void, never, Scope.Scope> =>
   Effect.asVoid(

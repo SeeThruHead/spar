@@ -70,22 +70,6 @@ describe("a reaction that sends its own action again", () => {
       })
     }),
   )
-
-  it.effect("a reaction that is Spar's own is not reported when its action is sent twice", () =>
-    Effect.gen(function* () {
-      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
-      const built = yield* Layer.build(
-        SendStore.layer([
-          Store.unwatched(Store.after(SendStore.actions.woke, () => Effect.never)),
-        ]).pipe(Layer.provideMerge(recording(noted))),
-      )
-      const store = Context.get(built, SendStore)
-
-      yield* store.commands.woke()
-      yield* store.commands.woke()
-      expect(yield* noticedIn(noted)).toEqual([])
-    }),
-  )
 })
 
 class Slow extends Context.Service<Slow, Readonly<Record<string, Deferred.Deferred<void>>>>()(

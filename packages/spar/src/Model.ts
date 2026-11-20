@@ -2,6 +2,7 @@ import { Context, Effect, Layer, Option, Record, Schema, Struct } from "effect"
 import type { Scope } from "effect"
 import type { Action, Actions, Selectors } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
+import { Seed } from "./internal/server.ts"
 import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as State from "./State.ts"
@@ -32,7 +33,7 @@ export type Shape<State, A extends Actions<State>, S extends Selectors<State>> =
   }
 }
 
-const made = Effect.fnUntraced(function* <
+export const made = Effect.fnUntraced(function* <
   State,
   A extends Actions<State>,
   S extends Selectors<State>,
@@ -44,7 +45,15 @@ const made = Effect.fnUntraced(function* <
   start: Effect.Effect<State, E, R>,
 ): Effect.fn.Return<Shape<State, A, S>, E, R | Scope.Scope> {
   const state = yield* State.current
-  const initial = yield* start
+  const seed = yield* Seed
+  const started = yield* start
+  const initial = Option.getOrElse(
+    Option.flatMap(
+      Record.get(seed, key),
+      Schema.decodeUnknownOption(Schema.toCodecJson(definition.state)),
+    ),
+    () => started,
+  )
   const slot = yield* state.slot([key], definition.state, initial)
   const recorder = yield* Timeline.Recorder
   const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = definition.actions

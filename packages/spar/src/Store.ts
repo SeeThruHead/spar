@@ -69,11 +69,9 @@ export type Send<State> = <Payload>(
 
 export type Reaction<State, R = never> = {
   readonly action?: Action<State, unknown>
-  readonly detached?: (entry: Entry) => Effect.Effect<string>
   readonly queued?: boolean
   readonly latest?: boolean
   readonly leading?: boolean
-  readonly unwatched?: boolean
   readonly during?: string
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
   readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
@@ -270,13 +268,11 @@ const Sender = Context.Reference<object | null>("spar/internal/Sender", {
   defaultValue: () => null,
 })
 
-const isOlderAnswer = <State, R>(
-  reaction: Reaction<State, R>,
+const isOlderAnswer = (
   chained: ReadonlySet<number>,
   last: Answered | undefined,
   mine: Answered,
 ): boolean => {
-  if (reaction.unwatched === true) return false
   if (last !== undefined && chained.has(last.seq)) return false
 
   return overwrites(last, mine)
@@ -288,11 +284,7 @@ const lastingIn = <State, R>(
 ): ReadonlyArray<Reaction<State, R>> =>
   reactions.filter((reaction) => reaction.during !== undefined && reaction.during === phase)
 
-const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => {
-  if (reaction.detached !== undefined) return false
-
-  return reaction.queued !== true
-}
+const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => reaction.queued !== true
 
 const sameAs = (entry: Entry): string => `${entry.action} ${Formatter.formatJson(entry.payload)}`
 
@@ -585,7 +577,6 @@ const makeLayer = <
         const attached = reacting.filter(runsHere)
         if (attached.length === 0) return Effect.void
         if (counted(busy, sameAs(entry), attached.length) === attached.length) return Effect.void
-        if (attached.every((reaction) => reaction.unwatched === true)) return Effect.void
         if (attached.some((reaction) => reaction === sender)) return Effect.void
 
         return noticed(
@@ -610,7 +601,7 @@ const makeLayer = <
 
                 answers.write(new Map([...answers.read(), [reaction, newerOf(last, mine)]]))
 
-                return isOlderAnswer(reaction, chained.read(), last, mine)
+                return isOlderAnswer(chained.read(), last, mine)
                   ? noticed(
                       "SPAR_OLDER_ANSWER",
                       `${key}/${entry.action}`,
@@ -634,18 +625,6 @@ const makeLayer = <
       const kept = (reaction: unknown, fiber: Fiber.Fiber<void>) =>
         Effect.sync(() => runs.write(new Map([...runs.read(), [reaction, fiber]])))
 
-      const apart = (running: Effect.Effect<void, never, R>, lane: string) =>
-        Effect.andThen(
-          stoppedEarlier(lane),
-          Effect.flatMap(
-            Effect.updateContext(
-              Effect.forkIn(running, scope),
-              (_caller: Context.Context<never>) => context,
-            ),
-            (fiber) => kept(lane, fiber),
-          ),
-        )
-
       const started = (
         reaction: Reaction<State, R>,
         done: { readonly entry: Entry; readonly next: State },
@@ -655,9 +634,6 @@ const makeLayer = <
         const bySelf = sender === reaction
         if (bySelf) chained.write(new Set([...chained.read(), done.entry.seq]))
 
-        if (reaction.detached !== undefined) {
-          return Effect.flatMap(reaction.detached(done.entry), (lane) => apart(running, lane))
-        }
         if (reaction.queued === true) return Effect.forkIn(running, scope)
         if (reaction.leading === true) {
           return Effect.andThen(
@@ -1036,20 +1012,6 @@ export const during = <State, R>(
   ...unstored,
   during: phase,
   run: (_entry, state, send) => effect(state, send),
-})
-
-export const unwatched = <State, R>(reaction: Reaction<State, R>): Reaction<State, R> => ({
-  ...reaction,
-  unwatched: true,
-})
-
-export const afterDetached = <State, Payload, R>(
-  trigger: Action<State, Payload>,
-  effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
-  lane: (payload: Payload) => string,
-): Reaction<State, R> => ({
-  ...after(trigger, effect),
-  detached: (entry) => Effect.map(Effect.orDie(trigger.decode(entry.payload)), lane),
 })
 
 export const outbox = <State, Payload, E, R>(
