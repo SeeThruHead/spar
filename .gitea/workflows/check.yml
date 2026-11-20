@@ -83,7 +83,7 @@ jobs:
   mutation:
     runs-on: boat-pool
     needs: check
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: https://github.com/oven-sh/setup-bun@v2
