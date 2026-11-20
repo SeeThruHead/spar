@@ -3,6 +3,7 @@ set -euo pipefail
 : "${GITEA_TOKEN:?}" "${GITHUB_SERVER_URL:?}" "${GITHUB_REPOSITORY:?}" "${REVISION:?}"
 cpu="$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ *//')"
 export SPAR_BENCH_MACHINE="the CI box $(hostname) (${cpu}, $(nproc) cores), with nothing else running on it"
+export BENCH_MOST_LOAD="$(nproc)"
 bun run moon run bench:bench
 if git diff --quiet -- docs/benchmarks.md docs/benchmarks.html; then
   echo "The benchmark page was not written (the box was busy) or did not change."
