@@ -14,10 +14,12 @@ import {
   Stream,
   Tracer,
 } from "effect"
+import { GivenUpSends, newIn } from "./internal/givenUp.ts"
+import type { GivenUp } from "./internal/givenUp.ts"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
-import type { Action } from "./internal/journal.ts"
+import type { Action, Entry as Logged } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -584,6 +586,35 @@ export const Tag =
         { discard: true },
       )
     })
+    const undoneIfAlreadyGivenUp = (sentAs: string) =>
+      Effect.flatMap(Effect.serviceOption(GivenUpSends), (found) =>
+        Effect.forEach(
+          Option.toArray(found),
+          (sends) =>
+            Effect.flatMap(sends.dead.get, (dead) =>
+              dead.some((given) => given.key === sentAs) ? invalidate : Effect.void,
+            ),
+          { discard: true },
+        ),
+      )
+    const undoneWhenGivenUp = (channel: string) =>
+      Effect.flatMap(Effect.serviceOption(GivenUpSends), (found) =>
+        Effect.forEach(
+          Option.toArray(found),
+          (sends) =>
+            Effect.forkScoped(
+              sends.dead.changes.pipe(
+                Stream.mapAccum(
+                  (): ReadonlySet<string> => new Set(),
+                  (seen, now: ReadonlyArray<GivenUp>) => newIn(seen, now, channel),
+                ),
+                Stream.runForEach(() => invalidate),
+              ),
+              { startImmediately: true },
+            ),
+          { discard: true },
+        ),
+      )
 
     return class extends base {
       static readonly loads = loads
@@ -618,11 +649,20 @@ export const Tag =
         action: Action<Other, Payload>,
         input: (payload: Payload) => I,
         patch: (value: A, payload: Payload) => A,
-      ) =>
-        Store.unwatched(
+      ) => {
+        const reaction = Store.unwatched(
           Store.after(action, (payload) =>
             patched(input(payload), (value) => patch(value, payload)),
           ),
         )
+
+        return {
+          ...reaction,
+          run: (logged: Logged, held: Other, sendNext: Store.Send<Other>) =>
+            Effect.andThen(reaction.run(logged, held, sendNext), undoneIfAlreadyGivenUp(logged.id)),
+          start: (channel: string) =>
+            Effect.andThen(reaction.start(channel), undoneWhenGivenUp(channel)),
+        }
+      }
     }
   }

@@ -40,8 +40,6 @@ Built since, and smaller than they sound, but not done:
   kept on the device, so the server cannot know what the browser will show, and taking over a
   server-drawn page whose data then changes under it needs a rule Spar does not have yet (which
   wins, and when the swap is shown).
-- **Queries:** an optimistic change stays shown if its
-  send fails for good, until something invalidates the query.
 - **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
   the components that changed, put in place by a one-line script (not the app's bundle); with
   scripts off the page stays as first drawn.

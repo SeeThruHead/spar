@@ -71,6 +71,25 @@ const layer = Shelf.layer([
   Layer.provideMerge(KeyValueStore.layerMemory),
 )
 
+const refusing = Shelf.layer([
+  Stock.patchedBy(
+    Shelf.actions.restocked,
+    () => undefined,
+    (_stock, { to }) => to,
+  ),
+  Store.outbox(Shelf.actions.restocked, () => Effect.fail("the warehouse refuses")),
+]).pipe(
+  Layer.provideMerge(Stock.live),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Warehouse.layer,
+      Outbox.Outbox.layerWith({ maxAttempts: 1, attemptTimeout: "1 second" }),
+      SecureRandom.layerWebCrypto,
+    ),
+  ),
+  Layer.provideMerge(KeyValueStore.layerMemory),
+)
+
 const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boolean) =>
   Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("5 millis") })
 
@@ -90,5 +109,31 @@ describe("a change shown at once and sent through the outbox", () => {
       yield* until(stock.value.get, (value) => value === 10)
       expect(yield* Ref.get(warehouse.asked)).toBe(2)
     }).pipe(Effect.scoped, Effect.provide(layer)),
+  )
+
+  it.live(
+    "a change whose send fails for good is taken back: the query loads what the server has",
+    () =>
+      Effect.gen(function* () {
+        const shelf = yield* Shelf
+        const warehouse = yield* Warehouse
+        const outbox = yield* Outbox.Outbox
+        const stock = yield* Stock.ask()
+
+        yield* until(stock.value.get, (value) => value === 3)
+        yield* shelf.commands.restocked({ to: 9 })
+        yield* until(outbox.dead.get, (dead) => dead.length === 1)
+        yield* until(stock.value.get, (value) => value === 3)
+        yield* Effect.sleep("50 millis")
+        expect(yield* stock.value.get).toBe(3)
+
+        const reloaded = yield* Ref.get(warehouse.asked)
+
+        expect(reloaded).toBeGreaterThan(1)
+
+        yield* outbox.discard((yield* outbox.dead.get)[0]?.key ?? "")
+        yield* until(outbox.dead.get, (dead) => dead.length === 0)
+        expect(yield* Ref.get(warehouse.asked)).toBe(reloaded)
+      }).pipe(Effect.scoped, Effect.provide(refusing)),
   )
 })
