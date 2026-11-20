@@ -995,13 +995,9 @@ const rows =
 
 Every piece is kept in one tree, under its component's place: the names of the views from the root
 down, with a row's key in brackets (`Board / Note[a]`), and a number when two share a place
-(`Panel#2`). It is there while the component is mounted and gone when it leaves.
-`UiState.snapshot` reads the whole tree as plain JSON (each value encoded by its Schema),
-`UiState.changes` is the stream of what was added, set and removed, `UiState.put(path, name, value)`
-sets one piece from outside (refused when the value does not fit the Schema), and
-`UiState.restore(snapshot)` puts a whole snapshot back, keeping values for components that are not
-on screen until they mount. Give an app its own tree with
-`Layer.succeed(UiState.Tree, UiState.makeTree())`; a server render always has its own.
+(`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
+the same one state that stores live in, so the devtools and agents read, set and rewind UI state
+through it. Give an app or a test its own with `State.layer`; a server render always has its own.
 
 ```tsx
 <button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
@@ -5209,7 +5205,8 @@ Tests of a store beside its view: no layer at the root, one state for each place
 ```ts
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Ref, Schema } from "effect"
-import { Store, UiState, View, compose, withProps } from "spar"
+import { Store, View, compose, withProps } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { PairView, TallyView } from "./units.tsx"
 
@@ -5263,11 +5260,11 @@ describe("a store declared beside its view", () => {
   it.live("needs no layer at the root, and each place it is used has its own state", () =>
     Effect.gen(function* () {
       const seen = yield* Ref.make<ReadonlyArray<string>>([])
-      const tree = UiState.makeTree()
+      const tree = Trees.makeTree()
 
       yield* Testing.mount(Pair).pipe(
         Effect.provideService(Store.Inspector, registering(seen)),
-        Effect.provideService(UiState.Tree, tree),
+        Effect.provideService(Trees.Tree, tree),
       )
       yield* Testing.click("button", "Add to pears")
       yield* Testing.click("button", "Add to pears")
@@ -5284,9 +5281,9 @@ describe("a store declared beside its view", () => {
 
   it.live("gives its place back when it is unmounted", () =>
     Effect.gen(function* () {
-      const tree = UiState.makeTree()
+      const tree = Trees.makeTree()
 
-      yield* Effect.scoped(Testing.mount(Pair).pipe(Effect.provideService(UiState.Tree, tree)))
+      yield* Effect.scoped(Testing.mount(Pair).pipe(Effect.provideService(Trees.Tree, tree)))
 
       expect([...tree.taken]).toEqual([])
     }),

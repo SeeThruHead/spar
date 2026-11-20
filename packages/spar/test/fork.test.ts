@@ -3,6 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, Router, Store, Timeline, UiState, View, compose } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
@@ -41,7 +42,7 @@ const Desk = compose(
 const layer = Layer.mergeAll(Tally.layer, Router.Router.layerMemory("/")).pipe(
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
-  Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+  Layer.provideMerge(Layer.sync(Trees.Tree, Trees.makeTree)),
   Layer.provideMerge(Layer.succeed(View.SlowAfter, Number.POSITIVE_INFINITY)),
 )
 
@@ -84,7 +85,7 @@ const keeping = (keepStates: number, seen: Ref.Ref<ReadonlyArray<Store.Inspected
     Tally.layer,
     Layer.mergeAll(
       SecureRandom.layerWebCrypto,
-      Layer.sync(UiState.Tree, UiState.makeTree),
+      Layer.sync(Trees.Tree, Trees.makeTree),
       Layer.succeed(Store.Inspector, {
         keepStates,
         register: (store) => Ref.update(seen, (all) => [...all, store]),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef } from "effect"
 import { Form, Handle, Overlay, Props, Reactive, Router, UiState, compose } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
@@ -27,7 +28,7 @@ const Card = (picked: SubscriptionRef.SubscriptionRef<string>) =>
   )(CardView)
 
 const kept = () => {
-  const tree = UiState.makeTree()
+  const tree = Trees.makeTree()
 
   return backedBy<string, Kept<string>>(
     tree.hold(tree.enter(tree, () => ["Here"]).place, "text", Schema.String, "a"),
@@ -54,8 +55,8 @@ describe("a view made from a Schema of its props", () => {
       yield* Testing.find("heading", "first")
       yield* Testing.click("button", "Save")
       yield* Testing.find("heading", "saved")
-      expect(yield* UiState.snapshot).toEqual([{ path: ["Card"], name: "draft", value: "changed" }])
-    }).pipe(Effect.provideService(UiState.Tree, UiState.makeTree())),
+      expect(yield* Trees.snapshot).toEqual([{ path: ["Card"], name: "draft", value: "changed" }])
+    }).pipe(Effect.provideService(Trees.Tree, Trees.makeTree())),
   )
 
   it.live("its props can be shown as data: values as they are now, the rest by kind", () =>

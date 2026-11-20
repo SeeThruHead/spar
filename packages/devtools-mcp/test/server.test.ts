@@ -6,7 +6,17 @@ import { McpClient, McpProtocol } from "effect/ai"
 import { Command } from "effect/cli"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
-import { Props, Router, Store, Timeline, UiState, View, compose, uses } from "spar"
+import {
+  Props,
+  Router,
+  State as OneState,
+  Store,
+  Timeline,
+  UiState,
+  View,
+  compose,
+  uses,
+} from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import { jsx } from "spar/jsx-runtime"
@@ -72,7 +82,7 @@ const openPage = Effect.fnUntraced(function* () {
   const built = yield* Layer.build(
     Layer.merge(Tally.layer, Page.layer({ url })).pipe(
       Layer.provideMerge(Devtools.layer),
-      Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+      Layer.provideMerge(OneState.layer),
       Layer.provide(SecureRandom.layerWebCrypto),
     ),
   )
@@ -87,7 +97,7 @@ const openInspected = Effect.fnUntraced(function* () {
     Layer.merge(Tally.layer, Page.layer({ url })).pipe(
       Layer.provideMerge(Devtools.layer),
       Layer.provideMerge(Spans.layer()),
-      Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+      Layer.provideMerge(OneState.layer),
       Layer.provide(SecureRandom.layerWebCrypto),
     ),
   )

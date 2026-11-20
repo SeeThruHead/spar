@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Router, Store, UiState, compose, uses } from "spar"
+import { App, Router, State as OneState, Store, UiState, compose, uses } from "spar"
 import { install, uninstall } from "spar/devtools/client"
 import { FetchHttpClient } from "effect/http"
 import * as Cell from "../src/internal/cell.ts"
@@ -44,7 +44,7 @@ const Desk = compose(
 
 const layer = Layer.mergeAll(Tally.layer, Router.Router.layerMemory("/")).pipe(
   Layer.provide(SecureRandom.layerWebCrypto),
-  Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+  Layer.provideMerge(OneState.layer),
 )
 
 const mounted = Effect.gen(function* () {

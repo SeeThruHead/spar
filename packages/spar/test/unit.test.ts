@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Ref, Schema } from "effect"
-import { Store, UiState, View, compose, withProps } from "spar"
+import { Store, View, compose, withProps } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { PairView, TallyView } from "./units.tsx"
 
@@ -54,11 +55,11 @@ describe("a store declared beside its view", () => {
   it.live("needs no layer at the root, and each place it is used has its own state", () =>
     Effect.gen(function* () {
       const seen = yield* Ref.make<ReadonlyArray<string>>([])
-      const tree = UiState.makeTree()
+      const tree = Trees.makeTree()
 
       yield* Testing.mount(Pair).pipe(
         Effect.provideService(Store.Inspector, registering(seen)),
-        Effect.provideService(UiState.Tree, tree),
+        Effect.provideService(Trees.Tree, tree),
       )
       yield* Testing.click("button", "Add to pears")
       yield* Testing.click("button", "Add to pears")
@@ -75,9 +76,9 @@ describe("a store declared beside its view", () => {
 
   it.live("gives its place back when it is unmounted", () =>
     Effect.gen(function* () {
-      const tree = UiState.makeTree()
+      const tree = Trees.makeTree()
 
-      yield* Effect.scoped(Testing.mount(Pair).pipe(Effect.provideService(UiState.Tree, tree)))
+      yield* Effect.scoped(Testing.mount(Pair).pipe(Effect.provideService(Trees.Tree, tree)))
 
       expect([...tree.taken]).toEqual([])
     }),

@@ -210,13 +210,9 @@ const rows =
 
 Every piece is kept in one tree, under its component's place: the names of the views from the root
 down, with a row's key in brackets (`Board / Note[a]`), and a number when two share a place
-(`Panel#2`). It is there while the component is mounted and gone when it leaves.
-`UiState.snapshot` reads the whole tree as plain JSON (each value encoded by its Schema),
-`UiState.changes` is the stream of what was added, set and removed, `UiState.put(path, name, value)`
-sets one piece from outside (refused when the value does not fit the Schema), and
-`UiState.restore(snapshot)` puts a whole snapshot back, keeping values for components that are not
-on screen until they mount. Give an app its own tree with
-`Layer.succeed(UiState.Tree, UiState.makeTree())`; a server render always has its own.
+(`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
+the same one state that stores live in, so the devtools and agents read, set and rewind UI state
+through it. Give an app or a test its own with `State.layer`; a server render always has its own.
 
 ```tsx
 <button onClick={UiState.update(open, (shown) => !shown)}>Options</button>

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Context, Effect, Layer, Ref } from "effect"
-import { App, Reactive, Server, UiState, View } from "spar"
+import { App, Reactive, Server, View } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import {
@@ -35,7 +36,7 @@ const shop = Layer.succeed(Shop, {
 
 const orders = Layer.mergeAll(SessionStore.layer, OrdersQuery.live).pipe(Layer.provideMerge(shop))
 
-const withTree = Layer.sync(UiState.Tree, UiState.makeTree)
+const withTree = Layer.sync(Trees.Tree, Trees.makeTree)
 
 describe("a component composed from enhancers, its view last and inline", () => {
   it.live("reads a store, sends its commands, and ignores a second reset while one runs", () =>
@@ -89,7 +90,7 @@ describe("a component composed from enhancers, its view last and inline", () => 
       yield* shows("Shown", "Mine")
       yield* shows("Sort", "Oldest")
 
-      const tree = yield* UiState.snapshot
+      const tree = yield* Trees.snapshot
 
       expect(tree.map((piece) => [piece.path.join(" / "), piece.name])).toEqual([
         ["Toolbar", "sort"],
@@ -189,7 +190,7 @@ describe("a component composed from enhancers, its view last and inline", () => 
 
         expect(screen.queryByRole("menu", { name: "fruit" })).toBeNull()
 
-        const tree = yield* UiState.snapshot
+        const tree = yield* Trees.snapshot
 
         expect(
           tree

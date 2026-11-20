@@ -2,7 +2,8 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Router, Store, Timeline, UiState, View, compose } from "spar"
+import { Reactive, Router, State as OneState, Store, Timeline, UiState, View, compose } from "spar"
+import { Entry as UiEntry } from "../src/internal/uiTree.ts"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
@@ -69,7 +70,7 @@ const BesideDesk = Beside.with(
 const layer = Layer.mergeAll(Tally.layer, Router.Router.layerMemory("/")).pipe(
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
-  Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+  Layer.provideMerge(OneState.layer),
   Layer.provideMerge(Layer.succeed(View.SlowAfter, Number.POSITIVE_INFINITY)),
 )
 
@@ -366,7 +367,7 @@ describe("one log of everything that happened", () => {
     expect(Schema.is(Timeline.Moment)({ ...moment, seq: "1" })).toBe(false)
     expect(Schema.is(Timeline.Noted)({})).toBe(false)
     expect(Schema.is(Timeline.Moment)({})).toBe(false)
-    expect(Schema.is(UiState.Entry)({})).toBe(false)
+    expect(Schema.is(UiEntry)({})).toBe(false)
     expect(Schema.is(Devtools.Component)({})).toBe(false)
   })
 
