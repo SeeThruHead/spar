@@ -1,11 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Schema, SubscriptionRef } from "effect"
-import { Events, Reactive, UiState, View } from "spar"
+import { Events, Reactive, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
 import { DraftView } from "./forms.tsx"
 import { LoadedView } from "./views.tsx"
 
-const Draft = View.connect(
+const Draft = compose(
   Effect.fnUntraced(function* () {
     const draft = yield* UiState.make("draft", Schema.String, "")
     const urgent = yield* UiState.make("urgent", Schema.Boolean, false)

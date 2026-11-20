@@ -1,10 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
-import { Reactive, UiState, View } from "spar"
+import { Reactive, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
 import { OrdersView } from "./units.tsx"
 
-const Counted = View.connect(
+const Counted = compose(
   Effect.fnUntraced(function* () {
     const count = yield* UiState.make("count", Schema.Finite, 0)
 

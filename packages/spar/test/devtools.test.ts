@@ -3,7 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
-import { Outbox, Props, Store, View } from "spar"
+import { Outbox, Props, Store, View, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { jsx } from "spar/jsx-runtime"
@@ -30,7 +30,7 @@ const layer = Tally.layer().pipe(
   Layer.provide(SecureRandom.layerWebCrypto),
 )
 
-const Screen = View.connect(
+const Screen = compose(
   Effect.fnUntraced(function* () {
     const tally = yield* Tally
 

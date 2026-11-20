@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef } from "effect"
-import { Form, Handle, Overlay, Props, Reactive, Router, UiState, View } from "spar"
+import { Form, Handle, Overlay, Props, Reactive, Router, UiState, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
@@ -10,7 +10,7 @@ import type { Kept } from "../src/internal/uiTree.ts"
 import { BadgeView, CardView } from "./made.tsx"
 
 const Card = (picked: SubscriptionRef.SubscriptionRef<string>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const draft = yield* UiState.make("draft", Schema.String, "hello")
 

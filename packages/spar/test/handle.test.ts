@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
 import { Effect, Option, pipe, Schema, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
-import { Handle, Reactive, UiState, View } from "spar"
+import { Handle, Reactive, UiState, compose } from "spar"
 import { OptionsView, PickerView } from "./focus.tsx"
 import { eventually, find, gone, mount } from "spar/testing"
 
@@ -12,7 +12,7 @@ const describeBox = Option.match({
     `${box.width} by ${box.height}`,
 })
 
-const Picker = View.connect(
+const Picker = compose(
   Effect.fnUntraced(function* () {
     const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make

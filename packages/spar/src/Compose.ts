@@ -106,6 +106,11 @@ const made = (
 
 const isView = (given: unknown): given is (props: Props) => Element => typeof given === "function"
 
+const viewName = (view: (props: Props) => Element): string =>
+  Predicate.hasProperty(view, "displayName") && typeof view.displayName === "string"
+    ? view.displayName
+    : "Component"
+
 export function compose<O, A, EA, RA>(a: Enhancer<O, A, EA, RA>): Composed<O, O & A, A, EA, RA>
 export function compose<O, A, EA, RA, B, EB, RB>(
   a: Enhancer<O, A, EA, RA>,
@@ -154,7 +159,7 @@ export function compose(...steps: ReadonlyArray<Step>): (given: unknown, name?: 
 
   return (given, name) =>
     isView(given)
-      ? made(steps, given, name ?? "Component", at)
+      ? made(steps, given, name ?? viewName(given), at)
       : applied(steps, isProps(given) ? given : {})
 }
 

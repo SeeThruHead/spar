@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Exit, pipe, Schema, Scope, Stream, SubscriptionRef } from "effect"
-import { Events, Reactive, UiState, View } from "spar"
+import { Events, Reactive, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
 import { ListView, RowView } from "./cleanup.tsx"
 import type { Item } from "./cleanup.tsx"
@@ -10,7 +10,7 @@ const List = (
   items: SubscriptionRef.SubscriptionRef<ReadonlyArray<Item>>,
   shared: SubscriptionRef.SubscriptionRef<string>,
 ) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const marked = yield* UiState.make("marked", Schema.Boolean, false)
       const picks = yield* UiState.make("picks", Schema.Finite, 0)

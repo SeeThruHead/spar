@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Router, Store, UiState, View } from "spar"
+import { Reactive, Router, Store, UiState, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
@@ -24,7 +24,7 @@ class Tally extends Store.Tag<Tally>()("test/ForkTally", {
 
 const next = Router.route("/next")
 
-const Desk = View.connect(
+const Desk = compose(
   Effect.fnUntraced(function* () {
     const tally = yield* Tally
     const router = yield* Router.Router

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Option, Ref, Schema } from "effect"
-import { Timeline, UiState, View } from "spar"
+import { Timeline, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
 import { DraftView } from "./typing.tsx"
 
-const Draft = View.connect(
+const Draft = compose(
   Effect.fnUntraced(function* () {
     const text = yield* UiState.make("text", Schema.String, "")
 

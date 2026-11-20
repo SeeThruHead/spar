@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Schema, pipe } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { vi } from "vitest"
-import { Reactive, Store, View } from "spar"
+import { Reactive, Store, compose } from "spar"
 import * as Testing from "spar/testing"
 import { LineView, MarkView } from "./units.tsx"
 
@@ -46,7 +46,7 @@ class Page extends Store.Tag<Page>()("test/QuietPage", {
 
 const read = vi.fn((line: Line) => line.text)
 
-const Shown = View.connect(
+const Shown = compose(
   Effect.fnUntraced(function* () {
     const page = yield* Page
 
