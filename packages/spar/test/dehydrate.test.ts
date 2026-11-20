@@ -312,6 +312,10 @@ describe("a page sent in pieces", () => {
         "</body>",
       ])
       expect(parts[4]).toContain("<noscript><style>")
+      expect(parts[4]).toContain("body:has(noscript[data-spar-round]) #root{display:none}")
+      expect(parts.at(-2)).toContain('"done":true')
+      expect(parts[3]).toContain('"pieces":true')
+      expect(parts.every((part) => part.startsWith("<"))).toBe(true)
       expect(
         parts.filter((part) => part.startsWith("<noscript data-spar-round>")).at(-1),
       ).toContain('<output aria-label="Orders count">3</output>')
@@ -355,6 +359,43 @@ describe("a page sent in pieces", () => {
 
         expect(drawn.at(-1)).toContain("replaceChildren")
         expect(drawn.at(-1)).toContain('<output aria-label="Orders count">3</output>')
+      }),
+  )
+
+  it.live(
+    "each piece says in the trace how many parts it sends and whether it is the whole page",
+    () =>
+      Effect.gen(function* () {
+        const spans = yield* Layer.build(Spans.layer())
+        const buffer = Context.get(spans, Spans.SpanBuffer)
+        const traced = (name: string) =>
+          buffer
+            .recent()
+            .filter((span) => span.name === "Server.piece")
+            .map((span) => [name, span.attributes["spar.whole"], span.attributes["spar.parts"]])
+
+        yield* Effect.provide(Stream.runDrain(sentInPieces), spans)
+
+        const inParts = traced("in parts")
+
+        yield* Effect.provide(
+          Stream.runDrain(
+            Server.renderInPieces(Priced, {
+              layer: queries,
+              open: "",
+              close: "",
+              script: "",
+              end: "",
+            }),
+          ),
+          spans,
+        )
+
+        const whole = traced("whole").slice(inParts.length)
+
+        expect(inParts).toContainEqual(["in parts", "false", "1"])
+        expect(inParts.map(([, isWhole]) => isWhole)).not.toContain("true")
+        expect(whole).toContainEqual(["whole", "true", "1"])
       }),
   )
 
