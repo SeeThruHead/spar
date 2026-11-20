@@ -5,9 +5,12 @@ import {
   ProductQuery,
   SupplierQuery,
   home,
+  nestedRoute,
   productRoute,
   slowRoute,
+  twoAtOnceRoute,
 } from "./Catalogue.ts"
+import { Nested, TwoAtOnce } from "./Pair.tsx"
 import { Shop } from "./Shop.ts"
 import { MissingView, ProductView, SiteView } from "./SiteView.tsx"
 
@@ -40,6 +43,8 @@ export const Site = compose(
       page: yield* Router.outlet({
         routes: [
           Router.on(home, Shop),
+          Router.on(twoAtOnceRoute, TwoAtOnce),
+          Router.on(nestedRoute, Nested),
           Router.live(productRoute, ProductPage),
           Router.live(slowRoute, ProductPage),
         ],

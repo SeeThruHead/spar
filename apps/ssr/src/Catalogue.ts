@@ -57,3 +57,7 @@ export const home = Router.route("/")
 export const productRoute = Router.route("/shelf/:id", ProductParams)
 
 export const slowRoute = Router.route("/slow/:id", ProductParams)
+
+export const twoAtOnceRoute = Router.route("/slow/two-at-once")
+
+export const nestedRoute = Router.route("/slow/nested")

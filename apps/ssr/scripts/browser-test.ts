@@ -1,10 +1,8 @@
 import { engine, launch } from "@spar/browsers"
-import { Effect, Schema, Stream } from "effect"
+import { Schema } from "effect"
 import type { Browser, Page } from "playwright"
 import { Server } from "spar"
 import { Recorded } from "spar/devtools/spans"
-import { layer } from "../server/layers.ts"
-import { Pair } from "./pair.tsx"
 import { start } from "./site.ts"
 
 const server = start(0)
@@ -299,33 +297,51 @@ const bundleAfterTheStream = async (browser: Browser): Promise<void> => {
   await Promise.race([checked, broke]).finally(() => page.close())
 }
 
-const twoAtOnce = async (browser: Browser): Promise<void> => {
-  const parts = await Effect.runPromise(
-    Stream.runCollect(
-      Server.renderInPieces(Pair, {
-        layer: layer("/", "100 millis"),
-        open: '<div id="root">',
-        close: "</div>",
-        script: "",
-        end: "",
-      }),
-    ),
-  )
-  const filled = parts.filter((part) => part.includes("createRange"))
-  if (filled.length < 2) throw new Error("The two parts that changed together were not sent as two")
-  if (parts.some((part) => part.includes("replaceChildren")))
-    throw new Error("The two parts that changed together were sent as the whole page")
+const piecesAt = async (path: string): Promise<ReadonlyArray<string>> => {
+  const all = await (await fetch(`${origin}${path}`)).text()
+  const after = all.slice(all.indexOf('id="spar-state"'))
+  if (after.includes("replaceChildren")) throw new Error(`${path} was sent as the whole page again`)
 
+  return after.split("<template data-spar-piece>").slice(1)
+}
+
+const takenWithNothingMadeAgain = async (
+  browser: Browser,
+  path: string,
+  labels: ReadonlyArray<string>,
+): Promise<void> => {
   const page = await browser.newPage()
+  const bundle = Promise.withResolvers<void>()
 
-  await page.setContent(parts.join(""))
-  await said(page, "First", "Valley dairy")
-  await said(page, "Second", "Valley dairy")
+  await page.route("**/client.js", async (route) => {
+    await bundle.promise
+    await route.continue()
+  })
+  await page.goto(`${origin}${path}`, { waitUntil: "commit" })
+  await Promise.all(labels.map((label) => said(page, label, "Valley dairy")))
+  await page.evaluate(markSent)
+  bundle.resolve()
+  await page.locator("#root[data-ready]").waitFor()
 
-  const shown = await page.evaluate(() => document.querySelectorAll("#root p").length)
-  if (shown !== 2) throw new Error(`The page holds ${shown} parts after the pieces, not 2`)
+  const again = await page.evaluate(madeAgain)
+  if (again !== 0) throw new Error(`Taking over ${path} made ${again} elements again`)
 
   await page.close()
+}
+
+const streamedByPart = async (browser: Browser): Promise<void> => {
+  const two = await piecesAt("/slow/two-at-once")
+  if (two.length !== 2)
+    throw new Error(`Two parts that changed in one round came as ${two.length} pieces, not 2`)
+
+  const nested = await piecesAt("/slow/nested")
+  if (nested.length !== 1)
+    throw new Error(`A part and the part inside it came as ${nested.length} pieces, not 1`)
+  if (!nested[0]?.includes('aria-label="Inner"'))
+    throw new Error("The piece for the outer part did not carry the part inside it")
+
+  await takenWithNothingMadeAgain(browser, "/slow/two-at-once", ["First", "Second"])
+  await takenWithNothingMadeAgain(browser, "/slow/nested", ["Outer", "Inner"])
 }
 
 const run = async (): Promise<void> => {
@@ -341,7 +357,7 @@ const run = async (): Promise<void> => {
       .then(() => takenInPieces(page))
       .then(() => withoutTheBundle(browser))
       .then(() => bundleAfterTheStream(browser))
-      .then(() => twoAtOnce(browser)),
+      .then(() => streamedByPart(browser)),
     broke,
   ]).finally(() => browser.close())
 }
