@@ -3282,70 +3282,47 @@ export const Notes = NotesStore.with(NotesPanel)
 A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.
 
 ```ts
-import { Duration, Effect, Option, Schema } from "effect"
-import { Store } from "spar"
+import { Schema } from "effect"
+import { Model, Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
-  phase: Schema.Literals(["idle", "resetting"]),
+  resetting: Schema.Boolean,
   resetDuration: Schema.Finite,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { count: 0, phase: "idle", resetDuration: 2 }
+const initialState: State = { count: 0, resetting: false, resetDuration: 2 }
 
-const whileResetting =
-  (reason: string) =>
-  (state: State): string | null =>
-    state.phase === "resetting" ? reason : null
-
-export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
+export class ResetCounterStore extends Model.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
   state: State,
   initialState,
   actions: {
-    incremented: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, count: state.count + 1 }),
-      whileResetting("A reset is in progress"),
-    ),
-    resetDurationChanged: Store.action(
-      Schema.Finite,
-      (state: State, seconds: number): State => ({ ...state, resetDuration: Math.max(0, seconds) }),
-      whileResetting("The delay cannot change during a reset"),
-    ),
-    resetClicked: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, phase: "resetting" }),
-      whileResetting("A reset is already in progress"),
-    ),
-    resetCompleted: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, count: 0, phase: "idle" }),
-      (state) => (state.phase === "idle" ? "No reset is in progress" : null),
-    ),
+    incremented: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      count: state.count + 1,
+    })),
+    resetDurationChanged: Store.action(Schema.Finite, (state: State, seconds: number): State => ({
+      ...state,
+      resetDuration: Math.max(0, seconds),
+    })),
+    resetClicked: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      resetting: true,
+    })),
+    resetCompleted: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      count: 0,
+      resetting: false,
+    })),
   },
   selectors: {
     count: Store.selector(Schema.Finite, (state: State) => state.count),
-    resetting: Store.selector(Schema.Boolean, (state: State) => state.phase === "resetting"),
+    resetting: Store.selector(Schema.Boolean, (state: State) => state.resetting),
     resetDuration: Store.selector(Schema.Finite, (state: State) => state.resetDuration),
   },
 }) {}
-
-export const resetAfterDelay = Store.after(
-  ResetCounterStore.actions.resetClicked,
-  (_payload, state: State, send) =>
-    Effect.andThen(
-      Effect.sleep(Duration.seconds(state.resetDuration)),
-      send(ResetCounterStore.actions.resetCompleted, undefined),
-    ),
-)
-
-export const told = (refused: Option.Option<Store.Refusal>): string =>
-  Option.match(refused, {
-    onNone: () => "Nothing has been refused",
-    onSome: (refusal) => `${refusal.action} was not accepted: ${refusal.reason}`,
-  })
 ```
 
 ## apps/sidebar/src/ResetCounter.tsx
@@ -3353,9 +3330,9 @@ export const told = (refused: Option.Option<Store.Refusal>): string =>
 Its component, composed with `withStore`. The buttons are never disabled; the store decides.
 
 ```tsx
-import { Effect, Schema } from "effect"
+import { Duration, Effect, FiberHandle, Schema } from "effect"
 import { Reactive, UiState, compose, withKey, withStore } from "spar"
-import { ResetCounterStore, resetAfterDelay, told } from "./ResetCounterStore.ts"
+import { ResetCounterStore } from "./ResetCounterStore.ts"
 
 const withDelay = Effect.fnUntraced(function* () {
   const store = yield* ResetCounterStore
@@ -3371,17 +3348,32 @@ const withDelay = Effect.fnUntraced(function* () {
   }
 })
 
+const withReset = Effect.fnUntraced(function* () {
+  const store = yield* ResetCounterStore
+  const running = yield* FiberHandle.make()
+  const resetAfterDelay = Effect.gen(function* () {
+    const seconds = yield* store.select.resetDuration.get
+
+    yield* store.commands.resetClicked()
+    yield* Effect.sleep(Duration.seconds(seconds))
+    yield* store.commands.resetCompleted()
+  })
+
+  return {
+    onReset: Effect.asVoid(FiberHandle.run(running, resetAfterDelay, { onlyIfMissing: true })),
+  }
+})
+
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
     count: store.select.count,
     status: Reactive.map(store.select.resetting, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
-    refused: Reactive.map(store.refused, told),
     onIncrement: store.commands.incremented(),
-    onReset: store.commands.resetClicked(),
   })),
   withDelay,
+  withReset,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -3407,14 +3399,14 @@ const ResetCounterPanel = compose(
         onInput={(event) => props.onDelay(event.currentTarget.value)}
       />
     </label>
-    <p>
-      <output aria-label="Last refusal">{props.refused}</output>
+    <p class="hint">
+      The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect,
+      run by a FiberHandle.
     </p>
-    <p class="hint">Both buttons stay enabled, and the + key adds 1 too. The store decides.</p>
   </section>
 ))
 
-export const ResetCounter = ResetCounterStore.with(ResetCounterPanel, [resetAfterDelay])
+export const ResetCounter = ResetCounterStore.with(ResetCounterPanel)
 ```
 
 ## apps/sidebar/src/People.ts

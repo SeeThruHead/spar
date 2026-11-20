@@ -108,6 +108,12 @@ describe("a store on one state", () => {
       ).toEqual([null, 2])
       yield* inspected?.run("added", 3) ?? Effect.void
       expect(yield* counter.select.count.get).toBe(6)
+      yield* inspected?.travelTo(1) ?? Effect.void
+      expect(yield* counter.select.count.get).toBe(1)
+      expect(yield* inspected?.viewing.get ?? Effect.succeed(null)).toBe(1)
+      yield* inspected?.travelTo(null) ?? Effect.void
+      expect(yield* counter.select.count.get).toBe(6)
+      expect(yield* inspected?.viewing.get ?? Effect.succeed(0)).toBe(null)
       yield* inspected?.load([{ id: "x", action: "added", payload: 7, seq: 1 }]) ?? Effect.void
       expect(yield* counter.select.count.get).toBe(7)
       expect(yield* inspected?.encoded ?? Effect.succeed(null)).toEqual({

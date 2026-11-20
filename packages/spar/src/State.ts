@@ -17,6 +17,8 @@ export type Slot<A> = {
     change: (now: A) => A,
     payload?: Schema.Json,
   ) => Effect.Effect<void>
+  readonly showAt: (seq: number | null) => Effect.Effect<void>
+  readonly forkAt: (seq: number) => Effect.Effect<void>
 }
 
 export type Service = {
@@ -124,6 +126,8 @@ const slotIn = (tree: Tree) =>
       set,
       update: (name, change, payload) =>
         Effect.suspend(() => set(name, change(kept.read()), payload)),
+      showAt: (seq) => Effect.sync(() => kept.showAt(seq ?? Number.POSITIVE_INFINITY)),
+      forkAt: (seq) => Effect.sync(() => kept.forkAt(seq)),
     }
   })
 

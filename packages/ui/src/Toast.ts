@@ -1,6 +1,5 @@
 import { Context, Duration, Effect, Layer, Schema, pipe } from "effect"
-import { SecureRandom } from "effect/crypto"
-import { Reactive, Store, compose } from "spar"
+import { Model, Reactive, Store, compose } from "spar"
 import { ToastView, ToastsView } from "./ToastView.tsx"
 
 const Tone = Schema.Literals(["info", "success", "problem"])
@@ -17,7 +16,7 @@ const stays = Duration.seconds(6)
 
 const idOf = (number: number): string => `toast-${number}`
 
-class ToastStore extends Store.Tag<ToastStore>()("spar/ui/Toasts", {
+class ToastStore extends Model.Tag<ToastStore>()("spar/ui/ToastStore", {
   state: State,
   initialState: { made: 0, showing: [] },
   actions: {
@@ -41,10 +40,6 @@ class ToastStore extends Store.Tag<ToastStore>()("spar/ui/Toasts", {
   },
 }) {}
 
-const leavesByItself = Store.after(ToastStore.actions.shown, (_toast, state: State, send) =>
-  Effect.andThen(Effect.sleep(stays), send(ToastStore.actions.dismissed, { id: idOf(state.made) })),
-)
-
 export class Toasts extends Context.Service<
   Toasts,
   {
@@ -55,18 +50,24 @@ export class Toasts extends Context.Service<
 >()("spar/ui/Toasts") {
   static readonly layer = Layer.effect(
     Toasts,
-    Effect.map(Effect.service(ToastStore), (store) =>
-      Toasts.of({
+    Effect.gen(function* () {
+      const store = yield* ToastStore
+      const scope = yield* Effect.scope
+      const dismiss = (id: string) => store.commands.dismissed({ id })
+
+      return Toasts.of({
         showing: store.select.showing,
-        show: (message, tone) =>
-          Effect.withSpan(store.commands.shown({ message, tone }), "Toasts.show"),
-        dismiss: (id) => store.commands.dismissed({ id }),
-      }),
-    ),
-  ).pipe(
-    Layer.provide(ToastStore.layer([leavesByItself])),
-    Layer.provide(SecureRandom.layerWebCrypto),
-  )
+        show: Effect.fn("Toasts.show")(function* (message: string, tone: Toast["tone"]) {
+          yield* store.commands.shown({ message, tone })
+
+          const { made } = yield* store.state.get
+
+          yield* Effect.forkIn(Effect.andThen(Effect.sleep(stays), dismiss(idOf(made))), scope)
+        }),
+        dismiss,
+      })
+    }),
+  ).pipe(Layer.provide(ToastStore.layer))
 }
 
 export const Viewport = compose(

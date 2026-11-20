@@ -1,9 +1,11 @@
 import { Context, Effect, Layer, Option, Record, Schema, Struct } from "effect"
 import type { Scope } from "effect"
 import type { Action, Actions, Selectors } from "./internal/journal.ts"
-import { map } from "./internal/reactive.ts"
+import * as Cell from "./internal/cell.ts"
+import { fromCell, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as State from "./State.ts"
+import * as Timeline from "./Timeline.ts"
 import { Inspector } from "./Store.ts"
 import type { ToReactive } from "./Store.ts"
 import type { Mountable } from "./View.ts"
@@ -47,7 +49,10 @@ const made = Effect.fnUntraced(function* <
   const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = definition.actions
   const run = (name: string, handled: Action<State, unknown>, payload: Schema.Json) =>
     Effect.flatMap(Effect.orDie(handled.reducer(payload)), (reduce) =>
-      slot.update(name, reduce, payload),
+      Effect.andThen(
+        slot.update(name, reduce, payload),
+        Timeline.note("command", `${key}/${name}`, () => payload),
+      ),
     )
   const commands = Record.map(
     named,
@@ -65,6 +70,7 @@ const made = Effect.fnUntraced(function* <
     Struct.lambda<ToReactive<State>>((chosen) => slot.pick(chosen.select)),
   )
   const inspector = yield* Inspector
+  const viewing = Cell.make<number | null>(null)
   const encodeState = Schema.encodeEffect(Schema.toCodecJson(definition.state))
 
   yield* inspector.register({
@@ -82,12 +88,20 @@ const made = Effect.fnUntraced(function* <
           seq: entry.seq,
         })),
     ),
-    viewing: state.viewing,
-    travelTo: state.travelTo,
+    viewing: fromCell(viewing),
+    travelTo: (seq) =>
+      Effect.andThen(
+        Effect.sync(() => viewing.write(seq)),
+        slot.showAt(seq),
+      ),
     actions: () =>
       Record.toEntries(named).map(([name, handled]) => ({ name, schema: handled.schema })),
     hold: Effect.succeed(Effect.void),
-    forkAt: (seq) => Effect.andThen(state.travelTo(seq), state.fork),
+    forkAt: (seq) =>
+      Effect.andThen(
+        Effect.sync(() => viewing.write(null)),
+        Effect.andThen(slot.showAt(seq), slot.forkAt(seq)),
+      ),
     load: (entries) =>
       Effect.andThen(
         slot.set("loaded", definition.initialState),
