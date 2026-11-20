@@ -40,7 +40,7 @@ const independent = ["org", "team", "member", "reports", "report"].map(
 const steps = async (): Promise<ReadonlyArray<string>> => {
   await page.goto(address)
   await page.getByRole("button", { name: "Devtools" }).click()
-  await page.getByRole("link", { name: "Open a page five segments deep" }).click()
+  await page.getByRole("link", { name: "Open a page five segments deep" }).dispatchEvent("click")
   await page.getByLabel("Author status").filter({ hasText: "loaded" }).waitFor({ timeout: 8000 })
 
   const author = (await page.getByLabel("Author name").textContent()) ?? ""
@@ -56,7 +56,12 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const log = page.getByLabel("Everything that happened")
 
   await log
-    .locator("ol li", { hasText: spans[0]?.traceId ?? "no lookups" })
+    .locator("ol li")
+    .filter({
+      has: page.locator("small[aria-label^='Trace of']", {
+        hasText: new RegExp(`^${spans[0]?.traceId ?? "no lookups"}$`),
+      }),
+    })
     .first()
     .getByRole("button", { name: /^Trace / })
     .click()
