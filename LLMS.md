@@ -647,8 +647,8 @@ drifts from the state.
 
 ### 8. Nothing the user did is lost
 
-A durable store writes each action to the device before the state changes and comes back after a
-reload. Anything leaving the device goes through the outbox: saved first, sent in order with one
+A saved store (`layerSaved`) writes its state to the device in the same step as each action and
+comes back after a reload. Anything leaving the device goes through the outbox: saved first, sent in order with one
 idempotency key, retried, held while offline, sent by one tab at a time, and set aside with its
 reason if it can never be sent.
 
@@ -1058,28 +1058,13 @@ folder is not page state and is left alone.
 
 #### Several tabs
 
-```mermaid
-sequenceDiagram
-  participant A as Tab A
-  participant D as Device
-  participant B as Tab B
-  A->>D: save request
-  A->>D: take lock
-  D-->>A: news from B
-  A->>D: append entry
-  A-)B: announce
-  B->>D: read news
-  Note over B: same state
-```
-
-Provide `Tabs.layerBrowser` in a browser and a durable store is one store across every open tab.
-A command takes a cross-tab lock, first applies whatever other tabs have recorded since, then
-records its own entry, so two tabs never write the same slot and a reducer always sees the latest
-state. Idle tabs hear about new entries and follow. A tab that fell behind a fold of old entries
-starts again from the saved state. Each command is written to the device before the lock is taken, so
-one made just before a reload or a close is carried out by the next tab to open (and reported as
-`Store.Abandoned` if that version no longer has the action). Without the layer a store behaves as if
-it were the only tab.
+A store placed with `TheStore.layerSaved` saves its state on the device in the same step as each
+command, so a reload or a close straight after a click loses nothing, and it starts from what was
+saved. Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
+saving, a tab tells the others, and each reads the saved state again (on the broadcast message and
+on the browser's own storage event, whichever arrives once the new value is visible). Two tabs that
+write at the same moment end on whichever saved last. Without the layer a store behaves as if it
+were the only tab.
 
 ### Outbox
 
@@ -1343,7 +1328,7 @@ What the tools show, docked at the corner of the page:
   moment, and stepping opens the trace of the moment stepped to.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
-  page: a durable store's saved log is not rewritten, so a reload returns to what was saved.
+  page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
 - **Trace.** Any moment opens as a waterfall of its spans: the page's and the backends' on one
   time line, nested by parent, with how long each took and the failed ones marked.
 - **Stores.** Each store's actions and state, with Back, Forward, Live and Go to; export a log as
@@ -2060,8 +2045,8 @@ Both are built on Effect and both keep app state changes explicit and replayable
 
 - Model fields that were only about the screen (`menu`, `tagging`, `naming`, the filter text) became
   `UiState` or form state inside the component that owns them. They are no longer saved or replayed.
-- Model fields that are real data (agents, projects, which sections are collapsed) became a durable
-  store.
+- Model fields that are real data (agents, projects, which sections are collapsed) became a saved
+  store (`layerSaved`).
 - Each Message that changed data became a store action. Messages that only changed screen state
   became `UiState.set` in a handler.
 - The pure functions that turned data into sections moved over unchanged in spirit
@@ -2637,10 +2622,10 @@ Built since, and smaller than they sound, but not done:
 - **Generated ids in `@spar/ui` come from a counter, not a store.** A tooltip or a listbox asks
   for an id when it mounts. Decided to leave it: an id is not state anyone would rewind to, and an
   action for every id would bury the log. Toasts did move to a store.
-- **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
+- **A fork lives in the page.** A saved store's saved state is not rewritten by a fork, so a reload
   returns to what was saved. Decided not to build keeping forks on the device as a leftover: a
   parked branch holds each store's state in memory as a way to resume it, and to save it the
-  branches would have to become plain data that every kind of store can be loaded from, durable
+  branches would have to become plain data that every kind of store can be loaded from, saved
   ones and ones with an outbox included. A store's log can be exported and loaded again, which is
   the way to keep one today.
 - **The showcase is not drawn on the server.** `apps/ssr` shows server rendering, with a routed

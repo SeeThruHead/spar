@@ -23,8 +23,8 @@ Both are built on Effect and both keep app state changes explicit and replayable
 
 - Model fields that were only about the screen (`menu`, `tagging`, `naming`, the filter text) became
   `UiState` or form state inside the component that owns them. They are no longer saved or replayed.
-- Model fields that are real data (agents, projects, which sections are collapsed) became a durable
-  store.
+- Model fields that are real data (agents, projects, which sections are collapsed) became a saved
+  store (`layerSaved`).
 - Each Message that changed data became a store action. Messages that only changed screen state
   became `UiState.set` in a handler.
 - The pure functions that turned data into sections moved over unchanged in spirit

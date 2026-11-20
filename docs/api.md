@@ -271,28 +271,13 @@ folder is not page state and is left alone.
 
 ### Several tabs
 
-```mermaid
-sequenceDiagram
-  participant A as Tab A
-  participant D as Device
-  participant B as Tab B
-  A->>D: save request
-  A->>D: take lock
-  D-->>A: news from B
-  A->>D: append entry
-  A-)B: announce
-  B->>D: read news
-  Note over B: same state
-```
-
-Provide `Tabs.layerBrowser` in a browser and a durable store is one store across every open tab.
-A command takes a cross-tab lock, first applies whatever other tabs have recorded since, then
-records its own entry, so two tabs never write the same slot and a reducer always sees the latest
-state. Idle tabs hear about new entries and follow. A tab that fell behind a fold of old entries
-starts again from the saved state. Each command is written to the device before the lock is taken, so
-one made just before a reload or a close is carried out by the next tab to open (and reported as
-`Store.Abandoned` if that version no longer has the action). Without the layer a store behaves as if
-it were the only tab.
+A store placed with `TheStore.layerSaved` saves its state on the device in the same step as each
+command, so a reload or a close straight after a click loses nothing, and it starts from what was
+saved. Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
+saving, a tab tells the others, and each reads the saved state again (on the broadcast message and
+on the browser's own storage event, whichever arrives once the new value is visible). Two tabs that
+write at the same moment end on whichever saved last. Without the layer a store behaves as if it
+were the only tab.
 
 ## Outbox
 
@@ -556,7 +541,7 @@ What the tools show, docked at the corner of the page:
   moment, and stepping opens the trace of the moment stepped to.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
-  page: a durable store's saved log is not rewritten, so a reload returns to what was saved.
+  page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
 - **Trace.** Any moment opens as a waterfall of its spans: the page's and the backends' on one
   time line, nested by parent, with how long each took and the failed ones marked.
 - **Stores.** Each store's actions and state, with Back, Forward, Live and Go to; export a log as

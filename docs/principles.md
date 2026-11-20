@@ -91,8 +91,8 @@ drifts from the state.
 
 ## 8. Nothing the user did is lost
 
-A durable store writes each action to the device before the state changes and comes back after a
-reload. Anything leaving the device goes through the outbox: saved first, sent in order with one
+A saved store (`layerSaved`) writes its state to the device in the same step as each action and
+comes back after a reload. Anything leaving the device goes through the outbox: saved first, sent in order with one
 idempotency key, retried, held while offline, sent by one tab at a time, and set aside with its
 reason if it can never be sent.
 
