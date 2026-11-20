@@ -88,10 +88,10 @@ and names the file and line. What can only be seen while the app runs is reporte
 format: a code, what happened, the component and file it happened in, and what to do instead.
 
 ```text
-[SPAR_NEEDLESS_WAIT] A query that takes no input waits for another query's value before it starts.
-  in: Dashboard > StockPanel
-  at: src/StockPanel.tsx:12:3
-  fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others.
+[SPAR_DUPLICATE_CALL] The same request was made again while an identical one was still on its way.
+  in: Dashboard > StockRow
+  at: src/StockRow.tsx:12:3
+  fix: Load it once with a Query and let each component that needs it ask for it.
 ```
 
 **What it removes.** Errors an agent cannot act on. Every code has an entry in the

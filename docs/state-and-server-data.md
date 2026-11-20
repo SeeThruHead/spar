@@ -130,7 +130,10 @@ means nothing is accepted there.
 
 (`packages/spar/test/phases.test.ts`)
 
-## Five mistakes Spar reports while the app runs
+## Four mistakes Spar reports while the app runs
+
+A fifth used to be here: giving a query that takes no input a value from another query, so it
+waited for nothing. That no longer compiles (`SPAR_NEEDLESS_WAIT`).
 
 None of these can be refused by the compiler, because each is ordinary code that is wrong only in
 how its timing works out. Spar notices them while the app runs, writes a warning in the agent
@@ -139,7 +142,6 @@ devtools and the agents' server show. Run the app, do the thing, and read the lo
 
 | Code                   | What was done                                                                                    | Do this instead                                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `SPAR_NEEDLESS_WAIT`   | A query that takes no input was given an input made from another query's value, so it waits      | `yield* TheQuery.ask()` with no argument. Chain two queries only when the second needs the first's value   |
 | `SPAR_DUPLICATE_CALL`  | The same GET was made again through `Backend` while the first was still on its way               | One `Query.Tag`; every component that needs it asks for it. Never fetch in each row                        |
 | `SPAR_OLDER_ANSWER`    | A `Store.after` run started by an earlier command answered after a later one's, on the same part | `Store.afterLatest`, or load it with a Query, which refuses an answer to an earlier request                |
 | `SPAR_SENT_AGAIN`      | The same command with the same payload, while what the first one started was still running       | A guard on the action that refuses it while in progress, or `form.submit`, which ignores a second submit   |

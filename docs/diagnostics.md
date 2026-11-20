@@ -112,14 +112,6 @@ Fix: Read the defect that follows. If the part is wrapped in View.crash the rest
 
 Reported by: The running app: an error's message, or an entry in the log.
 
-### SPAR_NEEDLESS_WAIT
-
-A query that takes no input waits for another query's value before it starts.
-
-Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
 ### SPAR_SENT_AGAIN
 
 The same command, with the same payload, was sent again while the work the first one started was still running.
@@ -231,6 +223,14 @@ It is in use again
 Fix: Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.
 
 Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
+
+### SPAR_NEEDLESS_WAIT
+
+A query that takes no input was given one, such as a value made from another query. It would wait for that value for nothing, so it does not compile: the argument is not assignable to parameter of type 'void' (TS2345).
+
+Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
+
+Reported by: The TypeScript compiler, in the text of a type error.
 
 ### SPAR_REDUCER_STATE_UNTYPED
 

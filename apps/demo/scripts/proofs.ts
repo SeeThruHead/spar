@@ -47,6 +47,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "the parent route must end with /* to have routes under it",
   },
   {
+    file: "query-without-input-waits.ts",
+    rule: "Giving a query that takes no input a value from another query, so it waits for nothing",
+    by: "types",
+    expect: "not assignable to parameter of type 'void'",
+  },
+  {
     file: "reducer-without-a-state-type.ts",
     rule: "Writing a store action's reducer without a type on its state parameter",
     by: "types",

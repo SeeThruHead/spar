@@ -17,7 +17,6 @@ import {
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
-import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Action } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
@@ -47,7 +46,7 @@ export type Entry<A, E> = {
 
 export type State<A, E> = { readonly entries: Readonly<Record<string, Entry<A, E>>> }
 
-export type Input<I> = I | Reactive<I> | Reactive<Option.Option<I>>
+export type Input<I> = [I] extends [void] ? void : I | Reactive<I> | Reactive<Option.Option<I>>
 
 export type Handle<A, E> = {
   readonly status: Reactive<Status>
@@ -154,6 +153,9 @@ const returning = (present: Reactive<boolean>): Stream.Stream<boolean> =>
 
 const optional = <I>(given: I | Option.Option<I>): Option.Option<I> =>
   Option.isOption(given) ? given : Option.some(given)
+
+const optionalOf = (given: unknown): Reactive<Option.Option<unknown>> =>
+  isReactive(given) ? map(given, optional) : succeed(Option.some(given))
 
 const statusOf = <A, E>(entry: Entry<A, E> | undefined): Status =>
   entry === undefined ? "waiting" : entry.status
@@ -336,15 +338,11 @@ export const Tag =
             ),
         },
       )
-    const askedFor = (input: Option.Option<I>): Option.Option<Asked> =>
+    const askedFor = (input: Option.Option<unknown>): Option.Option<Asked> =>
       Option.map(Option.flatMap(input, Schema.encodeUnknownOption(inputJson)), (encoded) => ({
         key: Formatter.formatJson(encoded),
         input: encoded,
       }))
-    const optionalOf = (given: Input<I>): Reactive<Option.Option<I>> =>
-      isReactive(given)
-        ? map<I | Option.Option<I>, Option.Option<I>>(given, optional)
-        : succeed(Option.some(given))
     const ensured = Effect.fnUntraced(function* (
       asked: Option.Option<Asked>,
       after: string | null,
@@ -389,39 +387,11 @@ export const Tag =
           links: linksTo(hit),
         },
       )
-    const takesNothing = Object.is(options.input, Schema.Void)
-    const needless = (after: string | null) => {
-      if (after === null || !takesNothing || !after.endsWith(" . value")) return Effect.void
-
-      return Effect.flatMap(Effect.serviceOption(ViewScope), (around) => {
-        const where = Option.match(around, {
-          onNone: () => ({ in: [], at: "" }),
-          onSome: (mounted) => ({ in: pathOf(mounted), at: mounted.at }),
-        })
-
-        return Effect.andThen(
-          Timeline.note("waited", key, () => ({
-            code: "SPAR_NEEDLESS_WAIT",
-            after,
-            in: where.in.join(" > "),
-            at: where.at,
-          })),
-          Effect.logWarning(
-            Diagnostics.text("SPAR_NEEDLESS_WAIT", {
-              said: `${key} takes no input, yet it waits for ${after}.`,
-              ...where,
-            }),
-          ),
-        )
-      })
-    }
-    const ask = Effect.fnUntraced(function* (input: Input<I>) {
+    const asking = Effect.fnUntraced(function* (input: unknown) {
       const store = yield* Effect.service(base)
       const wanted = map(optionalOf(input), askedFor)
       const after = Option.getOrNull(sourceOf(input))
       const context = yield* Effect.context<Self>()
-
-      yield* needless(after)
 
       const first = yield* wanted.get
       const users = usersOf(store)
@@ -516,6 +486,7 @@ export const Tag =
         ),
       }
     })
+    const ask = (input: Input<I>) => asking(input)
     const read = (input: I): Effect.Effect<A | null, never, Self> =>
       Effect.map(
         Effect.flatMap(Effect.service(base), (store) => store.state.get),
@@ -557,7 +528,7 @@ export const Tag =
           started.write(new Set([...started.read(), nameOf(input)]))
 
           return Effect.asVoid(
-            Effect.provide(Effect.provideService(ask(input), Scope.Scope, scope), context),
+            Effect.provide(Effect.provideService(asking(input), Scope.Scope, scope), context),
           )
         })
       const beginAll = (all: ReadonlyArray<I>) => Effect.forEach(all, begin, { discard: true })

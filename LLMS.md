@@ -175,11 +175,11 @@ with async work. The short version:
   the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
   next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
-- A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
-  input made from another query's value: it would wait for that query for nothing.
+- A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
+  input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
-- Spar reports five timing mistakes while the app runs (`SPAR_NEEDLESS_WAIT`,
-  `SPAR_DUPLICATE_CALL`, `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
+- Spar reports four timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
+  `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
   change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
 - A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
   yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.
@@ -1521,7 +1521,10 @@ means nothing is accepted there.
 
 (`packages/spar/test/phases.test.ts`)
 
-### Five mistakes Spar reports while the app runs
+### Four mistakes Spar reports while the app runs
+
+A fifth used to be here: giving a query that takes no input a value from another query, so it
+waited for nothing. That no longer compiles (`SPAR_NEEDLESS_WAIT`).
 
 None of these can be refused by the compiler, because each is ordinary code that is wrong only in
 how its timing works out. Spar notices them while the app runs, writes a warning in the agent
@@ -1530,7 +1533,6 @@ devtools and the agents' server show. Run the app, do the thing, and read the lo
 
 | Code                   | What was done                                                                                    | Do this instead                                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `SPAR_NEEDLESS_WAIT`   | A query that takes no input was given an input made from another query's value, so it waits      | `yield* TheQuery.ask()` with no argument. Chain two queries only when the second needs the first's value   |
 | `SPAR_DUPLICATE_CALL`  | The same GET was made again through `Backend` while the first was still on its way               | One `Query.Tag`; every component that needs it asks for it. Never fetch in each row                        |
 | `SPAR_OLDER_ANSWER`    | A `Store.after` run started by an earlier command answered after a later one's, on the same part | `Store.afterLatest`, or load it with a Query, which refuses an answer to an earlier request                |
 | `SPAR_SENT_AGAIN`      | The same command with the same payload, while what the first one started was still running       | A guard on the action that refuses it while in progress, or `form.submit`, which ignores a second submit   |
@@ -2468,14 +2470,6 @@ Fix: Read the defect that follows. If the part is wrapped in View.crash the rest
 
 Reported by: The running app: an error's message, or an entry in the log.
 
-#### SPAR_NEEDLESS_WAIT
-
-A query that takes no input waits for another query's value before it starts.
-
-Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
 #### SPAR_SENT_AGAIN
 
 The same command, with the same payload, was sent again while the work the first one started was still running.
@@ -2587,6 +2581,14 @@ It is in use again
 Fix: Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.
 
 Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
+
+#### SPAR_NEEDLESS_WAIT
+
+A query that takes no input was given one, such as a value made from another query. It would wait for that value for nothing, so it does not compile: the argument is not assignable to parameter of type 'void' (TS2345).
+
+Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
+
+Reported by: The TypeScript compiler, in the text of a type error.
 
 #### SPAR_REDUCER_STATE_UNTYPED
 
@@ -4235,37 +4237,6 @@ describe("the natural way: a value from one place feeds a query declared in anot
     ),
   )
 
-  it.live("the report of a needless wait names the component and where its view was made", () =>
-    Effect.gen(function* () {
-      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
-      const Chained = compose(
-        Effect.fnUntraced(function* () {
-          const users = yield* Users.ask()
-          const stock = yield* Stock.ask(
-            Reactive.map(users.value, (loaded) =>
-              loaded === null ? Option.none<void>() : Option.some<void>(undefined),
-            ),
-          )
-
-          return { status: stock.status, count: Reactive.map(stock.value, (held) => held ?? 0) }
-        }),
-      )(OrdersView)
-
-      yield* Testing.mount(Chained).pipe(Effect.provide(recording(noted)))
-      yield* Testing.eventually(() =>
-        expect(document.querySelector('[aria-label="Orders status"]')?.textContent).toBe("waiting"),
-      )
-
-      const [waited] = (yield* Ref.get(noted)).filter((seen) => seen.kind === "waited")
-
-      expect(JSON.stringify(waited?.detail)).toMatch(
-        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Chained","at":"[^"]+query\.test\.ts:\d+:\d+"/,
-      )
-    }).pipe(
-      Effect.provide(Layer.merge(Users.live, Stock.live).pipe(Layer.provideMerge(Directory.layer))),
-    ),
-  )
-
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
       const OrdersOf = compose(
@@ -4639,46 +4610,6 @@ describe("server data in a store", () => {
       yield* answer("orders 9", ["x"])
       yield* once(4)
       expect(Object.keys((yield* few.state.get).entries)).toEqual(["9"])
-    }),
-  )
-
-  it.effect("a query that takes no input but waits for another query's value is reported", () =>
-    Effect.gen(function* () {
-      const { built, noted } = yield* opened
-      const gate = yield* SubscriptionRef.make(Option.some<void>(undefined))
-
-      yield* Effect.provide(
-        Effect.gen(function* () {
-          const users = yield* Users.ask()
-
-          yield* Stock.ask(
-            Reactive.map(users.value, (loaded) =>
-              loaded === null ? Option.none<void>() : Option.some<void>(undefined),
-            ),
-          )
-          yield* Stock.ask(Reactive.fromSubscriptionRef(gate))
-          yield* Orders.ask(
-            Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id)),
-          )
-        }),
-        built,
-      )
-
-      expect(
-        (yield* Ref.get(noted))
-          .filter((seen) => seen.kind === "waited")
-          .map((seen) => [seen.name, seen.detail]),
-      ).toEqual([
-        [
-          "test/Stock",
-          {
-            code: "SPAR_NEEDLESS_WAIT",
-            after: "made from test/Users . value",
-            in: "",
-            at: "",
-          },
-        ],
-      ])
     }),
   )
 

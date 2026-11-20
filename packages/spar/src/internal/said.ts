@@ -22,11 +22,6 @@ export const atRun = {
     what: "A part of the page crashed.",
     fix: "Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.",
   },
-  SPAR_NEEDLESS_WAIT: {
-    kind: "run",
-    what: "A query that takes no input waits for another query's value before it starts.",
-    fix: "Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.",
-  },
   SPAR_SENT_AGAIN: {
     kind: "run",
     what: "The same command, with the same payload, was sent again while the work the first one started was still running.",

@@ -175,11 +175,11 @@ with async work. The short version:
   the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
   next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
-- A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
-  input made from another query's value: it would wait for that query for nothing.
+- A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
+  input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
-- Spar reports five timing mistakes while the app runs (`SPAR_NEEDLESS_WAIT`,
-  `SPAR_DUPLICATE_CALL`, `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
+- Spar reports four timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
+  `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
   change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
 - A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
   yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.
