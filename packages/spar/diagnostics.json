@@ -28,6 +28,13 @@
     "reportedBy": "The build (the Vite or Bun plugin), with the file, line and column."
   },
   {
+    "code": "SPAR_CHILD_NEEDS_A_SERVICE",
+    "kind": "build",
+    "what": "A component drawn inside another needs a service that nothing above it provides: not the layer given to App.mount, and not a store beside a component it is drawn in. TypeScript cannot see this through JSX, so the build checks it.",
+    "fix": "Add the service's layer to the layer given to App.mount (or App.hydrate, or Server.render), or ship the store beside the component that needs it with TheStore.with(Component).",
+    "reportedBy": "The build (the Vite or Bun plugin), with the file, line and column."
+  },
+  {
     "code": "SPAR_WAIT_IN_COMPONENT",
     "kind": "build",
     "what": "A component's Effect does not wait. Whatever it waits for holds back every component below it, and their queries start late: a waterfall.",

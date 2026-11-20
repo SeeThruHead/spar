@@ -763,8 +763,11 @@ props are inferred from them. Enhancers and the view run once, on mount.
 | `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin. |
 
 A child component is written in JSX inside the view: `<Dropdown label="Sort by" onPick={pick} />`.
-It keeps its own UI state, and runs with the services of the component that draws it; what it
-needs is not part of its parent's type. The build names each component after the constant it is
+It keeps its own UI state, and runs with the services of the component that draws it. What it
+needs is not part of its parent's type, because TypeScript gives every JSX expression one type, so
+the build checks it instead: a child that needs a service no layer given to `App.mount` provides
+(and no store beside a component above it) stops the build with `SPAR_CHILD_NEEDS_A_SERVICE`.
+The build names each component after the constant it is
 given to. A named view can stand at the end instead of an inline one:
 `compose(withHover)(CardView)`.
 
@@ -1888,8 +1891,8 @@ Effect.runFork(program)
 A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
 it does not compile. `App.mount` only accepts a component with no errors left and a layer that
 provides everything it needs. What a child written in JSX needs is not in its parent's type,
-because TypeScript gives every JSX expression the same type: a missing service there shows when
-that child mounts.
+because TypeScript gives every JSX expression the same type, so the Vite plugin checks it when you
+build: a child needing a service the mount's layer does not provide stops the build.
 
 ### Test it
 
@@ -2389,6 +2392,14 @@ Fix: Hold state in a Store (Store.Tag, placed with .layer or beside a view with 
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
+#### SPAR_CHILD_NEEDS_A_SERVICE
+
+A component drawn inside another needs a service that nothing above it provides: not the layer given to App.mount, and not a store beside a component it is drawn in. TypeScript cannot see this through JSX, so the build checks it.
+
+Fix: Add the service's layer to the layer given to App.mount (or App.hydrate, or Server.render), or ship the store beside the component that needs it with TheStore.with(Component).
+
+Reported by: The build (the Vite or Bun plugin), with the file, line and column.
+
 #### SPAR_WAIT_IN_COMPONENT
 
 A component's Effect does not wait. Whatever it waits for holds back every component below it, and their queries start late: a waterfall.
@@ -2739,10 +2750,12 @@ Built since, and smaller than they sound, but not done:
   drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
-- **What a JSX child needs is not in its parent's type.** TypeScript gives every JSX expression one
-  type, so a child component drawn as a tag in a view can need a service its parent's type does
-  not show. `App.mount` still checks the top component; a missing service for a child shows when
-  that child mounts, not at compile time.
+- **What a JSX child needs is checked by the build, not by the types.** TypeScript gives every JSX
+  expression one type, so the Vite build reads the code instead (`SPAR_CHILD_NEEDS_A_SERVICE`). It
+  follows components across files and reads the layer given to `App.mount`, but not through
+  everything code can do: a layer built by a function declaration, a component from a package, or
+  a service reached only through `Effect.service` is not seen, and such a child still fails when
+  it mounts. The Bun plugin checks one file at a time.
 - **The bundle is large and starts slower than Solid's.** The benchmark app ships 68 kB gzipped
   (Solid 6 kB, React 68 kB) and is on the page in 13.6 ms (Solid 4.9 ms). About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not

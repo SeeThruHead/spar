@@ -1,9 +1,15 @@
 import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
 import * as Diagnostics from "../Diagnostics.ts"
+import { unprovided } from "./requirements.ts"
+import type { Source } from "./requirements.ts"
 
 export type Violation = {
-  readonly rule: "jsx-only-in-views" | "no-effect-run-in-views" | "views-need-a-schema"
+  readonly rule:
+    | "jsx-only-in-views"
+    | "no-effect-run-in-views"
+    | "views-need-a-schema"
+    | "child-needs-a-service"
   readonly code: Diagnostics.Code
   readonly message: string
   readonly file: string
@@ -56,6 +62,7 @@ const codes = {
   "jsx-only-in-views": "SPAR_JSX_OUTSIDE_VIEW",
   "views-need-a-schema": "SPAR_VIEW_WITHOUT_SCHEMA",
   "no-effect-run-in-views": "SPAR_EFFECT_RUN_IN_VIEW",
+  "child-needs-a-service": "SPAR_CHILD_NEEDS_A_SERVICE",
 } as const satisfies Record<Violation["rule"], Diagnostics.Code>
 
 type Where = "outside" | "view" | "hole" | "listed"
@@ -111,14 +118,19 @@ const locate = (
   return { line: before.split("\n").length, column: offset - before.lastIndexOf("\n") }
 }
 
-export const check = (file: string, source: string): ReadonlyArray<Violation> =>
-  visit(parseSync(file, source).program, "outside").map(([rule, offset]) => ({
+export const check = (file: string, source: string): ReadonlyArray<Violation> => [
+  ...visit(parseSync(file, source).program, "outside").map(([rule, offset]) => ({
     rule,
     code: codes[rule],
     message: `${Diagnostics.all[codes[rule]].what} ${Diagnostics.all[codes[rule]].fix}`,
     file,
     ...locate(source, offset),
-  }))
+  })),
+  ...unprovided([{ file, source }]),
+]
+
+export const checkAll = (sources: ReadonlyArray<Source>): ReadonlyArray<Violation> =>
+  unprovided(sources)
 
 export const format = (
   violations: ReadonlyArray<Omit<Violation, "rule"> & { readonly rule: string }>,

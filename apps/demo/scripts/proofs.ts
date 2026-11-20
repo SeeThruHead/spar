@@ -101,6 +101,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "CounterStore",
   },
   {
+    file: "child-needs-a-service.tsx",
+    rule: "Drawing a child component that needs a service the app's layer does not provide",
+    by: "build",
+    expect: "child-needs-a-service: CountLabel, drawn in Page, needs CounterStore",
+  },
+  {
     file: "input-bound-to-a-store.tsx",
     rule: "Binding a text input's value to a store selector, so the store's echo replaces what is typed",
     by: "types",

@@ -78,6 +78,14 @@ const givenTo = (argument: unknown): ReadonlyArray<string> => {
   return serviceName(argument.arguments[argument.callee.name === "withStore" ? 0 : 1])
 }
 
+export const composeNeeds = (
+  args: ReadonlyArray<unknown>,
+  declared: ReadonlyMap<string, unknown>,
+): ReadonlyArray<string> =>
+  Array.dedupe(args.flatMap((given) => [...givenTo(given), ...yieldedIn(given, declared)]))
+
+export { everyNode, isDeclared, isNamed, isMember, isCapital }
+
 const listed = (services: ReadonlyArray<string>): string =>
   services.map((name) => `"${name}"`).join(",")
 

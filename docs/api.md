@@ -25,8 +25,11 @@ props are inferred from them. Enhancers and the view run once, on mount.
 | `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin. |
 
 A child component is written in JSX inside the view: `<Dropdown label="Sort by" onPick={pick} />`.
-It keeps its own UI state, and runs with the services of the component that draws it; what it
-needs is not part of its parent's type. The build names each component after the constant it is
+It keeps its own UI state, and runs with the services of the component that draws it. What it
+needs is not part of its parent's type, because TypeScript gives every JSX expression one type, so
+the build checks it instead: a child that needs a service no layer given to `App.mount` provides
+(and no store beside a component above it) stops the build with `SPAR_CHILD_NEEDS_A_SERVICE`.
+The build names each component after the constant it is
 given to. A named view can stand at the end instead of an inline one:
 `compose(withHover)(CardView)`.
 

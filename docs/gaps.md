@@ -51,10 +51,12 @@ Built since, and smaller than they sound, but not done:
   drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
-- **What a JSX child needs is not in its parent's type.** TypeScript gives every JSX expression one
-  type, so a child component drawn as a tag in a view can need a service its parent's type does
-  not show. `App.mount` still checks the top component; a missing service for a child shows when
-  that child mounts, not at compile time.
+- **What a JSX child needs is checked by the build, not by the types.** TypeScript gives every JSX
+  expression one type, so the Vite build reads the code instead (`SPAR_CHILD_NEEDS_A_SERVICE`). It
+  follows components across files and reads the layer given to `App.mount`, but not through
+  everything code can do: a layer built by a function declaration, a component from a package, or
+  a service reached only through `Effect.service` is not seen, and such a child still fails when
+  it mounts. The Bun plugin checks one file at a time.
 - **The bundle is large and starts slower than Solid's.** The benchmark app ships 68 kB gzipped
   (Solid 6 kB, React 68 kB) and is on the page in 13.6 ms (Solid 4.9 ms). About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not

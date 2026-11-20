@@ -146,8 +146,8 @@ Effect.runFork(program)
 A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
 it does not compile. `App.mount` only accepts a component with no errors left and a layer that
 provides everything it needs. What a child written in JSX needs is not in its parent's type,
-because TypeScript gives every JSX expression the same type: a missing service there shows when
-that child mounts.
+because TypeScript gives every JSX expression the same type, so the Vite plugin checks it when you
+build: a child needing a service the mount's layer does not provide stops the build.
 
 ## Test it
 

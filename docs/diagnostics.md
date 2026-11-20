@@ -56,6 +56,14 @@ Fix: Hold state in a Store (Store.Tag, placed with .layer or beside a view with 
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
+### SPAR_CHILD_NEEDS_A_SERVICE
+
+A component drawn inside another needs a service that nothing above it provides: not the layer given to App.mount, and not a store beside a component it is drawn in. TypeScript cannot see this through JSX, so the build checks it.
+
+Fix: Add the service's layer to the layer given to App.mount (or App.hydrate, or Server.render), or ship the store beside the component that needs it with TheStore.with(Component).
+
+Reported by: The build (the Vite or Bun plugin), with the file, line and column.
+
 ### SPAR_WAIT_IN_COMPONENT
 
 A component's Effect does not wait. Whatever it waits for holds back every component below it, and their queries start late: a waterfall.
