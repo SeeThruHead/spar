@@ -111,6 +111,25 @@
         "vitest": "5.0.5",
       },
     },
+    "apps/site": {
+      "name": "@spar/site",
+      "dependencies": {
+        "@spar/ui": "workspace:*",
+        "effect": "4.1.4",
+        "spar": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/tsgo": "0.67.7",
+        "@spar/browsers": "workspace:*",
+        "@spar/lint": "workspace:*",
+        "@types/bun": "1.4.3",
+        "mermaid": "12.3.0",
+        "oxfmt": "0.73.0",
+        "oxlint": "1.91.0",
+        "playwright": "1.65.1",
+        "typescript": "7.0.2",
+      },
+    },
     "apps/ssr": {
       "name": "@spar/ssr",
       "dependencies": {
@@ -592,6 +611,8 @@
     "@spar/lint": ["@spar/lint@workspace:packages/lint"],
 
     "@spar/sidebar": ["@spar/sidebar@workspace:apps/sidebar"],
+
+    "@spar/site": ["@spar/site@workspace:apps/site"],
 
     "@spar/ssr": ["@spar/ssr@workspace:apps/ssr"],
 

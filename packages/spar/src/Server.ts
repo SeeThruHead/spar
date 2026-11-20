@@ -53,13 +53,42 @@ const settled = (
         settled(stores, busy ? 0 : quiet + 1, waited || busy),
       )
 
-const drawn = (
+const placeOf = (key: string): string => key.replace(/#\d+$/, "")
+
+const statesOf = (
+  stores: Held<ReadonlyArray<Inspected>>,
+): Effect.Effect<ReadonlyMap<string, unknown>> =>
+  Effect.map(
+    Effect.forEach(stores.read(), (store) =>
+      Effect.map(store.state.get, (state) => [placeOf(store.key), state] as const),
+    ),
+    (states) => new Map(states),
+  )
+
+const same = (before: ReadonlyMap<string, unknown>, after: ReadonlyMap<string, unknown>): boolean =>
+  [...after].every(([key, state]) => Object.is(before.get(key), state))
+
+const mostDraws = 8
+
+const drawnWithin: (
   element: Element,
   stores: Held<ReadonlyArray<Inspected>>,
-): Effect.Effect<string, never, Scope.Scope> =>
-  Effect.flatMap(Effect.zip(toHtml(element), settled(stores, 0, false)), ([html, waited]) =>
-    waited ? drawn(element, stores) : Effect.succeed(html),
-  )
+  left: number,
+) => Effect.Effect<string, never, Scope.Scope> = Effect.fnUntraced(
+  function* (element, stores, left) {
+    const before = yield* statesOf(stores)
+    const html = yield* toHtml(element)
+    const waited = yield* settled(stores, 0, false)
+    const after = yield* statesOf(stores)
+    if (left === 0) return html
+    if (waited || !same(before, after)) return yield* drawnWithin(element, stores, left - 1)
+
+    return html
+  },
+)
+
+const drawn = (element: Element, stores: Held<ReadonlyArray<Inspected>>) =>
+  drawnWithin(element, stores, mostDraws)
 
 export const render = <R, LayerError = never>(
   component: Component<NoProps, never, R>,
