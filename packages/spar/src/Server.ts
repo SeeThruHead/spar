@@ -180,7 +180,7 @@ const sentAgain = (drawing: Drawing, sent: Part, now: Part) => {
     }),
     [
       ...replaced.map((replacement) => pieceOf(drawing.root, replacement)),
-      ...(replaced.length === 0 ? [] : [Pieces.round(unmarked(now.html))]),
+      ...replaced.slice(0, 1).map(() => Pieces.round(unmarked(now.html))),
     ],
   ).pipe((annotated) => Effect.withSpan(annotated, "Server.piece", { captureStackTrace: false }))
 }
