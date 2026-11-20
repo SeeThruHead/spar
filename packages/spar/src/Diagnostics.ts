@@ -97,6 +97,11 @@ export const all = {
     what: "An earlier tab asked a store for an action and closed before it was done, and this version cannot carry it out, so it was dropped.",
     fix: "Nothing to do for the dropped action. To keep such actions across versions, keep the action's name and payload Schema readable by the new version.",
   },
+  SPAR_COMPONENT_OUTSIDE_A_VIEW: {
+    kind: "run",
+    what: "A component was written in JSX that is not drawn by a component, so it has no services to run with.",
+    fix: "Put the component's JSX in the inline view at the end of a compose(...)(...), or in a For or Show inside one.",
+  },
   SPAR_NO_PAGE_ON_SERVER: {
     kind: "run",
     what: "There is no page on a server.",

@@ -11,6 +11,7 @@ import {
   sourceOf,
   sourced,
 } from "../src/internal/inspect.ts"
+import { Toolbar } from "./composed.tsx"
 import { BadgeView } from "./made.tsx"
 import { NoteView, TwiceView } from "./tree.tsx"
 
@@ -87,6 +88,25 @@ const idOf = (node: Element | null): number => Number(node?.getAttribute(mark))
 
 const onPage = (): ReadonlySet<number> =>
   new Set([...document.querySelectorAll(`[${mark}]`)].map((node) => idOf(node)))
+
+describe("what the inspector knows about a composed component", () => {
+  it.live("its name, its props with their Schema, and where it is in the tree", () =>
+    inspected(
+      Effect.fnUntraced(function* (inspector) {
+        yield* Testing.mount(Toolbar)
+
+        const button = yield* Testing.find("button", "Sort by")
+        const seen = Option.getOrThrow(inspector.find(idOf(button.closest(".dropdown"))))
+
+        expect([seen.name, Object.keys(seen.fields), seen.placed]).toEqual([
+          "Dropdown",
+          ["label", "items", "onPick"],
+          Option.some({ path: ["Toolbar", "Dropdown"], services: [] }),
+        ])
+      }),
+    ),
+  )
+})
 
 describe("what the inspector knows about what is on the page", () => {
   it.live("every view marks its elements and says its name, its props and their Schema", () =>

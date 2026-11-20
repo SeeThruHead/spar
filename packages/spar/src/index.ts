@@ -1,4 +1,18 @@
 export * as App from "./App.ts"
+export {
+  For,
+  Show,
+  compose,
+  withEffect,
+  withHandlers,
+  withKey,
+  withProps,
+  withQuery,
+  withSpan,
+  withStore,
+  withUiState,
+} from "./Compose.ts"
+export type { Enhancer } from "./Compose.ts"
 export * as Backend from "./Backend.ts"
 export * as Events from "./Events.ts"
 export * as Form from "./Form.ts"

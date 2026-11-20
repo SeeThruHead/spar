@@ -33,6 +33,23 @@ const isViewMake = Schema.is(
   }),
 )
 
+const isComposedView = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("CallExpression"),
+    callee: Schema.Struct({
+      type: Schema.Literal("CallExpression"),
+      callee: Schema.Struct({ name: Schema.Literal("compose") }),
+    }),
+  }),
+)
+
+const isFor = Schema.is(
+  Schema.Struct({
+    type: Schema.Literal("JSXElement"),
+    openingElement: Schema.Struct({ name: Schema.Struct({ name: Schema.Literal("For") }) }),
+  }),
+)
+
 const jsxTypes: ReadonlySet<string> = new Set(["JSXElement", "JSXFragment"])
 
 const codes = {
@@ -41,17 +58,20 @@ const codes = {
   "no-effect-run-in-views": "SPAR_EFFECT_RUN_IN_VIEW",
 } as const satisfies Record<Violation["rule"], Diagnostics.Code>
 
-type Where = "outside" | "view" | "hole"
+type Where = "outside" | "view" | "hole" | "listed"
 
 const jsxRule: Readonly<Record<Where, ReadonlyArray<Violation["rule"]>>> = {
   outside: ["views-need-a-schema"],
   view: [],
   hole: ["jsx-only-in-views"],
+  listed: ["jsx-only-in-views"],
 }
 
 const inside = (node: unknown, type: string, key: string, where: Where): Where => {
   if (isViewMake(node)) return key === "arguments" ? "view" : where
-  if (type === "JSXExpressionContainer") return "hole"
+  if (isComposedView(node)) return key === "arguments" ? "view" : where
+  if (isFor(node) && key === "children") return "listed"
+  if (type === "JSXExpressionContainer") return where === "listed" ? "view" : "hole"
   if (type === "CallExpression" && key === "arguments") return "hole"
 
   return where

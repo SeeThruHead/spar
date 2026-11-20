@@ -168,6 +168,14 @@ Fix: Nothing to do for the dropped action. To keep such actions across versions,
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_COMPONENT_OUTSIDE_A_VIEW
+
+A component was written in JSX that is not drawn by a component, so it has no services to run with.
+
+Fix: Put the component's JSX in the inline view at the end of a compose(...)(...), or in a For or Show inside one.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_NO_PAGE_ON_SERVER
 
 There is no page on a server.

@@ -2,6 +2,7 @@ import { Context, Duration, Effect, Layer, Option, Schema, Scope, SubscriptionRe
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
+import { drawingIn } from "./internal/drawing.ts"
 import { fragment, keyed, portal as portalTo } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { Frame, OverlayLayer } from "./internal/frame.ts"
@@ -18,6 +19,7 @@ export type View<Props> = (props: Props) => Element
 
 export type Component<Props, E = never, R = never, ViewProps = never> = {
   readonly [TypeId]: typeof TypeId
+  readonly "~requirements"?: (requirements: R) => R
   readonly view: View<ViewProps> & Declared
   readonly mount: (props: Props) => Effect.Effect<Element, E, R | Scope.Scope>
 }
@@ -55,7 +57,7 @@ type Outside<Requirements> = Exclude<Exclude<Requirements, ViewScope>, Scope.Sco
 const labelled = (name: string, key: string | undefined): string =>
   key === undefined ? name : `${name}[${key}]`
 
-const inViewScope = <A, E, Requirements>(
+export const inViewScope = <A, E, Requirements>(
   effect: Effect.Effect<A, E, Requirements>,
   name: string,
   at: string,
@@ -114,14 +116,17 @@ export const taking = <const F extends Fields, Props, E, Requirements>(
 ) => connected(props, [])
 
 const shownIn = <Props>(view: View<Props>, made: Props, services: ReadonlyArray<string>) =>
-  ViewScope.use((mounted) =>
-    Effect.sync(() => {
-      const element = view(made)
+  Effect.flatMap(Effect.context(), (context) =>
+    ViewScope.use((mounted) =>
+      Effect.map(
+        drawingIn(context, () => view(made)),
+        (element) => {
+          placed(() => pathOf(mounted), services)
 
-      placed(() => pathOf(mounted), services)
-
-      return element
-    }),
+          return element
+        },
+      ),
+    ),
   )
 
 const aFrame = 16

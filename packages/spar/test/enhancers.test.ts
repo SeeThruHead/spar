@@ -1,0 +1,168 @@
+import { describe, expect, it } from "@effect/vitest"
+import { fireEvent, screen } from "@testing-library/dom"
+import { Effect, Layer } from "effect"
+import { App, Reactive, Server, UiState } from "spar"
+import * as Testing from "spar/testing"
+import {
+  Account,
+  CounterStore,
+  Dropdown,
+  Gallery,
+  OrdersQuery,
+  ResetCounter,
+  SessionStore,
+  Shop,
+  Ticker,
+  Toolbar,
+  Unnamed,
+  resetAfterDelay,
+  withHover,
+} from "./composed.tsx"
+
+const text = (label: string) => screen.getByLabelText(label).textContent
+
+const shows = (label: string, expected: string) =>
+  Testing.eventually(() => expect(text(label)).toBe(expected))
+
+const shop = Layer.succeed(Shop, {
+  ordersOf: (userId: string) => Effect.succeed(userId === "ada" ? ["tea", "ink"] : ["pen"]),
+})
+
+const orders = Layer.mergeAll(SessionStore.layer(), OrdersQuery.live).pipe(Layer.provideMerge(shop))
+
+const withTree = Layer.sync(UiState.Tree, UiState.makeTree)
+
+describe("a component composed from enhancers, its view last and inline", () => {
+  it.live("reads a store, sends its commands, and is refused while resetting", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(ResetCounter)
+      yield* Testing.click("button", "Add 1")
+      yield* shows("Count", "1")
+      yield* Testing.click("button", "Reset after a delay")
+      yield* Testing.click("button", "Add 1")
+      yield* Testing.eventually(() =>
+        expect(screen.getByRole("alert").textContent).toBe("it is not accepted while resetting"),
+      )
+      yield* shows("Count", "0")
+      yield* Effect.sync(() => fireEvent.keyDown(window, { key: "a" }))
+      yield* Effect.sync(() => fireEvent.keyDown(window, { key: "+" }))
+      yield* shows("Count", "1")
+    }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
+  )
+
+  it.live("renders child components in JSX, each with its own open state and nothing wired", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Toolbar)
+      yield* Testing.click("button", "Sort by")
+      yield* Testing.find("menu", "Sort by")
+
+      expect(screen.queryByRole("menu", { name: "Show" })).toBeNull()
+
+      yield* Testing.click("menuitem", "Oldest")
+      yield* shows("Sort", "Oldest")
+      yield* Testing.gone("menu", "Sort by")
+      yield* Testing.click("button", "Show")
+      yield* Testing.find("menu", "Show")
+      yield* Effect.sync(() => fireEvent.keyDown(window, { key: "Escape" }))
+      yield* Testing.gone("menu", "Show")
+
+      const tree = yield* UiState.snapshot
+
+      expect(tree.map((piece) => [piece.path.join(" / "), piece.name])).toEqual([
+        ["Toolbar", "sort"],
+        ["Toolbar / Dropdown", "open"],
+        ["Toolbar / Dropdown#2", "open"],
+      ])
+    }).pipe(Effect.provide(withTree)),
+  )
+
+  it.live("passes a store's value down as a prop, and the child asks its query with it", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Account)
+      yield* shows("Orders", "2 orders")
+      yield* Testing.click("button", "Switch user")
+      yield* shows("User", "grace")
+      yield* shows("Orders", "1 orders")
+    }).pipe(Effect.provide(Layer.merge(orders, withTree))),
+  )
+
+  it.live("adds one behaviour, itself made of enhancers, to two different components", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Gallery)
+
+      const card = yield* Testing.find("article", "Release notes")
+      const avatar = screen.getByRole("figure", { name: "ada" })
+
+      expect(avatar.textContent).toContain("A")
+      expect(screen.getByRole("list", { name: "Tags" }).textContent).toBe("onetwo")
+
+      yield* Effect.sync(() => fireEvent.pointerEnter(card))
+      yield* Testing.eventually(() => expect(card.classList.contains("raised")).toBe(true))
+      yield* Effect.sync(() => fireEvent.pointerEnter(avatar))
+      yield* Testing.eventually(() =>
+        expect(avatar.querySelector("figcaption")?.hidden).toBe(false),
+      )
+    }).pipe(Effect.provide(withTree)),
+  )
+
+  it.live("is drawn on the server, and hydrating keeps the nodes the server sent", () =>
+    Effect.gen(function* () {
+      const html = yield* Server.renderToString(Toolbar, { layer: Layer.empty })
+      const target = document.createElement("div")
+
+      expect(html).toContain("Sort by")
+      expect(html).toContain('<output aria-label="Sort">Newest</output>')
+
+      target.insertAdjacentHTML("beforeend", html)
+      yield* Effect.acquireRelease(
+        Effect.sync(() => document.body.appendChild(target)),
+        (node) => Effect.sync(() => node.remove()),
+      )
+
+      const sent = target.querySelector("button")
+
+      yield* Effect.forkScoped(App.hydrate(Toolbar, { target, layer: Layer.empty }), {
+        startImmediately: true,
+      })
+      yield* Effect.sleep("20 millis")
+      expect(target.querySelector("button")).toBe(sent)
+      expect(target.querySelectorAll("header").length).toBe(1)
+
+      yield* Effect.sync(() => fireEvent.click(target.querySelector("button") ?? target))
+      yield* Testing.find("menu", "Sort by")
+    }),
+  )
+
+  it.live("runs an effect for as long as it is mounted, inside a span that names it", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Ticker)
+      yield* shows("Ticks", "1")
+    }).pipe(Effect.provide(withTree)),
+  )
+
+  it("is called Component when nothing named it, and a group of enhancers runs on any props", () => {
+    expect(Unnamed.view.displayName).toBe("Component")
+    expect(Effect.isEffect(withHover(null))).toBe(true)
+  })
+
+  it("is named after its constant, and its view can be drawn on its own", () => {
+    expect([ResetCounter.view.displayName, ResetCounter.view.at]).toEqual([
+      "ResetCounter",
+      expect.stringContaining("composed.tsx"),
+    ])
+    expect(
+      ResetCounter.view({
+        count: Reactive.succeed(3),
+        refused: Reactive.succeed(""),
+        onIncrement: Effect.void,
+        onReset: Effect.void,
+      }),
+    ).toMatchObject({ tag: "section" })
+  })
+
+  it("written in JSX outside any component, says so with its code", () => {
+    expect(() => Dropdown({ label: "Alone", items: [], onPick: () => Effect.void })).toThrow(
+      "SPAR_COMPONENT_OUTSIDE_A_VIEW",
+    )
+  })
+})
