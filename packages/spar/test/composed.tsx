@@ -13,7 +13,6 @@ import {
   withKey,
   withProps,
   withQuery,
-  withSpan,
   withStore,
   withUiState,
 } from "spar"
@@ -212,14 +211,11 @@ export const Avatar = compose(
 
 export const Ticker = compose(
   withUiState("ticks", Schema.Int, 0),
-  withSpan(
-    "ticking",
-    withEffect(
-      Effect.fnUntraced(function* (props: { readonly ticks: UiState.UiState<number> }) {
-        yield* Effect.sleep("10 millis")
-        yield* UiState.set(props.ticks, 1)
-      }),
-    ),
+  withEffect(
+    Effect.fn("ticking")(function* (props: { readonly ticks: UiState.UiState<number> }) {
+      yield* Effect.sleep("10 millis")
+      yield* UiState.set(props.ticks, 1)
+    }),
   ),
 )((props) => <output aria-label="Ticks">{props.ticks}</output>)
 

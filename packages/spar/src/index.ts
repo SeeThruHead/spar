@@ -10,7 +10,6 @@ export {
   withKey,
   withProps,
   withQuery,
-  withSpan,
   withStore,
   withUiState,
 } from "./Compose.ts"

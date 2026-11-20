@@ -422,11 +422,6 @@ export const withEffect =
   (props) =>
     Effect.as(Effect.forkScoped(run(props)), {})
 
-export const withSpan =
-  <In, Add, E, R>(name: string, inner: Enhancer<In, Add, E, R>): Enhancer<In, Add, E, R> =>
-  (props) =>
-    Effect.withSpan(inner(props), name, { captureStackTrace: false })
-
 export const For = <A>(props: {
   readonly each: Reactive<ReadonlyArray<A>> | ReadonlyArray<A>
   readonly by: (item: A) => string | number
