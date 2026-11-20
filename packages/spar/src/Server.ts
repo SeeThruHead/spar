@@ -1,8 +1,8 @@
-import { Effect, Formatter, Queue, Schema, Stream } from "effect"
+import { Effect, Exit, Formatter, Queue, Schema, Scope, Stream } from "effect"
 import type { Cause } from "effect"
 import * as Pieces from "./internal/pieces.ts"
 import type { Cell as Held } from "./internal/cell.ts"
-import type { Layer, Scope } from "effect"
+import type { Layer } from "effect"
 import type { Element } from "./internal/element.ts"
 import * as Cell from "./internal/cell.ts"
 import { Dehydrated, Text, stateId } from "./internal/dehydrated.ts"
@@ -76,14 +76,23 @@ const drawnWithin: (
   left: number,
 ) => Effect.Effect<string, never, Scope.Scope> = Effect.fnUntraced(
   function* (element, stores, left) {
+    const registered = stores.read()
     const before = yield* statesOf(stores)
-    const html = yield* toHtml(element)
+    const draw = yield* Scope.make()
+    const html = yield* Scope.provide(toHtml(element), draw)
     const waited = yield* settled(stores, 0, false)
     const after = yield* statesOf(stores)
-    if (left === 0) return html
-    if (waited || !same(before, after)) return yield* drawnWithin(element, stores, left - 1)
+    const again = left > 0 && (waited || !same(before, after))
+    if (!again)
+      return yield* Effect.as(
+        Effect.addFinalizer(() => Scope.close(draw, Exit.void)),
+        html,
+      )
 
-    return html
+    yield* Scope.close(draw, Exit.void)
+    yield* Effect.sync(() => stores.write(registered))
+
+    return yield* drawnWithin(element, stores, left - 1)
   },
 )
 

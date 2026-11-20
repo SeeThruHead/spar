@@ -120,6 +120,32 @@ const Routed = compose(
   }),
 )(RowsView)
 
+const ShelfPage = Shelf.with(
+  compose(
+    Effect.fnUntraced(function* () {
+      const shelf = yield* Shelf
+      const catalog = yield* Catalog.ask()
+      const both = yield* Reactive.zip(catalog.value, shelf.select.items)
+
+      return {
+        status: catalog.status,
+        count: Reactive.map(both, ([items, kept]) => (items?.length ?? 0) + kept.length),
+      }
+    }),
+  )(OrdersView),
+)
+
+const RoutedShelf = compose(
+  Effect.fnUntraced(function* () {
+    return {
+      rows: yield* Router.outlet({
+        routes: [Router.on(Router.route("/shelf"), ShelfPage)],
+        otherwise: NotFoundView,
+      }),
+    }
+  }),
+)(RowsView)
+
 const queries = Layer.merge(Catalog.live, Price.live).pipe(
   Layer.provideMerge(Asked.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
@@ -146,6 +172,23 @@ describe("a page whose data comes from queries, drawn on the server", () => {
       expect(made.html).toContain('<output aria-label="Orders status">loaded</output>')
       expect(made.html).toContain('<output aria-label="Orders count">3</output>')
       expect(JSON.stringify(made.state.stores)).not.toContain('"status":"loading"')
+    }),
+  )
+
+  it.live("a store beside a routed page is sent once, however many times the page is drawn", () =>
+    Effect.gen(function* () {
+      const made = yield* Server.render(RoutedShelf, {
+        layer: Layer.mergeAll(
+          queries,
+          Router.Router.layerMemory("/shelf"),
+          SecureRandom.layerWebCrypto,
+        ),
+      })
+
+      expect(made.html).toContain('<output aria-label="Orders status">loaded</output>')
+      expect(
+        Object.keys(made.state.stores).filter((key) => key.startsWith("test/Shelf")),
+      ).toHaveLength(1)
     }),
   )
 
