@@ -29,20 +29,14 @@ export class Kept<A> implements Cell.Cell<A> {
   readonly name: string
   readonly schema: Schema.Codec<A, unknown>
   readonly inner: Cell.Cell<A>
-  readonly changed: (kept: Kept<A>) => void
+  readonly tree: Tree
 
-  constructor(
-    path: Path,
-    name: string,
-    schema: Schema.Codec<A, unknown>,
-    initial: A,
-    changed: (kept: Kept<A>) => void,
-  ) {
+  constructor(path: Path, name: string, schema: Schema.Codec<A, unknown>, initial: A, tree: Tree) {
     this.path = path
     this.name = name
     this.schema = schema
     this.inner = Cell.make(initial)
-    this.changed = changed
+    this.tree = tree
   }
 
   read(): A {
@@ -53,7 +47,11 @@ export class Kept<A> implements Cell.Cell<A> {
     if (Object.is(this.inner.read(), value)) return
 
     this.inner.write(value)
-    this.changed(this)
+    this.tree.tell("set", this)
+  }
+
+  writtenAs(name: string, value: A, trace: Trace): void {
+    this.tree.written(this, name, value, trace)
   }
 
   subscribe(listener: Cell.Listener<A>): Cell.Stop {
@@ -84,9 +82,19 @@ type AnyKept = {
   readonly path: Path
   readonly name: string
   readonly entry: () => Option.Option<Entry>
+  readonly encoded: () => Option.Option<Schema.Json>
   readonly accept: (value: Schema.Json) => boolean
 }
 
+export type Trace = { readonly traceId: string; readonly spanId: string }
+
+export type Written = Trace & {
+  readonly seq: number
+  readonly path: Path
+  readonly slot: string
+  readonly name: string
+  readonly value: Schema.Json
+}
 type Place = { readonly owner: object; readonly path: Path; readonly keys: Cell.Waiting<string> }
 
 export class Tree {
@@ -95,6 +103,68 @@ export class Tree {
   readonly kept = new Map<string, AnyKept>()
   readonly seeds = new Map<string, Schema.Json>()
   readonly listeners = new Set<(change: Change) => void>()
+  readonly initials = new Map<string, Schema.Json>()
+  readonly log = Cell.make<ReadonlyArray<Written>>([])
+  readonly viewing = Cell.make<number | null>(null)
+
+  written<A>(kept: Kept<A>, name: string, value: A, trace: Trace): void {
+    if (this.viewing.read() !== null) this.travelTo(null)
+
+    kept.write(value)
+    Option.map(kept.encoded(), (encoded) =>
+      this.log.write([
+        ...this.log.read(),
+        {
+          seq: this.log.read().length + 1,
+          path: kept.path,
+          slot: kept.name,
+          name,
+          value: encoded,
+          ...trace,
+        },
+      ]),
+    )
+  }
+
+  valueAt(key: string, seq: number): Schema.Json | undefined {
+    return (
+      this.log
+        .read()
+        .findLast((entry) => entryKey(entry.path, entry.slot) === key && entry.seq <= seq)?.value ??
+      this.initials.get(key)
+    )
+  }
+
+  shown(seq: number): void {
+    Array.from(this.kept).forEach(([key, kept]) =>
+      Option.map(Option.fromUndefinedOr(this.valueAt(key, seq)), (value) => kept.accept(value)),
+    )
+  }
+
+  root(): Place {
+    return this.enter(this, () => []).place
+  }
+
+  release(kept: AnyKept): void {
+    const key = entryKey(kept.path, kept.name)
+
+    this.kept.delete(key)
+    this.initials.delete(key)
+    this.tell("removed", kept)
+  }
+
+  travelTo(seq: number | null): void {
+    this.viewing.write(seq)
+    this.shown(seq ?? Number.POSITIVE_INFINITY)
+  }
+
+  fork(): void {
+    const at = this.viewing.read()
+    if (at === null) return
+
+    this.log.write(this.log.read().filter((entry) => entry.seq <= at))
+    this.travelTo(null)
+  }
 
   free(path: Path, nth: number): Path {
     const candidate = numbered(path, nth)
@@ -119,6 +189,7 @@ export class Tree {
       const kept = this.kept.get(key)
 
       this.kept.delete(key)
+      this.initials.delete(key)
       Option.map(Option.fromNullishOr(kept), (gone) => this.tell("removed", gone))
     })
     this.places.delete(place.owner)
@@ -134,13 +205,14 @@ export class Tree {
   hold<A>(place: Place, wanted: string, schema: Schema.Codec<A, unknown>, initial: A): Kept<A> {
     const name = this.unused(place.path, wanted, 1)
     const key = entryKey(place.path, name)
-    const kept = new Kept(place.path, name, schema, initial, (changed) => this.tell("set", changed))
+    const kept = new Kept(place.path, name, schema, initial, this)
     const seed = this.seeds.get(key)
 
     this.seeds.delete(key)
     this.kept.set(key, kept)
     Cell.defer(place.keys, key)
     Option.map(Option.fromUndefinedOr(seed), (value) => kept.accept(value))
+    Option.map(kept.encoded(), (value) => this.initials.set(key, value))
     this.tell("added", kept)
 
     return kept

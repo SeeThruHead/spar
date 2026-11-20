@@ -4,6 +4,7 @@ import { write } from "./internal/action.ts"
 import type { UiWrite } from "./internal/action.ts"
 import { Backing, backedBy } from "./internal/reactive.ts"
 import type { Backed } from "./internal/reactive.ts"
+import { writeTo } from "./State.ts"
 import * as Timeline from "./Timeline.ts"
 import * as Internal from "./internal/uiTree.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
@@ -48,10 +49,11 @@ const written = <A>(self: UiState<A>, next: () => A): Write => {
       const value = next()
       if (Object.is(kept.read(), value)) return Effect.void
 
-      kept.write(value)
-
-      return Timeline.note("ui", `${kept.path.join(" / ")} . ${kept.name}`, () =>
-        Option.getOrNull(kept.encoded()),
+      return Effect.andThen(
+        writeTo(kept, "set", value),
+        Timeline.note("ui", `${kept.path.join(" / ")} . ${kept.name}`, () =>
+          Option.getOrNull(kept.encoded()),
+        ),
       )
     }),
   )
