@@ -16,6 +16,7 @@ import {
   SessionStore,
   Shop,
   Ticker,
+  Tags,
   Toolbar,
   Unnamed,
   resetAfterDelay,
@@ -218,4 +219,16 @@ describe("a component composed from enhancers, its view last and inline", () => 
       "SPAR_COMPONENT_OUTSIDE_A_VIEW",
     )
   })
+
+  it.live("is outside any component again once a view and its list have finished drawing", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Toolbar)
+      yield* Testing.mount(Tags)
+      yield* Testing.findText("two")
+
+      expect(() => Dropdown({ label: "After", items: [], onPick: () => Effect.void })).toThrow(
+        "SPAR_COMPONENT_OUTSIDE_A_VIEW",
+      )
+    }).pipe(Effect.provide(withTree)),
+  )
 })
