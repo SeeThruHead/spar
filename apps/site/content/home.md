@@ -30,14 +30,24 @@ A component says which data it needs by asking a query. It never fetches. Querie
 same Effect start together, and one request runs for each input however many components ask.
 
 ```ts
-const report = yield * ReportQuery.ask(Reactive.map(params, (now) => now.report))
-const author =
-  yield *
-  AuthorQuery.ask(Reactive.map(report.value, (found) => Option.fromNullishOr(found?.authorId)))
+const ReportPage = View.taking(
+  { params: Props.Reactive(Params) },
+  Effect.fnUntraced(function* ({ params }) {
+    const profile = yield* ProfileQuery.ask(Reactive.map(params, (now) => now.user))
+    const orders = yield* OrdersQuery.ask(Reactive.map(params, (now) => now.user))
+    const suggestions = yield* SuggestionsQuery.ask(
+      Reactive.map(profile.value, (found) => Option.fromNullishOr(found?.taste)),
+    )
+
+    return { name: nameOf(profile), orders: countOf(orders), ideas: listOf(suggestions) }
+  }),
+)(ReportView)
 ```
 
-The second query waits for the first only because its input is made from the first one's value.
+The third query waits for the first only because its input is made from the first one's value.
 That dependency is written down, so the trace viewer can draw it and name what waited for what.
+
+[[demo:loads]]
 
 **What it removes.** Accidental request waterfalls, the same request made by every row of a list,
 and an old answer landing over a newer one: an answer carries the number of the request it answers

@@ -4,10 +4,10 @@ import { built } from "./content.ts"
 const root = new URL("..", import.meta.url).pathname
 
 const result = await Bun.build({
-  entrypoints: [`${root}src/main.ts`],
+  entrypoints: [`${root}src/entry.ts`, `${root}src/entry-devtools.ts`],
   outdir: `${root}dist`,
   target: "browser",
-  naming: "client.js",
+  naming: "[name].js",
   minify: true,
   plugins: [sparJsx],
 })

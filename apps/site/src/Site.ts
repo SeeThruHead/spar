@@ -1,6 +1,7 @@
 import { Effect, Option, Schema, pipe } from "effect"
 import { Markup, Props, Reactive, Router, UiState, View } from "spar"
 import type { Heading, Hit, Page } from "./api.ts"
+import { Loads } from "./Loads.ts"
 import { groups } from "./nav.ts"
 import { Refusals } from "./Refusals.ts"
 import { DocParams, PageQuery, SearchQuery, docRoute, home } from "./Shelves.ts"
@@ -15,7 +16,7 @@ import {
   SiteView,
 } from "./SiteView.tsx"
 
-const demo = "<p>[[demo:refusals]]</p>"
+const demo = /<p>\[\[demo:[a-z]+\]\]<\/p>/
 
 const partOf = (page: Page | null, index: number): Markup.Markup =>
   Markup.trusted((page?.html ?? "").split(demo)[index] ?? "")
@@ -91,7 +92,9 @@ const Home = View.connect(
 
     return {
       before: Reactive.map(page.value, (shown) => partOf(shown, 0)),
-      after: Reactive.map(page.value, (shown) => partOf(shown, 1)),
+      between: Reactive.map(page.value, (shown) => partOf(shown, 1)),
+      after: Reactive.map(page.value, (shown) => partOf(shown, 2)),
+      loads: yield* View.child(Loads, {}),
       refusals: yield* View.child(Refusals, {}),
       start: router.link(docRoute, { slug: "getting-started" }),
       principles: router.link(docRoute, { slug: "principles" }),

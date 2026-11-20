@@ -13,4 +13,6 @@ const program = Effect.gen(function* () {
   })
 })
 
-Effect.runFork(Effect.scoped(program))
+export const start = (): void => {
+  Effect.runFork(Effect.scoped(program))
+}

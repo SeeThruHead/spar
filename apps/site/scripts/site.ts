@@ -21,22 +21,42 @@ const open = [
   '<body><div id="root">',
 ].join("")
 
-const end = '<script type="module" src="/client.js"></script></body></html>'
+const endWith = (script: string): string =>
+  `<script type="module" src="/${script}"></script></body></html>`
 
-const page = (content: Content, url: string) =>
+const withTools = (request: Request): boolean =>
+  (request.headers.get("cookie") ?? "").includes("spar-devtools=on")
+
+const page = (content: Content, url: string, tools: boolean) =>
   Effect.map(
     Effect.context(),
     (context) =>
       new Response(
         Stream.toReadableStreamWith(
           Stream.encodeText(
-            Server.renderToStream(Site, { layer: layer(content, url), open, close: "</div>", end }),
+            Server.renderToStream(Site, {
+              layer: layer(content, url),
+              open,
+              close: "</div>",
+              end: endWith(tools ? "entry-devtools.js" : "entry.js"),
+            }),
           ),
           context,
         ),
         { headers: { "content-type": "text/html; charset=utf-8" } },
       ),
   )
+
+const toggled = (request: Request): Response =>
+  new Response(null, {
+    status: 303,
+    headers: {
+      location: new URL(request.headers.get("referer") ?? "/", request.url).pathname,
+      "set-cookie": `spar-devtools=${withTools(request) ? "off" : "on"}; Path=/; SameSite=Lax`,
+    },
+  })
+
+const scripts: ReadonlySet<string> = new Set(["/entry.js", "/entry-devtools.js"])
 
 const file = (path: string, type: string): Response =>
   new Response(Bun.file(path), { headers: { "content-type": type } })
@@ -58,12 +78,14 @@ export const start = async (port: number, hostname: string) => {
     hostname,
     fetch: (request) => {
       const path = new URL(request.url).pathname
-      if (path === "/client.js") return file(`${root}client.js`, "text/javascript; charset=utf-8")
+      if (scripts.has(path))
+        return file(`${root}${path.slice(1)}`, "text/javascript; charset=utf-8")
       if (path === "/site.css") return file(`${root}site.css`, "text/css; charset=utf-8")
       if (path === "/llms.txt") return file(guide, "text/plain; charset=utf-8")
+      if (path === "/devtools/toggle") return toggled(request)
       if (path === "/rpc" || path === "/rpc/") return rpc.handler(request)
 
-      return runtime.runPromise(page(content, path))
+      return runtime.runPromise(page(content, path, withTools(request)))
     },
   })
 }

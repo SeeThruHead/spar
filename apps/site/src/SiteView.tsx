@@ -99,12 +99,14 @@ export const HomeView = View.make(
   "HomeView",
   {
     before: Props.Reactive(Markup.Markup),
+    between: Props.Reactive(Markup.Markup),
     after: Props.Reactive(Markup.Markup),
+    loads: Props.Element,
     refusals: Props.Element,
     start: Router.Link,
     principles: Router.Link,
   },
-  ({ before, after, refusals, start, principles }) => (
+  ({ before, between, after, loads, refusals, start, principles }) => (
     <main class="home">
       <header class="lead">
         <h1>Spar</h1>
@@ -138,6 +140,8 @@ export const HomeView = View.make(
         </p>
       </header>
       <article class="prose" markup={before} />
+      {loads}
+      <article class="prose" markup={between} />
       {refusals}
       <article class="prose" markup={after} />
     </main>
@@ -193,6 +197,7 @@ export const SiteView = View.make(
           >
             Error codes
           </a>
+          <a href="/devtools/toggle">Devtools on or off</a>
         </nav>
         <search class="search">
           <label>
