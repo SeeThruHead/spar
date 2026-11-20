@@ -3,12 +3,63 @@
 Everything is imported from `spar` unless a line says otherwise. Each section names a file in this
 repo where the API is used and type-checked.
 
+## Compose
+
+A component is `compose(...enhancers)((props) => <jsx />)`: enhancers first, the view last and
+inline. Each enhancer is a function from the props so far to an Effect of what it adds; the view's
+props are inferred from them. Enhancers and the view run once, on mount.
+
+| Function                                                  | What it adds                                                                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `compose(...enhancers)(view)`                             | A component. Called without the view, a group of enhancers that is itself an enhancer.                       |
+| `withProps({ name: Schema })`                             | The props its parent passes in JSX, each with a Schema. A wrong prop in the parent's JSX is a compile error. |
+| `withStore(Store, (store) => props)`                      | Values and commands read from a store, or from any service with the same shape.                              |
+| `withUiState(name, Schema, initial)`                      | One piece of UI state, under `name`, kept in the UI tree and rewound with everything else.                   |
+| `withQuery(name, Query, (props) => input)`                | A query's handle under `name`, asked with an input made from the props.                                      |
+| `withHandlers((props) => handlers)`                       | Plain values or actions made from the props.                                                                 |
+| `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                               |
+| `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                      |
+| `withSpan(name, enhancer)`                                | Runs an enhancer inside a span with that name.                                                               |
+| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one.                                                          |
+| `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                  |
+
+A child component is written in JSX inside the view: `<Dropdown label="Sort by" onPick={pick} />`.
+It keeps its own UI state, and runs with the services of the component that draws it; what it
+needs is not part of its parent's type. The build names each component after the constant it is
+given to. A named view can stand at the end instead of an inline one:
+`compose(withHover)(CardView)`.
+
+```tsx
+export const withHover = compose(
+  withUiState("hovered", Schema.Boolean, false),
+  withHandlers((props) => ({
+    onEnter: UiState.set(props.hovered, true),
+    onLeave: UiState.set(props.hovered, false),
+  })),
+)
+
+export const Card = compose(
+  withProps({ title: Schema.String }),
+  withHover,
+)((props) => (
+  <article class={{ raised: props.hovered }} onPointerenter={props.onEnter}>
+    {props.title}
+  </article>
+))
+```
+
+(`packages/spar/test/composed.tsx`)
+
 ## View
+
+`View.connect` and `View.taking` are the older way to make a component: an Effect that returns an
+object of props, joined to a separately declared view. They still work while the apps in this repo
+move to `compose`; write new components with `compose`.
 
 | Function                               | What it does                                                                                                               |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                      |
-| `View.connect(props)(View)`            | Makes a component: `props` is `() => Effect<Props, E, R>`, run once on mount.                                              |
+| `View.connect(props)(View)`            | The older way to make a component: `props` is `() => Effect<Props, E, R>`, run once on mount.                              |
 | `View.taking(fields, props)(View)`     | The same for a component its parent gives props to: `fields` is their Schema, `props` is `(outer) => Effect<Props, E, R>`. |
 | `View.child(component, props)`         | Mounts a child from a parent's Effect and gives back its element.                                                          |
 | `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                         |

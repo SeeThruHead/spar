@@ -90,7 +90,7 @@ const expectations: ReadonlyArray<Expectation> = [
   },
   {
     file: "connected-component-in-jsx.tsx",
-    rule: "Using a connected component as a JSX tag (it would lose its errors and layers)",
+    rule: "Using a component that can still fail as a JSX tag (its error would be lost)",
     by: "types",
     expect: "cannot be used as a JSX component",
   },

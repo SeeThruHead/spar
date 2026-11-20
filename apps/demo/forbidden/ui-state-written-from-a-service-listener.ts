@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { App, Events, UiState } from "spar"
-import { Counter } from "../src/counter/Counter.ts"
+import { Counter } from "../src/counter/Counter.tsx"
 import { CounterStore } from "../src/counter/CounterStore.ts"
 
 class Shortcuts extends Context.Service<Shortcuts, { readonly listening: true }>()(

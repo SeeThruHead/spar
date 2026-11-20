@@ -58,75 +58,72 @@ export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/Counte
 
 (`apps/demo/src/counter/CounterStore.ts`)
 
-## A view
-
-A view is made with `View.make`: a name, a Schema for each prop, and a function from those props to
-JSX, in a `.tsx` file. It cannot reach a service. Reactive values go straight into the markup; each
-one updates the single text node or attribute it sits in. A plain function that returns JSX is
-rejected by the build, because its props would have no Schema.
-
-```tsx
-import { Schema } from "effect"
-import { Props, View } from "spar"
-
-export const CounterView = View.make(
-  "CounterView",
-  {
-    count: Props.Reactive(Schema.Finite),
-    doubled: Props.Reactive(Schema.Finite),
-    onIncrement: Props.Action,
-    onReset: Props.Action,
-  },
-  ({ count, doubled, onIncrement, onReset }) => (
-    <section aria-label="Counter">
-      <h2>Counter</h2>
-      <p>
-        Count <output aria-label="Count">{count}</output>, doubled{" "}
-        <output aria-label="Doubled">{doubled}</output>
-      </p>
-      <button onClick={onIncrement}>Add one</button>
-      <button onClick={onReset}>Reset</button>
-    </section>
-  ),
-)
-```
-
-`Props` has the Schemas for what is not plain data: `Props.Reactive(schema)`, `Props.State(schema)`,
-`Props.Action`, `Props.Handler("keydown")`, `Props.Callback(schema)`, `Props.Element` and
-`Props.Handle`, next to `Form.Field(schema)`, `Router.Link` and `Overlay.Placement`.
-
-(`apps/demo/src/counter/CounterView.tsx`)
-
 ## A component
 
-`View.connect` joins an Effect that makes the props to the view that shows them. The Effect runs
-once, when the component mounts. A component that takes props from its parent names them with a
-Schema too: `View.taking({ id: Schema.String }, ({ id }) => ...)(View)`.
+A component is one expression: the behaviours it has, then its markup. `compose` takes
+enhancers, each a small function that adds props: a store's values and commands, UI state, a
+query, a key press. The last call is the view, written inline; its props are inferred from the
+enhancers, with nothing declared twice.
 
-```ts
-import { Effect } from "effect"
-import { View } from "spar"
+```tsx
+import { compose, withStore } from "spar"
 import { CounterStore } from "./CounterStore.ts"
-import { CounterView } from "./CounterView.tsx"
 
-export const Counter = View.connect(
-  Effect.fnUntraced(function* () {
-    const store = yield* CounterStore
-
-    return {
-      count: store.select.count,
-      doubled: store.select.doubled,
-      onIncrement: store.commands.incremented({ by: 1 }),
-      onReset: store.commands.reset(),
-    }
-  }),
-)(CounterView)
+export const Counter = compose(
+  withStore(CounterStore, (store) => ({
+    count: store.select.count,
+    doubled: store.select.doubled,
+    onIncrement: store.commands.incremented({ by: 1 }),
+    onReset: store.commands.reset(),
+  })),
+)((props) => (
+  <section aria-label="Counter">
+    <h2>Counter</h2>
+    <p>
+      Count <output aria-label="Count">{props.count}</output>, doubled{" "}
+      <output aria-label="Doubled">{props.doubled}</output>
+    </p>
+    <button onClick={props.onIncrement}>Add one</button>
+    <button onClick={props.onReset}>Reset</button>
+  </section>
+))
 ```
 
-(`apps/demo/src/counter/Counter.ts`)
+(`apps/demo/src/counter/Counter.tsx`)
 
-`Counter` has the type `Component<unknown, never, CounterStore>`: it takes no props, cannot fail,
-and needs the counter store.
+The enhancers and the view run once, when the component mounts. A reactive value in the markup
+updates the one text node or attribute it sits in; nothing runs again. The component is named
+`Counter` in the devtools and the trace, taken from its constant by the build.
+
+A component that takes props from its parent names them with a Schema in `withProps`, and its
+parent writes it in JSX like any element:
+
+```tsx
+export const Dropdown = compose(
+  withProps({
+    label: Schema.String,
+    items: Schema.Array(Schema.String),
+    onPick: Props.Callback(Schema.String),
+  }),
+  withUiState("open", Schema.Boolean, false),
+)((props) => <div class="dropdown">...</div>)
+
+export const Toolbar = compose(withUiState("sort", Schema.String, "Newest"))((props) => (
+  <header>
+    <Dropdown
+      label="Sort by"
+      items={["Newest", "Oldest"]}
+      onPick={(item) => UiState.set(props.sort, item)}
+    />
+  </header>
+))
+```
+
+(`packages/spar/test/composed.tsx`, which also has a query, `For`, `Show` and your own enhancer)
+
+An enhancer is a plain function from the props so far to an Effect of what it adds, so your own is
+one line: `(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`.
+A group of enhancers is `compose(...)` without a view, and is used like any other.
 
 ## Mount it
 
@@ -147,8 +144,10 @@ Effect.runFork(program)
 ```
 
 A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
-it does not compile. `App.mount` only accepts a component with no errors
-left and a layer that provides everything the tree needs.
+it does not compile. `App.mount` only accepts a component with no errors left and a layer that
+provides everything it needs. What a child written in JSX needs is not in its parent's type,
+because TypeScript gives every JSX expression the same type: a missing service there shows when
+that child mounts.
 
 ## Test it
 
@@ -168,8 +167,6 @@ it.live("the counter counts", () =>
   }).pipe(Effect.provide(CounterStore.layer())),
 )
 ```
-
-Pure views are rendered with plain props: `Testing.render(CounterView, { ... })`.
 
 ## Where to go next
 

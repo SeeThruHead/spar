@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { App, UiState } from "spar"
-import { Counter } from "../src/counter/Counter.ts"
+import { Counter } from "../src/counter/Counter.tsx"
 import { CounterStore } from "../src/counter/CounterStore.ts"
 
 class Sidebar extends Context.Service<Sidebar, { readonly open: UiState.UiState<boolean> }>()(
