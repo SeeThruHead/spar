@@ -18,7 +18,15 @@ export const writeTo = <A>(
   payload?: Schema.Json,
 ): Effect.Effect<void> =>
   Effect.flatMap(tracedBy, (trace) =>
-    Effect.sync(() =>
-      kept.writtenAs(name, next, payload === undefined ? trace : { ...trace, payload }),
+    Effect.flatMap(
+      Effect.sync(() =>
+        kept.writtenAs(name, next, payload === undefined ? trace : { ...trace, payload }),
+      ),
+      (logged) =>
+        Effect.forEach(
+          Option.toArray(logged),
+          (seq) => Effect.annotateCurrentSpan("spar.entry", String(seq)),
+          { discard: true },
+        ),
     ),
   )
