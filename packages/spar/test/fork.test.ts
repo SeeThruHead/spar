@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Effect, Layer, Ref, Schema } from "effect"
+import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, Router, Store, UiState, compose } from "spar"
 import * as Devtools from "spar/devtools"
@@ -56,12 +56,20 @@ const shown = (): ReadonlyArray<string | null> => {
 const shows = (count: string, draft: string) =>
   Testing.eventually(() => expect(shown()).toEqual([count, draft]))
 
+const recorded = (count: number) =>
+  Effect.flatMap(Effect.service(Devtools.Registry), (registry) =>
+    Effect.flatMap(registry.branches.get, (all) =>
+      (all[0]?.moments ?? 0) >= count ? Effect.void : Effect.fail("still recording"),
+    ),
+  ).pipe(Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 400 }), Effect.orDie)
+
 const addThree = Effect.gen(function* () {
   yield* Testing.mount(Desk)
   yield* Testing.click("button", "Add")
   yield* Testing.click("button", "Add")
   yield* Testing.click("button", "Add")
   yield* shows("3", "")
+  yield* recorded(3)
 })
 
 const branches = Effect.flatMap(Effect.service(Devtools.Registry), (registry) =>
