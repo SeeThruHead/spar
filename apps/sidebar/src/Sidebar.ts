@@ -13,7 +13,7 @@ import {
 } from "spar"
 import type { Action } from "spar"
 import { Dialog, Menu, Select, Toast } from "@spar/ui"
-import { BoardStore } from "./BoardStore.ts"
+import { AgentStarts, BoardStore } from "./BoardStore.ts"
 import { Agent, AgentId, Section, SpaceId, needsYou, sectionsOf, tagsOf } from "./domain.ts"
 import { agentRoute } from "./routes.ts"
 import {
@@ -171,7 +171,7 @@ type FormProps = Schema.Struct<typeof formFields>["Type"]
 const StartForm = compose(
   withProps(formFields),
   Effect.fnUntraced(function* ({ onClose }: FormProps) {
-    const store = yield* BoardStore
+    const starts = yield* AgentStarts
     const toasts = yield* Toast.Toasts
     const form = yield* Form.make(Named, { name: "" })
 
@@ -185,7 +185,7 @@ const StartForm = compose(
       onSubmit: form.submitThen(
         ({ name }) =>
           Effect.andThen(
-            store.commands.started({ name: name.trim() }),
+            starts.start(name.trim()),
             toasts.show(`Started ${name.trim()}`, "success"),
           ),
         onClose,
