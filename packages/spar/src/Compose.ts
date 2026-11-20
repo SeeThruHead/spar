@@ -40,6 +40,8 @@ type Composed<Outer, Inner, Add, E, R> = {
   ): Component<Outer, E, Outside<R>, ViewProps>
   (view: (props: Inner) => Element, name?: string): Component<Outer, E, Outside<R>, Outer>
   (props: Outer): Effect.Effect<Add, E, R>
+  readonly fields: Fields
+  readonly services: ReadonlyArray<string>
 }
 
 type Props = Readonly<Record<string, unknown>>
@@ -342,13 +344,22 @@ export function compose<
   EA | EB | EC | ED | EF | EG | EH | EI | EJ | EK,
   RA | RB | RC | RD | RF | RG | RH | RI | RJ | RK
 >
-export function compose(...steps: ReadonlyArray<Step>): (given: unknown, name?: string) => unknown {
+export function compose(...steps: ReadonlyArray<Step>): ((
+  given: unknown,
+  name?: string,
+) => unknown) & {
+  readonly fields: Fields
+  readonly services: ReadonlyArray<string>
+} {
   const at = Diagnostics.locationIn(new Error("where this component was made").stack, 1)
 
-  return (given, name) =>
-    isView(given)
-      ? made(steps, given, name ?? viewName(given), at)
-      : applied(steps, isProps(given) ? given : {})
+  return Object.assign(
+    (given: unknown, name?: string) =>
+      isView(given)
+        ? made(steps, given, name ?? viewName(given), at)
+        : applied(steps, isProps(given) ? given : {}),
+    { fields: fieldsOf(steps), services: servicesOf(steps) },
+  )
 }
 
 export const withProps = <const F extends Fields>(

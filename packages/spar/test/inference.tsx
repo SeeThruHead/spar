@@ -7,6 +7,7 @@ import {
   withEffectProps,
   withHandlers,
   withKey,
+  withProps,
   withUiState,
 } from "spar"
 
@@ -28,6 +29,16 @@ export const Dialog = compose(
     <p>{props.first}</p>
   </section>
 ))
+
+const withGreeting = compose(
+  withProps({ name: Schema.String }),
+  withHandlers((props) => ({ greeting: `Hello ${props.name}` })),
+)
+
+export const Greeter = compose(
+  withGreeting,
+  withHandlers((props) => ({ loud: props.greeting.toUpperCase() })),
+)((props) => <p>{props.loud}</p>)
 
 export const Numbered = compose(
   withHandlers(() => ({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, Ref } from "effect"
-import { App, Reactive, Server, UiState } from "spar"
+import { App, Reactive, Server, UiState, View } from "spar"
 import * as Testing from "spar/testing"
 import {
   Account,
@@ -22,7 +22,7 @@ import {
   resetAfterDelay,
   withHover,
 } from "./composed.tsx"
-import { Dialog, Numbered, Ten } from "./inference.tsx"
+import { Dialog, Greeter, Numbered, Ten } from "./inference.tsx"
 
 const text = (label: string) => screen.getByLabelText(label).textContent
 
@@ -226,6 +226,10 @@ describe("a component composed from enhancers, its view last and inline", () => 
         yield* Testing.findText("ten")
         yield* Testing.mount(Numbered)
         yield* Testing.findText("2 second")
+        yield* Testing.mount(View.mapProps(() => ({ name: "Ada" }))(Greeter))
+        yield* Testing.findText("HELLO ADA")
+
+        expect(Object.keys(Greeter.view.props)).toEqual(["name"])
       }).pipe(Effect.provide(withTree)),
   )
 
