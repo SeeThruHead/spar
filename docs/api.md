@@ -603,6 +603,31 @@ one that reported last.
 `App.mount(component, { target, layer })` never returns; interrupting it unmounts everything.
 `App.CrashReporter` is the reference to replace to receive crashes.
 
+### Any renderer, chosen by a layer
+
+Where a component is drawn is a `Renderer` service. `target` is the short way of giving the page's
+own renderer, `Renderer.dom(target)`; leave `target` out and give a `Renderer` in `layer` instead.
+The component and its view do not change between them, and an update writes the same one node.
+
+| Renderer                                           | Where it draws                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `Renderer.dom(target)`                             | The page, into `target`, with overlays above it                                       |
+| `Renderer.into(target, overlays)`                  | Any document's element; `spar/renderer/memory`'s `page()` makes one outside a browser |
+| `Terminal.layer(print)` (`spar/renderer/terminal`) | A document of its own, printed as text through `print` after each change              |
+
+```ts
+App.mount(Counter, {
+  layer: Layer.merge(
+    CounterStore.layer,
+    Terminal.layer((frame) => Console.log(frame)),
+  ),
+})
+```
+
+(`apps/demo/scripts/terminal.ts`, which draws the demo's counter in a terminal, unchanged.) A page
+sent from a server is still drawn by `Server.render`, which reads each value once and writes the
+markers the browser needs to take it over.
+
 ## spar/testing
 
 `import * as Testing from "spar/testing"`: `render(view, props)`, `mount(component)`,
