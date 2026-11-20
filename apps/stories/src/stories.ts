@@ -1,5 +1,5 @@
 import { Effect, Schema, pipe } from "effect"
-import { Form, Reactive, Store, UiState, View } from "spar"
+import { Form, Reactive, Store, UiState, View, compose } from "spar"
 import { Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
   ControlsView,
@@ -32,7 +32,7 @@ class Saved extends Store.Tag<Saved>()("stories/Saved", {
   },
 }) {}
 
-const ControlsForm = View.connect(
+const ControlsForm = compose(
   Effect.fnUntraced(function* () {
     const store = yield* Saved
     const form = yield* Form.make(Profile, { name: "", plan: "team", news: false })
@@ -65,7 +65,7 @@ const ControlsForm = View.connect(
 
 export const Controls = Saved.with(ControlsForm)
 
-export const TabsStory = View.connect(
+export const TabsStory = compose(
   Effect.fnUntraced(function* () {
     return {
       tabs: yield* View.child(Tabs, {
@@ -84,7 +84,7 @@ export const TabsStory = View.connect(
   }),
 )(TabsStoryView)
 
-export const MenuStory = View.connect(
+export const MenuStory = compose(
   Effect.fnUntraced(function* () {
     const chosen = yield* UiState.make("chosen", Schema.String, "none")
 
@@ -103,7 +103,7 @@ export const MenuStory = View.connect(
   }),
 )(MenuStoryView)
 
-export const DialogStory = View.connect(
+export const DialogStory = compose(
   Effect.fnUntraced(function* () {
     const open = yield* UiState.make("open", Schema.Boolean, false)
 
@@ -126,7 +126,7 @@ export const DialogStory = View.connect(
   }),
 )(DialogStoryView)
 
-export const ToastStory = View.connect(
+export const ToastStory = compose(
   Effect.fnUntraced(function* () {
     const toasts = yield* Toast.Toasts
 
@@ -138,13 +138,13 @@ export const ToastStory = View.connect(
   }),
 )(ToastStoryView)
 
-export const TooltipStory = View.connect(
+export const TooltipStory = compose(
   Effect.fnUntraced(function* () {
     return { tip: yield* Tooltip.make("Removes the project for everyone on the team") }
   }),
 )(TooltipStoryView)
 
-export const PopoverStory = View.connect(
+export const PopoverStory = compose(
   Effect.fnUntraced(function* () {
     return {
       popover: yield* View.child(Popover, {
@@ -158,7 +158,7 @@ export const PopoverStory = View.connect(
   }),
 )(PopoverStoryView)
 
-export const ListboxStory = View.connect(
+export const ListboxStory = compose(
   Effect.fnUntraced(function* () {
     const size = yield* UiState.make("size", Schema.String, "m")
 

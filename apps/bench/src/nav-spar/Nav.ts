@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
-import { Props, Query, Reactive, Router, View } from "spar"
+import { Props, Query, Reactive, Router, compose, withProps } from "spar"
 import { lookup, target } from "../nav-shared/lookup.ts"
 import { HomeView, NothingView, ReportView, SegmentView, ShellView } from "./NavView.tsx"
 
@@ -66,8 +66,8 @@ const reportRoute = Router.route("/org/:org/team/:team/member/:member/reports/:r
 
 const labelOf = (found: Found | null): string => found?.label ?? ""
 
-const ReportPage = View.taking(
-  { params: Props.Reactive(Report) },
+const ReportPage = compose(
+  withProps({ params: Props.Reactive(Report) }),
   Effect.fnUntraced(function* ({ params }) {
     const report = yield* ReportQuery.ask(Reactive.map(params, (now) => now.report))
     const author = yield* AuthorQuery.ask(
@@ -81,8 +81,8 @@ const ReportPage = View.taking(
   }),
 )(ReportView)
 
-const Reports = View.taking(
-  { params: Props.Reactive(Member) },
+const Reports = compose(
+  withProps({ params: Props.Reactive(Member) }),
   Effect.fnUntraced(function* ({ params }) {
     const reports = yield* ReportsQuery.ask(Reactive.map(params, (now) => now.member))
 
@@ -97,8 +97,8 @@ const Reports = View.taking(
   }),
 )(SegmentView)
 
-const MemberSegment = View.taking(
-  { params: Props.Reactive(Member) },
+const MemberSegment = compose(
+  withProps({ params: Props.Reactive(Member) }),
   Effect.fnUntraced(function* ({ params }) {
     const member = yield* MemberQuery.ask(Reactive.map(params, (now) => now.member))
 
@@ -113,8 +113,8 @@ const MemberSegment = View.taking(
   }),
 )(SegmentView)
 
-const TeamSegment = View.taking(
-  { params: Props.Reactive(Team) },
+const TeamSegment = compose(
+  withProps({ params: Props.Reactive(Team) }),
   Effect.fnUntraced(function* ({ params }) {
     const team = yield* TeamQuery.ask(Reactive.map(params, (now) => now.team))
 
@@ -129,8 +129,8 @@ const TeamSegment = View.taking(
   }),
 )(SegmentView)
 
-const OrgSegment = View.taking(
-  { params: Props.Reactive(Org) },
+const OrgSegment = compose(
+  withProps({ params: Props.Reactive(Org) }),
   Effect.fnUntraced(function* ({ params }) {
     const org = yield* OrgQuery.ask(Reactive.map(params, (now) => now.org))
 
@@ -145,7 +145,7 @@ const OrgSegment = View.taking(
   }),
 )(SegmentView)
 
-const Home = View.connect(
+const Home = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
 
@@ -153,7 +153,7 @@ const Home = View.connect(
   }),
 )(HomeView)
 
-export const Shell = View.connect(
+export const Shell = compose(
   Effect.fnUntraced(function* () {
     return {
       page: yield* Router.outlet({

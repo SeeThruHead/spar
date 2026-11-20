@@ -1,10 +1,10 @@
 import { Effect, pipe } from "effect"
-import { Reactive, View } from "spar"
+import { Reactive, compose } from "spar"
 import type { Row } from "../shared/rows.ts"
 import { TableStore } from "./TableStore.ts"
 import { RowView, TableView } from "./TableView.tsx"
 
-export const Table = View.connect(
+export const Table = compose(
   Effect.fnUntraced(function* () {
     const store = yield* TableStore
     const rows = yield* pipe(

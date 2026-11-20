@@ -1,10 +1,10 @@
 import { Effect, pipe, Schema } from "effect"
-import { Props, Reactive, UiState, View } from "spar"
+import { Props, Reactive, UiState, compose, withProps } from "spar"
 import { Todo, TodoStore } from "./TodoStore.ts"
 import { TodoRowView, TodosView } from "./TodosView.tsx"
 
-const TodoRow = View.taking(
-  { todo: Props.Reactive(Todo) },
+const TodoRow = compose(
+  withProps({ todo: Props.Reactive(Todo) }),
   Effect.fnUntraced(function* ({ todo }) {
     const store = yield* TodoStore
     const target = Effect.map(todo.get, ({ id }) => ({ id }))
@@ -17,7 +17,7 @@ const TodoRow = View.taking(
   }),
 )(TodoRowView)
 
-export const Todos = View.connect(
+export const Todos = compose(
   Effect.fnUntraced(function* () {
     const store = yield* TodoStore
     const draft = yield* UiState.make("draft", Schema.String, "")

@@ -1,5 +1,5 @@
 import { Context, Effect, pipe, Schema } from "effect"
-import { Reactive, UiState, View } from "spar"
+import { Reactive, UiState, View, compose } from "spar"
 import { ShopStore } from "./ShopStore.ts"
 import type { Item } from "./ShopStore.ts"
 import { CountingView, ItemView, ShopView, StockView } from "./ShopView.tsx"
@@ -10,7 +10,7 @@ export class Stockroom extends Context.Service<
 >()("ssr/Stockroom") {}
 
 const Stock = pipe(
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const stockroom = yield* Stockroom
       const count = yield* stockroom.count
@@ -21,7 +21,7 @@ const Stock = pipe(
   View.pending(CountingView),
 )
 
-export const Shop = View.connect(
+export const Shop = compose(
   Effect.fnUntraced(function* () {
     const store = yield* ShopStore
     const basket = yield* UiState.make("basket", Schema.Finite, 0)

@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Outbox, Tabs, View } from "spar"
+import { Outbox, Tabs, View, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import { AppView } from "./AppView.tsx"
 import { Counter } from "./counter/Counter.tsx"
@@ -11,7 +11,7 @@ import { Mail } from "./mail/Thread.ts"
 import { Todos } from "./todos/Todos.ts"
 import { TodoStore } from "./todos/TodoStore.ts"
 
-export const Root = View.connect(
+export const Root = compose(
   Effect.fnUntraced(function* () {
     return {
       counter: yield* View.child(Counter, {}),

@@ -1,5 +1,5 @@
-import { Effect, flow, pipe, Schema } from "effect"
-import { Events, Outbox, Reactive, UiState, View } from "spar"
+import { Effect, pipe, Schema } from "effect"
+import { Events, Outbox, Reactive, UiState, View, compose, withProps } from "spar"
 import { MailApi, ThreadLoadFailed } from "../server/MailApi.ts"
 import { MailStore } from "./MailStore.ts"
 import type { Reply } from "./MailStore.ts"
@@ -60,13 +60,13 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
   }
 })
 
-export const Thread = flow(
-  View.taking({ id: Schema.String }, threadProps),
+export const Thread = pipe(
+  compose(withProps({ id: Schema.String }), threadProps)(ThreadView),
   View.recover(ThreadLoadFailed, ThreadErrorView),
   View.pending(ThreadSkeletonView),
-)(ThreadView)
+)
 
-export const Mail = View.connect(
+export const Mail = compose(
   Effect.fnUntraced(function* () {
     return {
       welcome: yield* View.child(Thread, { id: "welcome" }),

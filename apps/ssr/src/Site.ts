@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect"
-import { Props, Reactive, Router, View } from "spar"
+import { Props, Reactive, Router, compose, withProps } from "spar"
 import {
   ProductParams,
   ProductQuery,
@@ -11,8 +11,8 @@ import {
 import { Shop } from "./Shop.ts"
 import { MissingView, ProductView, SiteView } from "./SiteView.tsx"
 
-const ProductPage = View.taking(
-  { params: Props.Reactive(ProductParams) },
+const ProductPage = compose(
+  withProps({ params: Props.Reactive(ProductParams) }),
   Effect.fnUntraced(function* ({ params }) {
     const router = yield* Router.Router
     const product = yield* ProductQuery.ask(Reactive.map(params, (now) => now.id))
@@ -30,7 +30,7 @@ const ProductPage = View.taking(
   }),
 )(ProductView)
 
-export const Site = View.connect(
+export const Site = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
 

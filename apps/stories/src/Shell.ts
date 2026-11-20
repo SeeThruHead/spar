@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { Handle, Router, View } from "spar"
+import { Handle, Router, View, compose } from "spar"
 import { Toast } from "@spar/ui"
 import {
   Controls,
@@ -23,7 +23,7 @@ const tooltip = Router.route("/tooltip")
 const popover = Router.route("/popover")
 const listbox = Router.route("/listbox")
 
-export const Shell = View.connect(
+export const Shell = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
     const main = yield* Handle.make
