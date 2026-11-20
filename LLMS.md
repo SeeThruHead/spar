@@ -152,6 +152,8 @@ with async work. The short version:
 - There is no way to make a command wait for another to finish, on purpose.
 - When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
   `Store.after`, or a Query. With `Store.after` an older answer can land last.
+- When a second press must not start the work again (Pay, Save, Send), use `Store.afterLeading`:
+  the store refuses the repeat while the first run lasts, and says why.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
   next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
@@ -908,6 +910,7 @@ on screen until they mount. Give an app its own tree with
 | `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
 | `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                                         |
 | `Store.afterLatest(action, effect)`                                   | The same, keeping only the newest run: a new one stops the one before it. For a search, or anything where only the last answer matters. |
+| `Store.afterLeading(action, effect)`                                  | The same, keeping only the first run: while it runs, the store refuses that command again, with the reason. For Pay, Save, Send.        |
 | `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                                          |
 | `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                                              |
 
@@ -2328,7 +2331,7 @@ Reported by: The running app: an error's message, or an entry in the log.
 
 The same command, with the same payload, was sent again while the work the first one started was still running.
 
-Fix: If the second send is a mistake, such as a second press of Pay, give the action a guard that refuses it while the first is in progress (Store.action's third argument), or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
+Fix: If the second send is a mistake, such as a second press of Pay, declare the reaction with Store.afterLeading, which refuses the command while the first run lasts, or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
 
 Reported by: The running app: an error's message, or an entry in the log.
 

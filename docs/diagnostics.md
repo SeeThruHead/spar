@@ -108,7 +108,7 @@ Reported by: The running app: an error's message, or an entry in the log.
 
 The same command, with the same payload, was sent again while the work the first one started was still running.
 
-Fix: If the second send is a mistake, such as a second press of Pay, give the action a guard that refuses it while the first is in progress (Store.action's third argument), or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
+Fix: If the second send is a mistake, such as a second press of Pay, declare the reaction with Store.afterLeading, which refuses the command while the first run lasts, or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
 
 Reported by: The running app: an error's message, or an entry in the log.
 

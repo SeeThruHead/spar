@@ -70,6 +70,7 @@ export type Reaction<State, R = never> = {
   readonly detached?: (entry: Entry) => Effect.Effect<string>
   readonly queued?: boolean
   readonly latest?: boolean
+  readonly leading?: boolean
   readonly unwatched?: boolean
   readonly during?: string
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
@@ -449,6 +450,16 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         }>()
       })
 
+      const leadingRuns = Cell.make<ReadonlySet<object>>(new Set())
+      const stillLeading = (handled: Action<State, unknown>): boolean =>
+        reactionsTo(handled).some((reaction) => leadingRuns.read().has(reaction))
+      const leadingStarted = (reaction: object) =>
+        Effect.sync(() => leadingRuns.write(new Set([...leadingRuns.read(), reaction])))
+      const leadingEnded = (reaction: object) =>
+        Effect.sync(() =>
+          leadingRuns.write(new Set([...leadingRuns.read()].filter((held) => held !== reaction))),
+        )
+
       const record = Effect.fnUntraced(function* (
         name: string,
         handled: Action<State, unknown>,
@@ -467,6 +478,14 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           reactions.some((reaction) => reaction === sender),
         )
         if (unfit !== null) return yield* turnAway(name, payload, unfit, intent)
+        if (stillLeading(handled)) {
+          return yield* turnAway(
+            name,
+            payload,
+            `what the last ${name} started is still running`,
+            intent,
+          )
+        }
 
         const next = attempt(before.state)
         if (next instanceof Refused) return yield* turnAway(name, payload, next.reason, intent)
@@ -603,6 +622,12 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           return Effect.flatMap(reaction.detached(done.entry), (lane) => apart(running, lane))
         }
         if (reaction.queued === true) return Effect.forkIn(running, scope)
+        if (reaction.leading === true) {
+          return Effect.andThen(
+            leadingStarted(reaction),
+            Effect.forkIn(Effect.ensuring(running, leadingEnded(reaction)), scope),
+          )
+        }
 
         const tracked = Effect.forkIn(
           Effect.ensuring(
@@ -897,6 +922,11 @@ export const afterLatest = <State, Payload, R>(
   trigger: Action<State, Payload>,
   effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
 ): Reaction<State, R> => ({ ...after(trigger, effect), latest: true })
+
+export const afterLeading = <State, Payload, R>(
+  trigger: Action<State, Payload>,
+  effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
+): Reaction<State, R> => ({ ...after(trigger, effect), leading: true })
 
 export const during = <State, R>(
   phase: string,

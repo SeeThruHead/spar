@@ -152,6 +152,8 @@ with async work. The short version:
 - There is no way to make a command wait for another to finish, on purpose.
 - When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
   `Store.after`, or a Query. With `Store.after` an older answer can land last.
+- When a second press must not start the work again (Pay, Save, Send), use `Store.afterLeading`:
+  the store refuses the repeat while the first run lasts, and says why.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
   next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
