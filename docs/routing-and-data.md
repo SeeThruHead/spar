@@ -199,6 +199,13 @@ A request that waited for another query's value draws that wait as a line before
 when the other was asked for to when this one started. Data that was already there (after a
 preload, or going back) is a short `served` span that links to the trace that loaded it.
 
+Hovering a link and then clicking it follows one rule. Hovering starts the target page's
+queries in the hover's own trace. When the click asks for the same queries, nothing is asked
+again, whether the hover's requests have answered or are still on their way. The click's
+trace gets a `served` span for each one, saying "served from what trace … loaded" and linking
+to the hover's trace. So each request is recorded once, in the trace that started it, and the
+click's trace says where its data came from.
+
 When three or more requests each waited for the one before, or when a request had the same input
 as the one it waited for, the trace panel says so above the spans with the code
 `SPAR_QUERY_CHAIN`, names the requests in order with how long after the one before each started, and says which one

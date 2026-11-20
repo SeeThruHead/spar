@@ -139,7 +139,76 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   ]
 }
 
-const problems = await steps().catch((cause: unknown) => [String(cause)])
+const everyLookup = [...independent, "Agents.lookup author"]
+
+const waitForLookups = async (
+  before: ReadonlySet<string>,
+  left: number,
+): Promise<ReadonlyArray<Recorded>> => {
+  const fresh = (await lookups()).filter((span) => !before.has(span.traceId))
+  if (fresh.length > 0 || left === 0) return fresh
+  await Bun.sleep(25)
+
+  return waitForLookups(before, left - 1)
+}
+
+const hoveredFirst = async (): Promise<ReadonlyArray<string>> => {
+  const before = new Set((await lookups()).map((span) => span.traceId))
+  const fresh = await browser.newPage({ viewport: { width: 1440, height: 1500 } })
+
+  await fresh.goto(address)
+  await fresh.getByRole("button", { name: "Devtools" }).click()
+
+  const link = fresh.getByRole("link", { name: "Open a page five segments deep" })
+
+  await link.hover()
+
+  const preloaded = await waitForLookups(before, 200)
+  const preloadTrace = preloaded[0]?.traceId ?? "none"
+
+  await link.click()
+  await fresh.getByLabel("Author status").filter({ hasText: "loaded" }).waitFor({ timeout: 8000 })
+  await fresh
+    .getByLabel("Everything that happened")
+    .locator("ol li", { hasText: "route /org/" })
+    .last()
+    .getByRole("button", { name: /^Trace / })
+    .click()
+  await fresh.getByLabel("Spans").locator("li", { hasText: "served from" }).first().waitFor()
+
+  const clickSpans = await fresh.getByLabel("Spans").locator("li").allInnerTexts()
+  const seen = (await lookups()).filter((span) => !before.has(span.traceId))
+  const byPreload = seen.filter((span) => span.traceId === preloadTrace)
+  const servedFromPreload = clickSpans.filter((line) =>
+    line.includes(`served from what trace ${preloadTrace.slice(0, 8)} loaded`),
+  )
+  const askedTwice = everyLookup.filter(
+    (name) => seen.filter((span) => span.name === name).length > 1,
+  )
+  const missing = everyLookup.filter((name) => !seen.some((span) => span.name === name))
+
+  await fresh.screenshot({ path: `${root}artifacts/devtools-hovered.png` })
+  await fresh.close()
+
+  return [
+    ...(preloaded.length > 0 ? [] : ["hovering the link started no lookup"]),
+    ...(askedTwice.length === 0
+      ? []
+      : [`clicking after hovering asked again for: ${askedTwice.join(", ")}`]),
+    ...(missing.length === 0
+      ? []
+      : [`after hovering and clicking, never asked: ${missing.join(", ")}`]),
+    ...(servedFromPreload.length >= byPreload.length
+      ? []
+      : [
+          `the click's trace showed ${servedFromPreload.length} queries served from the hover's load, but the hover started ${byPreload.length}: ${clickSpans.join(" | ")}`,
+        ]),
+  ]
+}
+
+const problems = await steps()
+  .then(async (found) => [...found, ...(await hoveredFirst())])
+  .catch((cause: unknown) => [String(cause)])
 
 await browser.close()
 await server.close()
@@ -151,6 +220,6 @@ if (problems.length > 0) {
 }
 
 console.log(
-  "The page five segments deep: five lookups start together, the author's waits only for the report, all six are one trace, and going there again is served from that load and says so",
+  "The page five segments deep: five lookups start together, the author's waits only for the report, all six are one trace, and going there again is served from that load and says so; hovering first starts the lookups, the click asks for none again, and its trace says each was served from the hover's load",
 )
 process.exit(0)
