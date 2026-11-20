@@ -3,6 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Effect, Layer, Option, Ref, Schema } from "effect"
 import { Timeline, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
+import * as Dom from "../src/internal/dom.ts"
 import { DraftView } from "./typing.tsx"
 
 const Draft = compose(
@@ -21,6 +22,19 @@ const Draft = compose(
     }
   }),
 )(DraftView)
+
+const typedIn = (
+  tag: string,
+  attributes: ReadonlyArray<readonly [string, string]>,
+): HTMLElement => {
+  const node = document.createElement(tag)
+
+  attributes.forEach(([name, value]) => node.setAttribute(name, value))
+  document.body.append(node)
+  node.dispatchEvent(new Event("input", { bubbles: true }))
+
+  return node
+}
 
 const field = () => screen.getByRole<HTMLInputElement>("textbox", { name: "Draft" })
 
@@ -63,4 +77,18 @@ describe("a field the user is typing in", () => {
       expect((yield* notices).length).toBe(1)
     }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
   )
+
+  it("counts only text entry as typing: a select or a checkbox given a value is not reported", () => {
+    Dom.watchTyping(document)
+
+    expect(
+      [
+        typedIn("input", []),
+        typedIn("input", [["type", "search"]]),
+        typedIn("textarea", []),
+        typedIn("select", []),
+        typedIn("input", [["type", "checkbox"]]),
+      ].map((node) => Dom.typingReplaced(node, "value", "from elsewhere", 0)),
+    ).toEqual([true, true, true, false, false])
+  })
 })

@@ -527,6 +527,15 @@ export const watchTyping = (page: Document): void => {
   )
 }
 
+const typedIn = new Set(["text", "search", "email", "url", "tel", "password", "number", ""])
+
+const isTextEntry = (node: Host): boolean => {
+  if (node.localName === "textarea") return true
+  if (node.localName !== "input") return false
+
+  return typedIn.has(node.getAttribute("type") ?? "")
+}
+
 export const typingReplaced = (
   node: Host,
   name: string,
@@ -534,6 +543,7 @@ export const typingReplaced = (
   causedAt: number,
 ): boolean => {
   if (name !== "value" || Reflect.get(node, "value") === value) return false
+  if (!isTextEntry(node)) return false
 
   return (typedAt.get(node) ?? 0) > causedAt
 }
