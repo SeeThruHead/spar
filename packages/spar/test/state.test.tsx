@@ -91,7 +91,7 @@ describe("one state for everything", () => {
 
       const [written] = yield* state.log.get
 
-      expect([written?.path, written?.slot, written?.name, written?.value]).toEqual([
+      expect([written?.path, written?.slot, written?.name, written?.seq]).toEqual([
         ["LocalCounter"],
         "count",
         "set",
@@ -157,11 +157,7 @@ describe("one state for everything", () => {
 
       const [written] = yield* state.log.get
 
-      expect([written?.slot, written?.name, written?.value]).toEqual([
-        "app/Theme",
-        "chosen",
-        "dark",
-      ])
+      expect([written?.slot, written?.name, written?.seq]).toEqual(["app/Theme", "chosen", 1])
       expect(written?.traceId.length).toBe(32)
       expect(yield* theme.value.get).toBe("dark")
     }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(State.layer)))),
