@@ -1,17 +1,16 @@
 import { Schema } from "effect"
 import { Props, View } from "spar"
 
-export const RefusalsView = View.make(
-  "RefusalsView",
+export const StoreDemoView = View.make(
+  "StoreDemoView",
   {
     count: Props.Reactive(Schema.Finite),
     status: Props.Reactive(Schema.String),
-    refused: Props.Reactive(Schema.String),
     onIncrement: Props.Action,
     onReset: Props.Action,
   },
   (props) => (
-    <section class="demo" aria-label="Live example: a store that refuses">
+    <section class="demo" aria-label="Live example: a store and a reset">
       <p class="demo-label">Live example</p>
       <p class="demo-count">
         <output aria-label="Count">{props.count}</output>
@@ -27,11 +26,8 @@ export const RefusalsView = View.make(
           Reset after two seconds
         </button>
       </p>
-      <p>
-        <output aria-label="Last refusal">{props.refused}</output>
-      </p>
       <p class="hint">
-        Neither button is ever disabled. Press Reset, then Add 1: the store refuses it and says why.
+        Press Reset twice: the second press is ignored, because the reset is already running.
       </p>
     </section>
   ),

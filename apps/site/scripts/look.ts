@@ -89,14 +89,15 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await ready(page)
   await shot(page, size, "home")
 
-  const demo = page.getByRole("region", { name: "Live example: a store that refuses" })
+  const demo = page.getByRole("region", { name: "Live example: a store and a reset" })
 
   await demo.scrollIntoViewIfNeeded()
   await demo.getByRole("button", { name: "Add 1" }).click()
   await demo.getByRole("button", { name: "Reset after two seconds" }).click()
-  await demo.getByRole("button", { name: "Add 1" }).click()
-  await demo.getByLabel("Last refusal").getByText("was refused").waitFor({ timeout: 5000 })
-  await shot(page, size, "home-refused")
+  await demo.getByRole("button", { name: "Reset after two seconds" }).click()
+  await demo.getByLabel("Counter status").getByText("resetting").waitFor({ timeout: 5000 })
+  await shot(page, size, "home-resetting")
+  await demo.getByLabel("Counter status").getByText("counting").waitFor({ timeout: 5000 })
 
   const homeWide = await wide(page)
   const promo = page.locator("figure.promo video")

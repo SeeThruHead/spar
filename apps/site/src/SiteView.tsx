@@ -103,12 +103,12 @@ export const HomeView = View.make(
     between: Props.Reactive(Markup.Markup),
     after: Props.Reactive(Markup.Markup),
     loads: Props.Element,
-    refusals: Props.Element,
+    store: Props.Element,
     start: Router.Link,
     principles: Router.Link,
     onLink: Props.Handler("click"),
   },
-  ({ before, between, after, loads, refusals, start, principles, onLink }) => (
+  ({ before, between, after, loads, store, start, principles, onLink }) => (
     <main class="home">
       <header class="lead">
         <h1>Spar</h1>
@@ -154,7 +154,7 @@ export const HomeView = View.make(
       <article class="prose" markup={before} onClick={onLink} />
       {loads}
       <article class="prose" markup={between} onClick={onLink} />
-      {refusals}
+      {store}
       <article class="prose" markup={after} onClick={onLink} />
     </main>
   ),

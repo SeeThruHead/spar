@@ -465,10 +465,6 @@ a.spar-button {
   font-weight: 400;
 }
 
-.demo output[aria-label="Last refusal"] {
-  font-weight: 600;
-}
-
 .hint {
   color: var(--spar-muted);
   font-size: 0.875rem;
