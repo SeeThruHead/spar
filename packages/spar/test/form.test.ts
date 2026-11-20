@@ -272,4 +272,19 @@ describe("forms", () => {
       expect(yield* Testing.find("textbox", "Email")).toHaveProperty("value", "")
     }),
   )
+
+  it.live("a submit in the same breath as the last keystroke sends what was typed", () =>
+    Effect.gen(function* () {
+      const { accounts } = yield* started
+      const email = screen.getByRole<HTMLInputElement>("textbox", { name: "Email" })
+
+      yield* fillValid
+      yield* Effect.sync(() => {
+        fireEvent.input(email, { target: { value: "grace@example.com" } })
+        fireEvent.submit(screen.getByRole("form", { name: "Sign up" }))
+      })
+      yield* Effect.sleep("30 millis")
+      expect((yield* accounts).map((account) => account.email)).toEqual(["grace@example.com"])
+    }),
+  )
 })

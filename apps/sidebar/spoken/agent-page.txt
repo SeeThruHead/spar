@@ -31,7 +31,7 @@
           - /url: /agents/agent-6
         - button "Actions for Tidy the release notes": Actions
       - listitem:
-        - link "Trip planning idle":
+        - link "Trip planning idle travel":
           - /url: /agents/agent-4
         - button "Actions for Trip planning": Actions
   - region "Hangar":
@@ -68,7 +68,7 @@
   - term: Project
   - definition: No project
   - term: Tags
-  - definition: None
+  - definition: travel
   - paragraph: The server has no record of Trip planning yet.
   - region "Notes on this agent":
     - heading "Notes on this agent" [level=2]
