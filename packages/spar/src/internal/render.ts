@@ -383,7 +383,6 @@ const repeated = (keys: ReadonlyArray<string>): ReadonlyArray<string> => [
 type Placed<A> = { readonly entry: Entry<A>; readonly position: number }
 
 const wroteAt = <A>(entry: Entry<A> | undefined, item: A, key: (item: A) => string): boolean => {
-  if (Object.is(entry?.cell.read(), item)) return true
   if (entry?.key !== key(item)) return false
 
   entry.cell.write(item)
@@ -393,12 +392,13 @@ const wroteAt = <A>(entry: Entry<A> | undefined, item: A, key: (item: A) => stri
 
 const refreshedInPlace = <A>(
   previous: ReadonlyArray<Entry<A>>,
+  shown: ReadonlyArray<A>,
   next: ReadonlyArray<A>,
   key: (item: A) => string,
 ): boolean => {
   if (previous.length !== next.length) return false
 
-  return next.every((item, index) => wroteAt(previous[index], item, key))
+  return next.every((item, index) => item === shown[index] || wroteAt(previous[index], item, key))
 }
 
 const refreshed = <A>(existing: Placed<A>, item: A): Placed<A> => {
@@ -462,6 +462,7 @@ const fillRows = Effect.fnUntraced(function* <A>(
   existing: Dom.Cursor | undefined,
 ) {
   const entries = yield* Ref.make<ReadonlyArray<Entry<A>>>([])
+  const shown = Cell.make<ReadonlyArray<A>>([])
   const claiming = yield* Ref.make(existing)
   const placeEach = (
     wanted: ReadonlyArray<readonly [string, A]>,
@@ -486,7 +487,9 @@ const fillRows = Effect.fnUntraced(function* <A>(
     function* (next: ReadonlyArray<A>) {
       const previous = yield* Ref.get(entries)
 
-      if (refreshedInPlace(previous, next, rows.key)) return
+      if (refreshedInPlace(previous, shown.read(), next, rows.key)) return shown.write(next)
+
+      shown.write([])
 
       const nextKeys = next.map(rows.key)
       const keys = new Set(nextKeys)
@@ -510,6 +513,7 @@ const fillRows = Effect.fnUntraced(function* <A>(
 
       yield* Effect.sync(() => Dom.placeSpans(place.parent, current, staying, anchor))
       yield* Ref.set(entries, current)
+      shown.write(next)
     },
     Effect.provideService(Scheduler.PreventSchedulerYield, true),
   )

@@ -56,6 +56,36 @@ the same state. It is not silent either:
 - the store's `refused` is the last refusal since the store last accepted a command, as a
   reactive value a view can show.
 
+### Rules declared once
+
+A guard belongs to one action. A rule belongs to the store. `invariants` name what no state may
+be, and `transitions` name what no command may do, given the state before, the state after, the
+action's name and its payload. They are checked after every command, whoever sent it. A command
+that would break one is refused like any other refusal, and the reason names the rule:
+`it would break the rule NothingChangesDuringAReset`.
+
+```ts
+export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
+  state: State,
+  initialState,
+  actions: { incremented, resetClicked, resetCompleted },
+  selectors: { count, resetting },
+  invariants: {
+    CountIsNeverNegative: (state) => state.count >= 0,
+  },
+  transitions: {
+    NothingChangesDuringAReset: ({ before, after, action }) =>
+      before.phase !== "resetting" || action === "resetCompleted" || after === before,
+  },
+}) {}
+```
+
+With that one transition, no action of this counter needs a guard. Use a guard when the reason
+should be a sentence for the user, and a rule for what must hold whatever is added later. Rules
+are checked while the app runs; they are not proved.
+
+(`packages/spar/test/rules.test.ts`)
+
 ## Five mistakes Spar reports while the app runs
 
 None of these can be refused by the compiler, because each is ordinary code that is wrong only in

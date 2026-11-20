@@ -9,20 +9,20 @@ Change one row among 10,000 is the suite chosen for Spar's model, where one stor
 
 | Operation | spar | solid | solid2 | react | foldkit |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Create 1,000 rows | 29.1 ms | 19.8 ms | 29.8 ms | 25.0 ms | 34.8 ms |
-| Replace all 1,000 rows | 28.5 ms | 27.7 ms | 26.8 ms | 25.3 ms | 30.8 ms |
-| Update every 10th row of 1,000 | 6.7 ms | 14.5 ms | 13.3 ms | 11.1 ms | 7.2 ms |
-| Select a row among 1,000 | 3.9 ms | 11.1 ms | 10.4 ms | 6.6 ms | 6.1 ms |
-| Swap two rows of 1,000 | 6.8 ms | 13.0 ms | 11.5 ms | 24.1 ms | 7.1 ms |
-| Remove one row of 1,000 | 7.5 ms | 16.2 ms | 14.3 ms | 10.5 ms | 6.7 ms |
-| Create 10,000 rows | 267.7 ms | 222.7 ms | 220.9 ms | 393.4 ms | 302.3 ms |
-| Append 1,000 rows to 1,000 | 29.2 ms | 33.3 ms | 32.8 ms | 28.6 ms | 32.3 ms |
-| Clear 1,000 rows | 6.2 ms | 12.8 ms | 9.9 ms | 7.9 ms | 8.3 ms |
-| Change one row among 10,000, to the next frame | 32.6 ms | 38.9 ms | 33.1 ms | 38.5 ms | 33.6 ms |
-| Change one row among 10,000, until the DOM changed | 1.2 ms | 0.5 ms | 0.5 ms | 3.5 ms | 3.1 ms |
-| Heap after 1,000 rows | 4.6 MB | 3.3 MB | 3.7 MB | 4.3 MB | 5.9 MB |
+| Create 1,000 rows | 29.7 ms | 25.1 ms | 27.5 ms | 28.9 ms | 45.7 ms |
+| Replace all 1,000 rows | 32.9 ms | 25.8 ms | 27.5 ms | 29.0 ms | 38.2 ms |
+| Update every 10th row of 1,000 | 4.3 ms | 12.9 ms | 9.2 ms | 8.3 ms | 15.0 ms |
+| Select a row among 1,000 | 4.5 ms | 8.7 ms | 7.1 ms | 5.1 ms | 5.1 ms |
+| Swap two rows of 1,000 | 5.7 ms | 12.0 ms | 8.3 ms | 24.2 ms | 5.8 ms |
+| Remove one row of 1,000 | 18.5 ms | 11.2 ms | 14.1 ms | 6.5 ms | 5.7 ms |
+| Create 10,000 rows | 317.1 ms | 253.1 ms | 251.8 ms | 480.6 ms | 374.9 ms |
+| Append 1,000 rows to 1,000 | 35.9 ms | 34.1 ms | 33.1 ms | 33.7 ms | 48.1 ms |
+| Clear 1,000 rows | 5.9 ms | 9.1 ms | 6.9 ms | 5.5 ms | 11.2 ms |
+| Change one row among 10,000, to the next frame | 44.9 ms | 38.0 ms | 37.5 ms | 41.9 ms | 54.6 ms |
+| Change one row among 10,000, until the DOM changed | 0.9 ms | 0.5 ms | 0.5 ms | 4.2 ms | 5.6 ms |
+| Heap after 1,000 rows | 4.7 MB | 3.3 MB | 3.7 MB | 4.3 MB | 5.9 MB |
 | Heap after 10,000 rows | 16.6 MB | 14.3 MB | 15.5 MB | 18.5 MB | 26.7 MB |
 | Typical frame while scrolling 10,000 rows | 16.7 ms | 16.7 ms | 16.7 ms | 16.7 ms | 16.7 ms |
 | Slowest frame while scrolling 10,000 rows | 16.8 ms | 16.8 ms | 16.8 ms | 16.8 ms | 16.8 ms |
-| Startup, until the app is in the page | 9.3 ms | 3.1 ms | 4.5 ms | 7.0 ms | 12.1 ms |
-| JavaScript shipped (gzip) | 70.0 kB | 6.1 kB | 23.7 kB | 68.0 kB | 98.5 kB |
+| Startup, until the app is in the page | 12.9 ms | 3.7 ms | 4.9 ms | 7.5 ms | 16.5 ms |
+| JavaScript shipped (gzip) | 72.5 kB | 6.1 kB | 23.7 kB | 68.0 kB | 98.5 kB |

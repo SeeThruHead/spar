@@ -822,6 +822,7 @@ on screen until they mount. Give an app its own tree with
 | `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                                     |
 | `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                                   |
 | `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                        |
+| `invariants`, `transitions` (on the definition)                       | Named rules for the whole store: what no state may be, and what no command may do. A command that would break one is refused by name.   |
 | `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                                            |
 | `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                          |
 | `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
@@ -1268,6 +1269,36 @@ the same state. It is not silent either:
 - its span in the trace carries `spar.refused` with the reason;
 - the store's `refused` is the last refusal since the store last accepted a command, as a
   reactive value a view can show.
+
+#### Rules declared once
+
+A guard belongs to one action. A rule belongs to the store. `invariants` name what no state may
+be, and `transitions` name what no command may do, given the state before, the state after, the
+action's name and its payload. They are checked after every command, whoever sent it. A command
+that would break one is refused like any other refusal, and the reason names the rule:
+`it would break the rule NothingChangesDuringAReset`.
+
+```ts
+export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
+  state: State,
+  initialState,
+  actions: { incremented, resetClicked, resetCompleted },
+  selectors: { count, resetting },
+  invariants: {
+    CountIsNeverNegative: (state) => state.count >= 0,
+  },
+  transitions: {
+    NothingChangesDuringAReset: ({ before, after, action }) =>
+      before.phase !== "resetting" || action === "resetCompleted" || after === before,
+  },
+}) {}
+```
+
+With that one transition, no action of this counter needs a guard. Use a guard when the reason
+should be a sentence for the user, and a rule for what must hold whatever is added later. Rules
+are checked while the app runs; they are not proved.
+
+(`packages/spar/test/rules.test.ts`)
 
 ### Five mistakes Spar reports while the app runs
 
