@@ -1,7 +1,18 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, FiberHandle, Layer, Schedule, Schema, Scope } from "effect"
+import {
+  Context,
+  Effect,
+  Exit,
+  FiberHandle,
+  Layer,
+  PubSub,
+  Schedule,
+  Schema,
+  Scope,
+  Stream,
+} from "effect"
 import { KeyValueStore } from "effect/persistence"
-import { Reactive, UiState, compose, withUiState } from "spar"
+import { Reactive, Tabs, UiState, compose, withUiState } from "spar"
 import * as Testing from "spar/testing"
 import * as State from "../src/State.ts"
 
@@ -145,6 +156,44 @@ describe("one state for everything", () => {
       )
 
       expect(after).toBe(2)
+    }),
+  )
+
+  it.live("a saved slot follows what another tab saves", () =>
+    Effect.gen(function* () {
+      const storage = yield* Layer.build(KeyValueStore.layerMemory)
+      const told = yield* PubSub.unbounded<string>()
+      const shared: Tabs.Tabs = {
+        exclusively: (_name, effect) => effect,
+        stay: () => Effect.void,
+        here: () => Effect.succeed(true),
+        announce: (name) => Effect.asVoid(PubSub.publish(told, name)),
+        announced: (name) =>
+          Stream.fromPubSub(told).pipe(
+            Stream.filter((heard) => heard === name),
+            Stream.map(() => undefined),
+          ),
+      }
+      const tab = Counter.layer.pipe(
+        Layer.provide(State.saved),
+        Layer.provide(Layer.succeedContext(storage)),
+        Layer.provide(State.layer),
+        Layer.provide(Layer.succeed(Tabs.Tabs, shared)),
+      )
+      const here = yield* Layer.build(tab)
+      const there = yield* Layer.build(tab)
+
+      yield* Effect.flatMap(Counter, (counter) => counter.increment).pipe(
+        Effect.provideContext(there),
+      )
+
+      const count = yield* Effect.flatMap(Counter, (counter) => counter.count.get).pipe(
+        Effect.provideContext(here),
+        Effect.repeat({ until: (now) => now === 1, schedule: Schedule.spaced("5 millis") }),
+        Effect.timeout("1 second"),
+      )
+
+      expect(count).toBe(1)
     }),
   )
 

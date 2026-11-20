@@ -1,5 +1,6 @@
-import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
 import { KeyValueStore } from "effect/persistence"
+import * as Tabs from "./Tabs.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -84,6 +85,7 @@ const startingValue = <A, I>(
 
 const savedAfter = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
+  tabs: Tabs.Tabs,
   path: ReadonlyArray<string>,
   schema: Schema.Codec<A, I>,
   next: A,
@@ -91,13 +93,34 @@ const savedAfter = <A, I>(
   Option.match(saving, {
     onNone: () => Effect.void,
     onSome: (store) =>
-      Effect.orDie(
-        store.set(
-          storedKey(path),
-          Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(schema)))(next),
+      Effect.andThen(
+        Effect.orDie(
+          store.set(
+            storedKey(path),
+            Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(schema)))(next),
+          ),
         ),
+        tabs.announce(storedKey(path)),
       ),
   })
+
+const followOtherTabs = <A, I>(
+  saving: Option.Option<KeyValueStore.KeyValueStore>,
+  tabs: Tabs.Tabs,
+  path: ReadonlyArray<string>,
+  schema: Schema.Codec<A, I>,
+  kept: Kept<A>,
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.forEach(Option.toArray(saving), () =>
+    Effect.forkScoped(
+      Stream.runForEach(tabs.announced(storedKey(path)), () =>
+        Effect.flatMap(startingValue(saving, path, schema, kept.read()), (now) =>
+          writeTo(kept, "another tab", now),
+        ),
+      ),
+      { startImmediately: true },
+    ),
+  ).pipe(Effect.asVoid)
 
 const slotIn = (tree: Tree) =>
   Effect.fnUntraced(function* <A, I>(
@@ -106,13 +129,19 @@ const slotIn = (tree: Tree) =>
     initial: A,
   ): Effect.fn.Return<Slot<A>, never, Scope.Scope> {
     const saving = yield* Saving
+    const tabs = yield* Tabs.Tabs
     const start = yield* startingValue(saving, path, schema, initial)
     const kept = yield* Effect.acquireRelease(
       Effect.sync(() => tree.hold(tree.root(), path.join(" / "), schema, start)),
       (held) => Effect.sync(() => tree.release(held)),
     )
     const set = (name: string, next: A, payload?: Schema.Json) =>
-      Effect.andThen(writeTo(kept, name, next, payload), savedAfter(saving, path, schema, next))
+      Effect.andThen(
+        writeTo(kept, name, next, payload),
+        savedAfter(saving, tabs, path, schema, next),
+      )
+
+    yield* followOtherTabs(saving, tabs, path, schema, kept)
 
     return {
       value: fromCell(kept),

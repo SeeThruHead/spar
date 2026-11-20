@@ -1,4 +1,5 @@
-import { Context, Duration, Effect, Layer, Option, Schema, Scope, SubscriptionRef } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schema, Scope } from "effect"
+import * as Cell from "./internal/cell.ts"
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
@@ -6,7 +7,7 @@ import { placedHere } from "./internal/placed.ts"
 import { fragment, keyed, portal as portalTo } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
 import { Frame, OverlayLayer } from "./internal/frame.ts"
-import { fromSubscriptionRef, map } from "./internal/reactive.ts"
+import { fromCell, map } from "./internal/reactive.ts"
 import { Hydrating, OnServer } from "./internal/server.ts"
 import { RowKey, UiTree } from "./internal/uiTree.ts"
 import { drawn, recovering } from "./internal/inspect.ts"
@@ -206,21 +207,20 @@ export const pending =
         const settled = yield* waitsForContent
         if (settled) return yield* child(self, props)
 
-        const current = yield* SubscriptionRef.make<Shown>({
-          key: "pending",
-          element: placeholder(props),
-        })
+        const current = Cell.make<Shown>({ key: "pending", element: placeholder(props) })
 
         yield* Effect.forkScoped(
           child(self, props).pipe(
-            Effect.flatMap((element) => SubscriptionRef.set(current, { key: "ready", element })),
+            Effect.flatMap((element) =>
+              Effect.sync(() => current.write({ key: "ready", element })),
+            ),
             Effect.tapDefect(report),
           ),
         )
 
         return keyed({
           kind: "mounted",
-          items: map(fromSubscriptionRef(current), (shown) => [shown]),
+          items: map(fromCell(current), (shown) => [shown]),
           key: (shown: Shown) => shown.key,
           mount: (_key, shown) => Effect.map(shown.get, (now) => now.element),
         })

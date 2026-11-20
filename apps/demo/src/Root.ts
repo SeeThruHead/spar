@@ -22,11 +22,7 @@ export const Root = compose(
   }),
 )(AppView)
 
-export const layer = Layer.mergeAll(
-  CounterStore.layer,
-  TodoStore.layerDurable(),
-  MailStoreLive,
-).pipe(
+export const layer = Layer.mergeAll(CounterStore.layer, TodoStore.layerSaved, MailStoreLive).pipe(
   Layer.provideMerge(Layer.mergeAll(MailApi.layer, Outbox.Outbox.layer, Devtools.layer)),
   Layer.provide(Outbox.layerBrowser),
   Layer.provide(Tabs.layerBrowser),
