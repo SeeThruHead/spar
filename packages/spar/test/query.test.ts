@@ -83,6 +83,14 @@ class Stock extends Query.Tag<Stock>()("test/Stock", {
   load: () => Effect.flatMap(directory, (found) => found.stock),
 }) {}
 
+class LiveStock extends Query.Tag<LiveStock>()("test/LiveStock", {
+  input: Schema.Void,
+  success: Schema.Finite,
+  failure: Schema.String,
+  staleAfter: "0 millis",
+  load: () => Effect.flatMap(directory, (found) => found.stock),
+}) {}
+
 class Orders extends Query.Tag<Orders>()("test/Orders", {
   input: Schema.Int,
   success: Schema.Array(Schema.String),
@@ -856,13 +864,14 @@ describe("server data in a store", () => {
     () =>
       Effect.gen(function* () {
         const { built, whats, answer } = yield* opened
+        const live = yield* Layer.build(Layer.provide(LiveStock.live, Layer.succeedContext(built)))
         const asked = (count: number) =>
           Effect.repeat(whats, {
             until: (all) => all.length === count,
             schedule: Schedule.spaced("5 millis"),
           })
 
-        yield* Effect.provide(Stock.ask(), built)
+        yield* Effect.provide(LiveStock.ask(), live)
         yield* Effect.provide(Users.ask(), built)
         yield* asked(2)
         yield* answer("stock", 3)
@@ -900,18 +909,37 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("with no stale time it is stale as soon as time has passed", () =>
+  it.effect("by default an answer stays fresh for 500 ms: asks 100 ms apart share one call", () =>
     Effect.gen(function* () {
       const { built, whats, answer } = yield* opened
 
       yield* Effect.provide(Stock.ask(), built)
       yield* Effect.yieldNow
       yield* answer("stock", 3)
+      yield* TestClock.adjust("100 millis")
       yield* Effect.provide(Stock.ask(), built)
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock"])
-      yield* TestClock.adjust("1 milli")
+      yield* TestClock.adjust("500 millis")
       yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+    }),
+  )
+
+  it.effect("with a stale time of 0 it is stale as soon as time has passed", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const live = yield* Layer.build(Layer.provide(LiveStock.live, Layer.succeedContext(built)))
+
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      yield* answer("stock", 3)
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock"])
+      yield* TestClock.adjust("1 milli")
+      yield* Effect.provide(LiveStock.ask(), live)
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
     }),

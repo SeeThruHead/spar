@@ -233,7 +233,8 @@ pass finds nothing still loading. That covers queries inside a routed page or a 
 start once the page is drawn, and dependent ones. The queries' stores travel with the page like
 any store's, so in the browser the first `ask` finds its data and makes no request. Data the
 server or a link preload loaded is used once by the first `ask` that wants it, whatever the
-query's `staleAfter`; asks after that follow `staleAfter`, which is 0 unless set.
+query's `staleAfter`; asks after that follow `staleAfter`, which is 500 ms unless set (give
+`"0 millis"` to ask again every time).
 
 The server boundary is one Effect RPC group and one service with two layers. On the server the
 layer reads the database; in the browser it calls the group over `Backend.rpc`. The query's

@@ -482,7 +482,8 @@ pass finds nothing still loading. That covers queries inside a routed page or a 
 start once the page is drawn, and dependent ones. The queries' stores travel with the page like
 any store's, so in the browser the first `ask` finds its data and makes no request. Data the
 server or a link preload loaded is used once by the first `ask` that wants it, whatever the
-query's `staleAfter`; asks after that follow `staleAfter`, which is 0 unless set.
+query's `staleAfter`; asks after that follow `staleAfter`, which is 500 ms unless set (give
+`"0 millis"` to ask again every time).
 
 The server boundary is one Effect RPC group and one service with two layers. On the server the
 layer reads the database; in the browser it calls the group over `Backend.rpc`. The query's
@@ -1256,7 +1257,7 @@ in the log, the devtools and the traces like any other.
 
 | Function                                                                       | What it does                                                                                                                                                                                                                                                            |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh, and a schedule to try again on before it counts as failed.                                                                                    |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed.                            |
 | `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                                                 |
 | `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                                               |
 | `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                                           |
@@ -2346,18 +2347,19 @@ made. What Spar's reports still lack next to Solid's: a location for anything fi
 
 Read from the README of Solid Router's main branch, whose 1.0 line targets Solid 2.
 
-|                                         | Solid Router 1.0                                                                                  | Spar                                                                                                                                       |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Where a route's data is                 | A `query` function, read with a memo in the component, and started early by the route's `preload` | `ask` in the component; nothing is declared on the route                                                                                   |
-| Preload on intent                       | Opt-in for the router: after the pointer rests on a link for 20 ms, or on focus or touch          | Opt-in for each link: `onIntent` on the anchor                                                                                             |
-| What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask`                                                |
-| How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | Data a preload or the server loaded is used once by the first real read, whatever `staleAfter` is; after that, `staleAfter` (0 unless set) |
-| Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                                                                            |
-| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request                                                              |
+|                                         | Solid Router 1.0                                                                                  | Spar                                                                                                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where a route's data is                 | A `query` function, read with a memo in the component, and started early by the route's `preload` | `ask` in the component; nothing is declared on the route                                                                                        |
+| Preload on intent                       | Opt-in for the router: after the pointer rests on a link for 20 ms, or on focus or touch          | Opt-in for each link: `onIntent` on the anchor                                                                                                  |
+| What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask`                                                     |
+| How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | Data a preload or the server loaded is used once by the first real read, whatever `staleAfter` is; after that, `staleAfter` (500 ms unless set) |
+| Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                                                                                 |
+| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request                                                                   |
 
 Two things Solid Router does that bear on Spar's list of open cases. Preloaded data is fresh for
-a few seconds by itself, which is the behaviour the default stale time of 0 lacks. And a
-mutation's answer brings the refreshed data with it, where Spar asks again.
+a few seconds by itself; Spar uses data loaded ahead once whatever the stale time, and keeps any
+answer fresh for 500 ms by default. And a mutation's answer brings the refreshed data with it,
+where Spar asks again.
 
 
 # Spar beside Treflex
@@ -3931,6 +3933,14 @@ class Stock extends Query.Tag<Stock>()("test/Stock", {
   load: () => Effect.flatMap(directory, (found) => found.stock),
 }) {}
 
+class LiveStock extends Query.Tag<LiveStock>()("test/LiveStock", {
+  input: Schema.Void,
+  success: Schema.Finite,
+  failure: Schema.String,
+  staleAfter: "0 millis",
+  load: () => Effect.flatMap(directory, (found) => found.stock),
+}) {}
+
 class Orders extends Query.Tag<Orders>()("test/Orders", {
   input: Schema.Int,
   success: Schema.Array(Schema.String),
@@ -4704,13 +4714,14 @@ describe("server data in a store", () => {
     () =>
       Effect.gen(function* () {
         const { built, whats, answer } = yield* opened
+        const live = yield* Layer.build(Layer.provide(LiveStock.live, Layer.succeedContext(built)))
         const asked = (count: number) =>
           Effect.repeat(whats, {
             until: (all) => all.length === count,
             schedule: Schedule.spaced("5 millis"),
           })
 
-        yield* Effect.provide(Stock.ask(), built)
+        yield* Effect.provide(LiveStock.ask(), live)
         yield* Effect.provide(Users.ask(), built)
         yield* asked(2)
         yield* answer("stock", 3)
@@ -4748,18 +4759,37 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("with no stale time it is stale as soon as time has passed", () =>
+  it.effect("by default an answer stays fresh for 500 ms: asks 100 ms apart share one call", () =>
     Effect.gen(function* () {
       const { built, whats, answer } = yield* opened
 
       yield* Effect.provide(Stock.ask(), built)
       yield* Effect.yieldNow
       yield* answer("stock", 3)
+      yield* TestClock.adjust("100 millis")
       yield* Effect.provide(Stock.ask(), built)
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock"])
-      yield* TestClock.adjust("1 milli")
+      yield* TestClock.adjust("500 millis")
       yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+    }),
+  )
+
+  it.effect("with a stale time of 0 it is stale as soon as time has passed", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const live = yield* Layer.build(Layer.provide(LiveStock.live, Layer.succeedContext(built)))
+
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      yield* answer("stock", 3)
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock"])
+      yield* TestClock.adjust("1 milli")
+      yield* Effect.provide(LiveStock.ask(), live)
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
     }),

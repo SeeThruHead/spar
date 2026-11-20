@@ -102,6 +102,7 @@ class Note extends Query.Tag<Note>()("test/Note", {
   input: Schema.Void,
   success: Schema.String,
   failure: Schema.Never,
+  staleAfter: "0 millis",
   load: () => answering("note", "kept"),
 }) {}
 
@@ -208,7 +209,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
   )
 
   it.live(
-    "data a query with no stale time sent with the page is used once, then asked for again",
+    "data a query with a stale time of 0 sent with the page is used once, then asked for again",
     () =>
       Effect.gen(function* () {
         const noted = Note.live.pipe(Layer.provideMerge(Asked.layer))

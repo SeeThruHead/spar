@@ -78,6 +78,8 @@ const stands = <A, E>(
   onServer: boolean,
 ): boolean => onServer || isFresh(entry, now, staleAfter)
 
+export const defaultStaleAfter: Duration.Input = "500 millis"
+
 const withAhead = (keys: ReadonlyArray<string>): { readonly ahead?: ReadonlyArray<string> } =>
   keys.length === 0 ? {} : { ahead: [...new Set(keys)] }
 
@@ -196,7 +198,9 @@ export const Tag =
   ) => {
     const dropAfter = Duration.fromInputUnsafe(options.dropAfter ?? "5 minutes")
     const keepAtMost = options.keepAtMost ?? 100
-    const staleAfter = Duration.toMillis(Duration.fromInputUnsafe(options.staleAfter ?? 0))
+    const staleAfter = Duration.toMillis(
+      Duration.fromInputUnsafe(options.staleAfter ?? defaultStaleAfter),
+    )
     const inputJson = Schema.toCodecJson(options.input)
     const entry: Schema.Codec<Entry<A, E>, unknown> = Schema.Struct({
       status: Schema.Literals(["loading", "loaded", "failed"]),
