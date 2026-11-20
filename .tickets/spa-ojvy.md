@@ -23,3 +23,7 @@ Startup (13.6 ms vs Solid 4.9 on the CI box): a CPU profile of page load shows n
 **2026-11-20T09:48:41Z**
 
 Checked 'Select a row' (CI table: Spar 10.2 ms, React 3.5, to the next frame): to the DOM change Spar takes 0.10 ms and React 0.30 (20 clicks, median, profiled), and the earlier STHDEV table had Spar 4.5 vs React 5.1. The to-the-frame number is dominated by frame alignment; no Spar change needed.
+
+**2026-11-20T11:00:44Z**
+
+Decided not to strip diagnostic text from production builds: Diagnostics.ts is 10.7 kB before gzip, and those texts are the messages agents read in production logs; trimming them works against the point. The remaining bundle work is structural (Effect's floor, Stream under Reactive.changes).
