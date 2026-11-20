@@ -12,7 +12,7 @@ import { RowKey, UiTree } from "./internal/uiTree.ts"
 import { drawn, recovering } from "./internal/inspect.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Fields } from "./Props.ts"
-import * as Diagnostics from "./Diagnostics.ts"
+import * as Diagnostics from "./internal/said.ts"
 import * as Timeline from "./Timeline.ts"
 
 export type View<Props> = (props: Props) => Element

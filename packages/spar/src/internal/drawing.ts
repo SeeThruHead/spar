@@ -1,5 +1,5 @@
 import { Context, Effect, Option } from "effect"
-import * as Diagnostics from "../Diagnostics.ts"
+import * as Diagnostics from "./said.ts"
 import * as Cell from "./cell.ts"
 
 const current = Cell.make<Option.Option<Context.Context<never>>>(Option.none())

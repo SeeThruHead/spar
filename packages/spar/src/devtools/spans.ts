@@ -1,6 +1,6 @@
 import { Array, Context, Effect, Layer, Schema, Tracer } from "effect"
 import * as Cell from "../internal/cell.ts"
-import * as Diagnostics from "../Diagnostics.ts"
+import * as Diagnostics from "../internal/said.ts"
 
 export const Recorded = Schema.Struct({
   name: Schema.String,

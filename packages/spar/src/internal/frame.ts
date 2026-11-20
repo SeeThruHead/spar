@@ -1,5 +1,5 @@
 import { Context } from "effect"
-import * as Diagnostics from "../Diagnostics.ts"
+import * as Diagnostics from "./said.ts"
 
 export class Frame extends Context.Service<
   Frame,

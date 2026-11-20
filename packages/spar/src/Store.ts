@@ -56,7 +56,7 @@ import { Outbox } from "./Outbox.ts"
 import { within } from "./View.ts"
 import type { Mountable } from "./View.ts"
 import * as Timeline from "./Timeline.ts"
-import * as Diagnostics from "./Diagnostics.ts"
+import * as Diagnostics from "./internal/said.ts"
 
 export { Entries, LogText, Refused, Seed, UnknownAction, Unreadable, replay }
 export type { Action, Definition, Durable, Entry, Selector }

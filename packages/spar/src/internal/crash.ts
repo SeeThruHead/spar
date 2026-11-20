@@ -1,5 +1,5 @@
 import { Context, Effect, Option } from "effect"
-import * as Diagnostics from "../Diagnostics.ts"
+import * as Diagnostics from "./said.ts"
 import { ViewScope, pathOf } from "./viewScope.ts"
 
 export type Where = { readonly in: ReadonlyArray<string>; readonly at: string }

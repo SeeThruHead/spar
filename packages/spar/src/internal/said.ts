@@ -1,0 +1,141 @@
+export type Kind = "build" | "run" | "refusal" | "types" | "tools"
+
+export type Diagnostic = {
+  readonly kind: Kind
+  readonly what: string
+  readonly fix: string
+}
+
+export const atRun = {
+  SPAR_COMPONENT_WAITED: {
+    kind: "run",
+    what: "A component took a frame or more before its children could mount, so their queries started late.",
+    fix: "Find what its Effect waits for, usually a service call that loads data, and move it to a Query the component asks for.",
+  },
+  SPAR_QUERY_CHAIN: {
+    kind: "run",
+    what: "Requests ran one after another: each could start only when the one before had answered.",
+    fix: "If a later request does not need the earlier answer, make its input from something that is there already (a route param, a prop, a store), so they start together. If it does need it, have the backend answer both in one call, or preload the page.",
+  },
+  SPAR_PART_CRASHED: {
+    kind: "run",
+    what: "A part of the page crashed.",
+    fix: "Read the defect that follows. If the part is wrapped in View.crash the rest of the page kept working; fix the cause in the component the report names.",
+  },
+  SPAR_NEEDLESS_WAIT: {
+    kind: "run",
+    what: "A query that takes no input waits for another query's value before it starts.",
+    fix: "Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.",
+  },
+  SPAR_SENT_AGAIN: {
+    kind: "run",
+    what: "The same command, with the same payload, was sent again while the work the first one started was still running.",
+    fix: "If the second send is a mistake, such as a second press of Pay, declare the reaction with Store.afterLeading, which refuses the command while the first run lasts, or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.",
+  },
+  SPAR_OLDER_ANSWER: {
+    kind: "run",
+    what: "What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.",
+    fix: "If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.",
+  },
+  SPAR_DUPLICATE_CALL: {
+    kind: "run",
+    what: "The same request was made again while an identical one was still on its way.",
+    fix: "Load it once with a Query and let each component that needs it ask for it (yield* TheQuery.ask(input)): one request runs for each input and everyone shares the answer. Do not fetch in a component and pass the data down, and do not fetch the same thing once in each row.",
+  },
+  SPAR_TYPING_REPLACED: {
+    kind: "run",
+    what: "A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.",
+    fix: "A text input's value can only be UI state or a form field (anything else is a type error), so this comes from writing that UI state from something slow. Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.",
+  },
+  SPAR_DUPLICATE_KEY: {
+    kind: "run",
+    what: "A keyed list has rows that share a key.",
+    fix: "Give each row its own key in Reactive.mapBy, for example the row's id and not its index or label.",
+  },
+  SPAR_UNKNOWN_ACTION: {
+    kind: "run",
+    what: "The log holds an action this store does not define.",
+    fix: "Load the log into the version of the store that wrote it, or add the action back.",
+  },
+  SPAR_UNREADABLE_SAVE: {
+    kind: "run",
+    what: "What was saved for a store on this device could not be read.",
+    fix: "Clear the saved data, or read it with the version that wrote it. If the state's Schema changed, give the store's durable options a new version.",
+  },
+  SPAR_ABANDONED_ACTION: {
+    kind: "run",
+    what: "An earlier tab asked a store for an action and closed before it was done, and this version cannot carry it out, so it was dropped.",
+    fix: "Nothing to do for the dropped action. To keep such actions across versions, keep the action's name and payload Schema readable by the new version.",
+  },
+  SPAR_COMPONENT_OUTSIDE_A_VIEW: {
+    kind: "run",
+    what: "A component was written in JSX that is not drawn by a component, so it has no services to run with.",
+    fix: "Put the component's JSX in the inline view at the end of a compose(...)(...), or in a For or Show inside one.",
+  },
+  SPAR_NO_PAGE_ON_SERVER: {
+    kind: "run",
+    what: "There is no page on a server.",
+    fix: "Do not measure, focus or scroll while rendering on the server. Do it in a handler or after the browser has taken over.",
+  },
+  SPAR_NOT_ON_SCREEN: {
+    kind: "run",
+    what: "A test expected something and the screen never showed it.",
+    fix: "Check the role and name asked for against what the view draws, and that the data it needs was provided in the test's layer.",
+  },
+  SPAR_ALREADY_LOADING: {
+    kind: "refusal",
+    what: "It is already loading",
+    fix: "Nothing: one request runs for each input at a time, and the second was not needed.",
+  },
+  SPAR_LATE_ANSWER: {
+    kind: "refusal",
+    what: "This answers an earlier request",
+    fix: "Nothing: a newer request was made for the same input, and its answer is the one kept.",
+  },
+  SPAR_IN_USE_AGAIN: {
+    kind: "refusal",
+    what: "It is in use again",
+    fix: "Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.",
+  },
+} as const satisfies Readonly<Record<string, Diagnostic>>
+
+export type RunCode = keyof typeof atRun
+
+const frame = /\(?([^()\s@]+):(\d+):(\d+)\)?$/
+
+const withoutOrigin = (address: string): string =>
+  address.replace(/^[a-z]+:\/\/[^/]*/, "").replace(/\?[^:]*/, "")
+
+export const locationIn = (stack: string | undefined, skip: number): string =>
+  (stack ?? "")
+    .split("\n")
+    .flatMap((line) => {
+      const parts = frame.exec(line.trim())
+
+      return parts === null ? [] : [withoutOrigin(parts.slice(1).join(":"))]
+    })
+    .at(skip) ?? ""
+
+export const guide = (code: string): string => `LLMS.md, section "${code}"`
+
+export type Where = {
+  readonly said?: string
+  readonly in?: ReadonlyArray<string>
+  readonly at?: string
+}
+
+export const described = (code: string, found: Diagnostic, options: Where): string =>
+  [
+    `[${code}] ${options.said ?? found.what}`,
+    ...(options.in === undefined || options.in.length === 0
+      ? []
+      : [`  in ${options.in.join(" > ")}`]),
+    ...(options.at === undefined || options.at === "" ? [] : [`  at ${options.at}`]),
+    `  fix: ${found.fix}`,
+    `  see: ${guide(code)}`,
+  ].join("\n")
+
+export const brief = (code: RunCode): string => `[${code}] ${atRun[code].what}`
+
+export const text = (code: RunCode, options: Where = {}): string =>
+  described(code, atRun[code], options)

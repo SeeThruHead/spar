@@ -27,7 +27,7 @@ import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 import { changedOne } from "./rows.ts"
-import * as Diagnostics from "../Diagnostics.ts"
+import * as Diagnostics from "./said.ts"
 import * as Markup from "../Markup.ts"
 
 export class DuplicateKey extends Schema.TaggedError<

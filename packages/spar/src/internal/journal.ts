@@ -3,7 +3,7 @@ import type { Cause, Scope } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import { Tabs } from "../Tabs.ts"
-import * as Diagnostics from "../Diagnostics.ts"
+import * as Diagnostics from "./said.ts"
 
 export const StoredEntry = Schema.Struct({
   id: Schema.String,

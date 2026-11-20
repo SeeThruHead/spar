@@ -3,7 +3,7 @@ import { Effect, Layer, Option, Schema, pipe } from "effect"
 import type { Scope } from "effect"
 import * as App from "./App.ts"
 import * as View from "./View.ts"
-import * as Diagnostics from "./Diagnostics.ts"
+import * as Diagnostics from "./internal/said.ts"
 
 export class NotOnScreen extends Schema.TaggedError<
   NotOnScreen,
