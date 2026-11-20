@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import { Reactive, Store, View } from "spar"
+import { Reactive, Store, compose, withStore } from "spar"
 import { RefusalsView } from "./RefusalsView.tsx"
 
 const State = Schema.Struct({
@@ -51,20 +51,16 @@ const told = (refused: Option.Option<Store.Refusal>): string =>
     onSome: (refusal) => `${refusal.action} was refused: ${refusal.reason}`,
   })
 
-const Panel = View.connect(
-  Effect.fnUntraced(function* () {
-    const store = yield* CounterStore
-
-    return {
-      count: store.select.count,
-      status: Reactive.map(store.select.resetting, (resetting) =>
-        resetting ? "resetting" : "counting",
-      ),
-      refused: Reactive.map(store.refused, told),
-      onIncrement: store.commands.incremented(),
-      onReset: store.commands.resetClicked(),
-    }
-  }),
+const Panel = compose(
+  withStore(CounterStore, (store) => ({
+    count: store.select.count,
+    status: Reactive.map(store.select.resetting, (resetting) =>
+      resetting ? "resetting" : "counting",
+    ),
+    refused: Reactive.map(store.refused, told),
+    onIncrement: store.commands.incremented(),
+    onReset: store.commands.resetClicked(),
+  })),
 )(RefusalsView)
 
 export const Refusals = CounterStore.with(Panel, [resetAfterDelay])

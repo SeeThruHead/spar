@@ -1,6 +1,6 @@
 import { Clock, Effect, Layer, Option, Schema } from "effect"
 import type { Duration } from "effect"
-import { Props, Query, Reactive, UiState, View } from "spar"
+import { Props, Query, Reactive, UiState, View, compose, withProps } from "spar"
 import { LoadRowView, LoadsView } from "./LoadsView.tsx"
 
 const Run = Schema.Struct({ run: Schema.Int, at: Schema.Finite })
@@ -45,15 +45,23 @@ export const queries = Layer.mergeAll(ProfileQuery.live, OrdersQuery.live, Sugge
 
 const percent = (millis: number): string => `${Math.min(Math.max((millis / scale) * 100, 0), 100)}%`
 
-const LoadRow = View.taking(
-  {
-    name: Schema.String,
-    note: Schema.String,
-    status: Props.Reactive(Schema.String),
-    value: Props.Reactive(Schema.NullOr(Timed)),
-    run: Props.Reactive(Schema.NullOr(Run)),
-  },
-  Effect.fnUntraced(function* ({ name, note, status, value, run }) {
+const rowFields = {
+  name: Schema.String,
+  note: Schema.String,
+  status: Props.Reactive(Schema.String),
+  value: Props.Reactive(Schema.NullOr(Timed)),
+  run: Props.Reactive(Schema.NullOr(Run)),
+}
+
+const LoadRow = compose(
+  withProps(rowFields),
+  Effect.fnUntraced(function* ({
+    name,
+    note,
+    status,
+    value,
+    run,
+  }: Schema.Struct<typeof rowFields>["Type"]) {
     const seen = yield* Reactive.zip(value, run)
     const span = Reactive.map(seen, ([timedNow, runNow]) =>
       timedNow === null || runNow === null
@@ -84,7 +92,7 @@ const told = (run: Run | null, ends: ReadonlyArray<number>): string => {
   return `Three requests that take 1,300 ms between them were done ${Math.max(...ends) - run.at} ms after the press.`
 }
 
-export const Loads = View.connect(
+export const Loads = compose(
   Effect.fnUntraced(function* () {
     const run = yield* UiState.make("run", Schema.NullOr(Run), null)
     const asked = Reactive.map(run, Option.fromNullOr)

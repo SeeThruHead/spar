@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, pipe } from "effect"
-import { Markup, Props, Reactive, Router, UiState, View } from "spar"
+import { Markup, Props, Reactive, Router, UiState, View, compose, withProps } from "spar"
 import type { Heading, Hit, Page } from "./api.ts"
 import { Loads } from "./Loads.ts"
 import { groups } from "./nav.ts"
@@ -28,13 +28,19 @@ const Entry = Schema.Struct({ slug: Schema.String, title: Schema.String })
 
 type Entry = typeof Entry.Type
 
-const NavGroup = View.taking(
-  {
-    title: Schema.String,
-    entries: Schema.Array(Entry),
-    current: Props.Reactive(Schema.String),
-  },
-  Effect.fnUntraced(function* ({ title, entries, current }) {
+const groupFields = {
+  title: Schema.String,
+  entries: Schema.Array(Entry),
+  current: Props.Reactive(Schema.String),
+}
+
+const NavGroup = compose(
+  withProps(groupFields),
+  Effect.fnUntraced(function* ({
+    title,
+    entries,
+    current,
+  }: Schema.Struct<typeof groupFields>["Type"]) {
     const router = yield* Router.Router
 
     return {
@@ -55,9 +61,11 @@ const NavGroup = View.taking(
   }),
 )(NavGroupView)
 
-const DocPage = View.taking(
-  { params: Props.Reactive(DocParams) },
-  Effect.fnUntraced(function* ({ params }) {
+const docFields = { params: Props.Reactive(DocParams) }
+
+const DocPage = compose(
+  withProps(docFields),
+  Effect.fnUntraced(function* ({ params }: Schema.Struct<typeof docFields>["Type"]) {
     const page = yield* PageQuery.ask(Reactive.map(params, (now) => now.slug))
     const current = Reactive.map(params, (now) => now.slug)
     const state = yield* Reactive.zip(page.status, current)
@@ -85,7 +93,7 @@ const DocPage = View.taking(
   }),
 )(DocView)
 
-const Home = View.connect(
+const Home = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
     const page = yield* PageQuery.ask("home")
@@ -113,7 +121,7 @@ const summaryOf = (status: string, found: number): string => {
   return found === 1 ? "1 place" : `${found} places`
 }
 
-export const Site = View.connect(
+export const Site = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
     const text = yield* UiState.make("search", Schema.String, "")
