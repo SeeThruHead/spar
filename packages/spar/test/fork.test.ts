@@ -101,7 +101,11 @@ describe("a store asked to fork", () => {
       const back = yield* inspected.hold
 
       expect(inspected.actions().map((action) => action.name)).toEqual(["added"])
-      expect(JSON.stringify(inspected.actions())).toContain('"by"')
+      expect(
+        JSON.stringify(
+          inspected.actions().map((action) => Schema.toJsonSchemaDocument(action.schema)),
+        ),
+      ).toContain('"by"')
 
       yield* inspected.forkAt(1)
       expect(yield* tally.select.count.get).toBe(1)

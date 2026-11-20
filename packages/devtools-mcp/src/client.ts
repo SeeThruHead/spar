@@ -14,7 +14,12 @@ const snapshotOf = (store: Store.Inspected): Effect.Effect<Snapshot> =>
     store: Effect.succeed(store.key),
     state: Effect.map(store.state.get, (state) => Formatter.formatJson(state, { space: 2 })),
     log: store.log.get,
-    actions: Effect.sync(store.actions),
+    actions: Effect.sync(() =>
+      store.actions().map(({ name, schema }) => ({
+        name,
+        payload: Schema.decodeUnknownSync(Schema.Json)(Schema.toJsonSchemaDocument(schema)),
+      })),
+    ),
     viewing: store.viewing.get,
   })
 
