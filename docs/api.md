@@ -9,19 +9,20 @@ A component is `compose(...enhancers)((props) => <jsx />)`: enhancers first, the
 inline. Each enhancer is a function from the props so far to an Effect of what it adds; the view's
 props are inferred from them. Enhancers and the view run once, on mount.
 
-| Function                                                  | What it adds                                                                                                 |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `compose(...enhancers)(view)`                             | A component. Called without the view, a group of enhancers that is itself an enhancer.                       |
-| `withProps({ name: Schema })`                             | The props its parent passes in JSX, each with a Schema. A wrong prop in the parent's JSX is a compile error. |
-| `withStore(Store, (store) => props)`                      | Values and commands read from a store, or from any service with the same shape.                              |
-| `withUiState(name, Schema, initial)`                      | One piece of UI state, under `name`, kept in the UI tree and rewound with everything else.                   |
-| `withQuery(name, Query, (props) => input)`                | A query's handle under `name`, asked with an input made from the props.                                      |
-| `withHandlers((props) => handlers)`                       | Plain values or actions made from the props.                                                                 |
-| `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                               |
-| `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                      |
-| `withSpan(name, enhancer)`                                | Runs an enhancer inside a span with that name.                                                               |
-| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one.                                                          |
-| `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                  |
+| Function                                                  | What it adds                                                                                                                                   |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compose(...enhancers)(view)`                             | A component. Called without the view, a group of enhancers that is itself an enhancer.                                                         |
+| `withProps({ name: Schema })`                             | The props its parent passes in JSX, each with a Schema. A wrong prop in the parent's JSX is a compile error.                                   |
+| `withStore(Store, (store) => props)`                      | Values and commands read from a store, or from any service with the same shape.                                                                |
+| `withUiState(name, Schema, initial)`                      | One piece of UI state, under `name`, kept in the UI tree and rewound with everything else.                                                     |
+| `withQuery(name, Query, (props) => input)`                | A query's handle under `name`, asked with an input made from the props.                                                                        |
+| `withHandlers((props) => handlers)`                       | Plain values or actions made from the props.                                                                                                   |
+| `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                                                                 |
+| `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                                                        |
+| `withSpan(name, enhancer)`                                | Runs an enhancer inside a span with that name.                                                                                                 |
+| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one.                                                                                            |
+| `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                                                    |
+| `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin. |
 
 A child component is written in JSX inside the view: `<Dropdown label="Sort by" onPick={pick} />`.
 It keeps its own UI state, and runs with the services of the component that draws it; what it
@@ -373,7 +374,9 @@ page: yield *
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
 layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
-`replace`, `back` and `link(route, params)`. `Router.focusOnChange(handle)` moves focus after a
+`replace`, `back`, `link(route, params)` and `followLinks`, a click handler for a container of
+links you did not write as JSX (trusted markup), which follows links to this site in place.
+`Router.focusOnChange(handle)` moves focus after a
 navigation. `Router.live(route, Page)` keeps the page mounted while only the query changes and
 gives it `params` as a reactive value, where `Router.on` mounts a fresh page for every change. In
 a browser, a new page starts at the top and going back or forward puts the page where it was
