@@ -28,22 +28,22 @@ const examples: ReadonlyArray<readonly [string, string]> = [
     "An app-wide store: state Schema, actions, selectors, and an outbox for what must reach the server.",
   ],
   [
-    "apps/sidebar/src/Notes.ts",
-    "A store declared beside the component that uses it, shipped as one unit with `NotesStore.with`. It is mounted twice in the app and each place has its own notes.",
+    "apps/sidebar/src/Notes.tsx",
+    "A composed component with its own enhancer (`withDraft`) and a store declared beside it, shipped as one unit. It is mounted twice in the app and each place has its own notes.",
   ],
   [
-    "apps/sidebar/src/ResetCounter.ts",
+    "apps/sidebar/src/ResetCounterStore.ts",
     "A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.",
   ],
   [
-    "apps/sidebar/src/ResetCounterView.tsx",
-    "Its view. The buttons are never disabled; the store decides.",
+    "apps/sidebar/src/ResetCounter.tsx",
+    "Its component, composed with `withStore`. The buttons are never disabled; the store decides.",
   ],
   [
     "apps/sidebar/src/People.ts",
     "Server data in a query store, a second store for the selection, and Export CSV as an action that reads the people from the query store itself.",
   ],
-  ["apps/sidebar/src/PeopleView.tsx", "The people table."],
+  ["apps/sidebar/src/PeoplePanel.tsx", "The people table, composed, its rows in a For."],
   [
     "apps/sidebar/test/people.test.ts",
     "Tests of the export: the file, the refusal with nobody selected, one trace for the request and the result.",
@@ -61,16 +61,16 @@ const examples: ReadonlyArray<readonly [string, string]> = [
     "A page five segments deep: each segment asks for its own data, and the author's query takes its input from the report's answer.",
   ],
   [
-    "apps/sidebar/src/NotesView.tsx",
-    "The view of that unit: a Schema for each prop, JSX and nothing else.",
+    "apps/sidebar/src/DeepPage.tsx",
+    "Its components: each segment composed from small enhancers of its own, children written as JSX.",
   ],
   [
-    "apps/sidebar/src/AgentPage.ts",
-    "A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit mounted as a child.",
+    "apps/sidebar/src/AgentPage.tsx",
+    "A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit, both written as JSX tags.",
   ],
   [
-    "apps/sidebar/src/Shell.ts",
-    "The shell: the router's outlet and the second place the notes unit is mounted.",
+    "apps/sidebar/src/Shell.tsx",
+    "The shell: the router's outlet and the second place the notes unit is mounted, every child a JSX tag.",
   ],
   [
     "apps/sidebar/src/main.ts",

@@ -410,6 +410,13 @@ A request that waited for another query's value draws that wait as a line before
 when the other was asked for to when this one started. Data that was already there (after a
 preload, or going back) is a short `served` span that links to the trace that loaded it.
 
+Hovering a link and then clicking it follows one rule. Hovering starts the target page's
+queries in the hover's own trace. When the click asks for the same queries, nothing is asked
+again, whether the hover's requests have answered or are still on their way. The click's
+trace gets a `served` span for each one, saying "served from what trace … loaded" and linking
+to the hover's trace. So each request is recorded once, in the trace that started it, and the
+click's trace says where its data came from.
+
 When three or more requests each waited for the one before, or when a request had the same input
 as the one it waited for, the trace panel says so above the spans with the code
 `SPAR_QUERY_CHAIN`, names the requests in order with how long after the one before each started, and says which one
@@ -2965,14 +2972,14 @@ export const BoardStoreLive = BoardStore.layerDurable({}, [
 ])
 ```
 
-## apps/sidebar/src/Notes.ts
+## apps/sidebar/src/Notes.tsx
 
-A store declared beside the component that uses it, shipped as one unit with `NotesStore.with`. It is mounted twice in the app and each place has its own notes.
+A composed component with its own enhancer (`withDraft`) and a store declared beside it, shipped as one unit. It is mounted twice in the app and each place has its own notes.
 
-```ts
-import { Effect, Schema, pipe } from "effect"
-import { Form, Reactive, Store, View } from "spar"
-import { NoteLineView, NotesView } from "./NotesView.tsx"
+```tsx
+import { Effect, Schema } from "effect"
+import { Events, For, Form, Reactive, Store, compose, withProps, withStore } from "spar"
+import { SubmitButton, TextField } from "@spar/ui"
 
 const Note = Schema.Struct({ id: Schema.Int, text: Schema.String })
 
@@ -3003,42 +3010,55 @@ const Draft = Schema.Struct({
   text: Schema.String.check(Schema.makeFilter((text) => text.trim().length > 0 || "Write a note")),
 })
 
-const NotesPanel = View.taking(
-  { id: Schema.String, title: Schema.String },
-  Effect.fnUntraced(function* ({ id, title }) {
-    const store = yield* NotesStore
-    const form = yield* Form.make(Draft, { text: "" })
+const withDraft = (props: { readonly onAdd: (text: string) => Effect.Effect<void> }) =>
+  Effect.map(Form.make(Draft, { text: "" }), (form) => ({
+    field: form.field("text"),
+    busy: form.submitting,
+    onSubmit: form.submitThen(({ text }) => props.onAdd(text.trim()), form.reset),
+  }))
 
-    return {
-      id,
-      title,
-      count: store.select.count,
-      notes: yield* pipe(
-        store.select.notes,
-        Reactive.mapBy(
-          (note: Note) => String(note.id),
-          NoteLineView,
-          (note) => ({ text: Reactive.map(note, (now) => now.text) }),
-        ),
-      ),
-      field: form.field("text"),
-      busy: form.submitting,
-      onSubmit: form.submitThen(({ text }) => store.commands.added(text.trim()), form.reset),
-    }
-  }),
-)(NotesView)
+const NotesPanel = compose(
+  withProps({ id: Schema.String, title: Schema.String }),
+  withStore(NotesStore, (store) => ({
+    count: store.select.count,
+    notes: store.select.notes,
+    onAdd: store.commands.added,
+  })),
+  withDraft,
+)((props) => (
+  <section class="notes" aria-label={props.title}>
+    <h2>{props.title}</h2>
+    <p>
+      <output aria-label={`${props.title} count`}>{props.count}</output>
+    </p>
+    <ul>
+      <For each={props.notes} by={(note) => String(note.id)}>
+        {(note) => <li>{Reactive.map(note, (now) => now.text)}</li>}
+      </For>
+    </ul>
+    <form aria-label={`Add to ${props.title}`} onSubmit={Events.prevent(props.onSubmit)}>
+      <TextField
+        id={props.id}
+        label="Note"
+        hint={`Kept in ${props.title}`}
+        type="text"
+        field={props.field}
+      />
+      <SubmitButton label="Add note" busy={props.busy} />
+    </form>
+  </section>
+))
 
 export const Notes = NotesStore.with(NotesPanel)
 ```
 
-## apps/sidebar/src/ResetCounter.ts
+## apps/sidebar/src/ResetCounterStore.ts
 
 A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.
 
 ```ts
 import { Duration, Effect, Option, Schema } from "effect"
-import { Events, Reactive, Store, View } from "spar"
-import { ResetCounterView } from "./ResetCounterView.tsx"
+import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
@@ -3096,87 +3116,66 @@ export const resetAfterDelay = Store.after(
     ),
 )
 
-const told = (refused: Option.Option<Store.Refusal>): string =>
+export const told = (refused: Option.Option<Store.Refusal>): string =>
   Option.match(refused, {
     onNone: () => "Nothing has been refused",
     onSome: (refusal) => `${refusal.action} was not accepted: ${refusal.reason}`,
   })
-
-const ResetCounterPanel = View.connect(
-  Effect.fnUntraced(function* () {
-    const store = yield* ResetCounterStore
-
-    yield* Events.onWindow("keydown", (event) =>
-      event.key === "+" ? store.commands.incremented() : [],
-    )
-
-    return {
-      count: store.select.count,
-      status: Reactive.map(store.select.resetting, (resetting) =>
-        resetting ? "Resetting" : "Counting",
-      ),
-      resetDuration: Reactive.map(store.select.resetDuration, String),
-      refused: Reactive.map(store.refused, told),
-      onIncrement: store.commands.incremented(),
-      onReset: store.commands.resetClicked(),
-      onDuration: store.commands.resetDurationChanged,
-    }
-  }),
-)(ResetCounterView)
-
-export const ResetCounter = ResetCounterStore.with(ResetCounterPanel, [resetAfterDelay])
 ```
 
-## apps/sidebar/src/ResetCounterView.tsx
+## apps/sidebar/src/ResetCounter.tsx
 
-Its view. The buttons are never disabled; the store decides.
+Its component, composed with `withStore`. The buttons are never disabled; the store decides.
 
 ```tsx
-import { Schema } from "effect"
-import { Props, View } from "spar"
+import { Reactive, compose, withKey, withStore } from "spar"
+import { ResetCounterStore, resetAfterDelay, told } from "./ResetCounterStore.ts"
 
-export const ResetCounterView = View.make(
-  "ResetCounterView",
-  {
-    count: Props.Reactive(Schema.Finite),
-    status: Props.Reactive(Schema.String),
-    resetDuration: Props.Reactive(Schema.String),
-    refused: Props.Reactive(Schema.String),
-    onIncrement: Props.Action,
-    onReset: Props.Action,
-    onDuration: Props.Callback(Schema.Finite),
-  },
-  (props) => (
-    <section class="reset-counter" aria-label="Counter">
-      <h2>Counter</h2>
-      <p>
-        <output aria-label="Count">{props.count}</output>{" "}
-        <output aria-label="Counter status">{props.status}</output>
-      </p>
-      <p>
-        <button type="button" class="spar-button" onClick={props.onIncrement}>
-          Add 1
-        </button>{" "}
-        <button type="button" class="spar-button spar-quiet" onClick={props.onReset}>
-          Reset after a delay
-        </button>
-      </p>
-      <label>
-        Delay in seconds{" "}
-        <input
-          type="number"
-          min="0"
-          value={props.resetDuration}
-          onInput={(event) => props.onDuration(Number(event.currentTarget.value))}
-        />
-      </label>
-      <p>
-        <output aria-label="Last refusal">{props.refused}</output>
-      </p>
-      <p class="hint">Both buttons stay enabled, and the + key adds 1 too. The store decides.</p>
-    </section>
-  ),
-)
+const ResetCounterPanel = compose(
+  withStore(ResetCounterStore, (store) => ({
+    count: store.select.count,
+    status: Reactive.map(store.select.resetting, (resetting) =>
+      resetting ? "Resetting" : "Counting",
+    ),
+    resetDuration: Reactive.map(store.select.resetDuration, String),
+    refused: Reactive.map(store.refused, told),
+    onIncrement: store.commands.incremented(),
+    onReset: store.commands.resetClicked(),
+    onDuration: store.commands.resetDurationChanged,
+  })),
+  withKey("+", (props) => props.onIncrement),
+)((props) => (
+  <section class="reset-counter" aria-label="Counter">
+    <h2>Counter</h2>
+    <p>
+      <output aria-label="Count">{props.count}</output>{" "}
+      <output aria-label="Counter status">{props.status}</output>
+    </p>
+    <p>
+      <button type="button" class="spar-button" onClick={props.onIncrement}>
+        Add 1
+      </button>{" "}
+      <button type="button" class="spar-button spar-quiet" onClick={props.onReset}>
+        Reset after a delay
+      </button>
+    </p>
+    <label>
+      Delay in seconds{" "}
+      <input
+        type="number"
+        min="0"
+        value={props.resetDuration}
+        onInput={(event) => props.onDuration(Number(event.currentTarget.value))}
+      />
+    </label>
+    <p>
+      <output aria-label="Last refusal">{props.refused}</output>
+    </p>
+    <p class="hint">Both buttons stay enabled, and the + key adds 1 too. The store decides.</p>
+  </section>
+))
+
+export const ResetCounter = ResetCounterStore.with(ResetCounterPanel, [resetAfterDelay])
 ```
 
 ## apps/sidebar/src/People.ts
@@ -3184,10 +3183,9 @@ export const ResetCounterView = View.make(
 Server data in a query store, a second store for the selection, and Export CSV as an action that reads the people from the query store itself.
 
 ```ts
-import { Effect, Option, Schema, pipe } from "effect"
-import { Query, Reactive, Store, View } from "spar"
+import { Effect, Schema } from "effect"
+import { Query, Store } from "spar"
 import { ServerUnreachable, User } from "./api.ts"
-import { PeopleView, PersonRowView } from "./PeopleView.tsx"
 import { Server } from "./server/Server.ts"
 
 export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
@@ -3250,6 +3248,17 @@ export const exportsCsv = Store.after(
     yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
   }),
 )
+```
+
+## apps/sidebar/src/PeoplePanel.tsx
+
+The people table, composed, its rows in a For.
+
+```tsx
+import { Option } from "effect"
+import { For, Reactive, compose, withHandlers, withQuery, withStore } from "spar"
+import type { Query, Store } from "spar"
+import { PeopleStore, UsersQuery, exportsCsv } from "./People.ts"
 
 const statusOf = (status: Query.Status): string =>
   ({
@@ -3262,128 +3271,79 @@ const statusOf = (status: Query.Status): string =>
 const told = (refused: Option.Option<Store.Refusal>): string =>
   Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
 
-const PeoplePanel = View.connect(
-  Effect.fnUntraced(function* () {
-    const users = yield* UsersQuery.ask()
-    const people = yield* PeopleStore
-
-    return {
-      status: Reactive.map(users.status, statusOf),
-      rows: yield* pipe(
-        Reactive.map(users.value, (loaded) => loaded ?? []),
-        Reactive.mapBy(
-          (user: User) => String(user.id),
-          PersonRowView,
-          (user, id) => ({
-            id,
-            name: Reactive.map(user, (now) => now.name),
-            email: Reactive.map(user, (now) => now.email),
-            selected: Reactive.map(people.select.selected, (selected) =>
-              selected.includes(Number(id)),
-            ),
-            onToggle: people.commands.toggled(Number(id)),
-          }),
-        ),
-      ),
-      count: Reactive.map(people.select.selected, (selected) => `${selected.length} selected`),
-      csv: people.select.csv,
-      download: people.select.download,
-      refused: Reactive.map(people.refused, told),
-      onExport: people.commands.exportRequested(),
-      onRefresh: users.refetch,
-    }
-  }),
-)(PeopleView)
+const PeoplePanel = compose(
+  withQuery("users", UsersQuery, () => undefined),
+  withHandlers((props) => ({
+    rows: Reactive.map(props.users.value, (loaded) => loaded ?? []),
+  })),
+  withStore(PeopleStore, (people) => ({
+    selected: people.select.selected,
+    count: Reactive.map(people.select.selected, (selected) => `${selected.length} selected`),
+    csv: people.select.csv,
+    download: people.select.download,
+    refused: Reactive.map(people.refused, told),
+    onToggle: (id: number) => people.commands.toggled(id),
+    onExport: people.commands.exportRequested(),
+  })),
+)((props) => (
+  <section class="people" aria-label="People">
+    <h2>People</h2>
+    <p>
+      <output aria-label="People status">{Reactive.map(props.users.status, statusOf)}</output>,{" "}
+      <output aria-label="People selected">{props.count}</output>
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Pick</th>
+          <th scope="col">Name</th>
+          <th scope="col">Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        <For each={props.rows} by={(user) => String(user.id)}>
+          {(user, id) => (
+            <tr data-selected={Reactive.map(props.selected, (all) => all.includes(Number(id)))}>
+              <td>
+                <input
+                  type="checkbox"
+                  id={`person-${id}`}
+                  checked={Reactive.map(props.selected, (all) => all.includes(Number(id)))}
+                  onChange={props.onToggle(Number(id))}
+                />
+              </td>
+              <td>
+                <label for={`person-${id}`}>{Reactive.map(user, (now) => now.name)}</label>
+              </td>
+              <td>{Reactive.map(user, (now) => now.email)}</td>
+            </tr>
+          )}
+        </For>
+      </tbody>
+    </table>
+    <p>
+      <button type="button" class="spar-button" onClick={props.onExport}>
+        Export CSV
+      </button>{" "}
+      <button type="button" class="spar-button spar-quiet" onClick={props.users.refetch}>
+        Load again
+      </button>
+    </p>
+    <p>
+      <output aria-label="Export problem">{props.refused}</output>
+    </p>
+    <output class="csv" aria-label="Exported CSV">
+      {props.csv}
+    </output>
+    <p>
+      <a href={props.download} download="people.csv">
+        Download people.csv
+      </a>
+    </p>
+  </section>
+))
 
 export const People = UsersQuery.beside(PeopleStore.with(PeoplePanel, [exportsCsv]))
-```
-
-## apps/sidebar/src/PeopleView.tsx
-
-The people table.
-
-```tsx
-import { Schema } from "effect"
-import { Props, View } from "spar"
-
-export const PersonRowView = View.make(
-  "PersonRowView",
-  {
-    id: Schema.String,
-    name: Props.Reactive(Schema.String),
-    email: Props.Reactive(Schema.String),
-    selected: Props.Reactive(Schema.Boolean),
-    onToggle: Props.Action,
-  },
-  (props) => (
-    <tr data-selected={props.selected}>
-      <td>
-        <input
-          type="checkbox"
-          id={`person-${props.id}`}
-          checked={props.selected}
-          onChange={props.onToggle}
-        />
-      </td>
-      <td>
-        <label for={`person-${props.id}`}>{props.name}</label>
-      </td>
-      <td>{props.email}</td>
-    </tr>
-  ),
-)
-
-export const PeopleView = View.make(
-  "PeopleView",
-  {
-    status: Props.Reactive(Schema.String),
-    rows: Props.Element,
-    count: Props.Reactive(Schema.String),
-    csv: Props.Reactive(Schema.String),
-    download: Props.Reactive(Schema.String),
-    refused: Props.Reactive(Schema.String),
-    onExport: Props.Action,
-    onRefresh: Props.Action,
-  },
-  (props) => (
-    <section class="people" aria-label="People">
-      <h2>People</h2>
-      <p>
-        <output aria-label="People status">{props.status}</output>,{" "}
-        <output aria-label="People selected">{props.count}</output>
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Pick</th>
-            <th scope="col">Name</th>
-            <th scope="col">Email</th>
-          </tr>
-        </thead>
-        <tbody>{props.rows}</tbody>
-      </table>
-      <p>
-        <button type="button" class="spar-button" onClick={props.onExport}>
-          Export CSV
-        </button>{" "}
-        <button type="button" class="spar-button spar-quiet" onClick={props.onRefresh}>
-          Load again
-        </button>
-      </p>
-      <p>
-        <output aria-label="Export problem">{props.refused}</output>
-      </p>
-      <output class="csv" aria-label="Exported CSV">
-        {props.csv}
-      </output>
-      <p>
-        <a href={props.download} download="people.csv">
-          Download people.csv
-        </a>
-      </p>
-    </section>
-  ),
-)
 ```
 
 ## apps/sidebar/test/people.test.ts
@@ -4743,7 +4703,7 @@ A page five segments deep: each segment asks for its own data, and the author's 
 ```ts
 import { Effect, Layer, Schema } from "effect"
 import { Query, Router } from "spar"
-import { RecordQuery } from "./AgentPage.ts"
+import { RecordQuery } from "./AgentPage.tsx"
 import { Found, ServerUnreachable } from "./api.ts"
 import { Server } from "./server/Server.ts"
 
@@ -4823,73 +4783,122 @@ export const deepExample = {
 } as const
 ```
 
-## apps/sidebar/src/NotesView.tsx
+## apps/sidebar/src/DeepPage.tsx
 
-The view of that unit: a Schema for each prop, JSX and nothing else.
+Its components: each segment composed from small enhancers of its own, children written as JSX.
 
 ```tsx
-import { Schema } from "effect"
-import { Events, Form, Props, View } from "spar"
-import { SubmitButton, TextField } from "@spar/ui"
+import { Effect, Option } from "effect"
+import { Props, Reactive, Router, compose, withProps, withQuery } from "spar"
+import type { Query, View } from "spar"
+import type { Found, ServerUnreachable } from "./api.ts"
+import {
+  AuthorQuery,
+  Member,
+  MemberQuery,
+  Org,
+  OrgQuery,
+  Report,
+  ReportQuery,
+  ReportsQuery,
+  Team,
+  TeamQuery,
+  memberRoute,
+  reportRoute,
+  reportsRoute,
+  teamRoute,
+} from "./Deep.ts"
+import { DeepMissingView, SegmentView } from "./DeepView.tsx"
 
-export const NoteLineView = View.make(
-  "NoteLineView",
-  { text: Props.Reactive(Schema.String) },
-  ({ text }) => <li>{text}</li>,
-)
+const labelOf = (found: Found | null): string => found?.label ?? ""
 
-export const NotesView = View.make(
-  "NotesView",
-  {
-    id: Schema.String,
-    title: Schema.String,
-    count: Props.Reactive(Schema.String),
-    notes: Props.Element,
-    field: Form.Field(Schema.String),
-    busy: Props.Reactive(Schema.Boolean),
-    onSubmit: Props.Action,
-  },
-  (props) => (
-    <section class="notes" aria-label={props.title}>
-      <h2>{props.title}</h2>
-      <p>
-        <output aria-label={`${props.title} count`}>{props.count}</output>
-      </p>
-      <ul>{props.notes}</ul>
-      <form aria-label={`Add to ${props.title}`} onSubmit={Events.prevent(props.onSubmit)}>
-        <TextField
-          id={props.id}
-          label="Note"
-          hint={`Kept in ${props.title}`}
-          type="text"
-          field={props.field}
-        />
-        <SubmitButton label="Add note" busy={props.busy} />
-      </form>
-    </section>
+type Asked<R> = {
+  readonly ask: (
+    input: Query.Input<string>,
+  ) => Effect.Effect<Query.Handle<Found, ServerUnreachable>, never, R>
+}
+
+const withSegment =
+  <Params, R>(kind: string, query: Asked<R>, pick: (params: Params) => string) =>
+  (props: { readonly params: Reactive.Reactive<Params> }) =>
+    Effect.map(query.ask(Reactive.map(props.params, pick)), (handle) => ({
+      kind,
+      label: Reactive.map(handle.value, labelOf),
+      status: handle.status,
+    }))
+
+const withInner =
+  <Params, Path extends string, R>(
+    route: Router.Route<Params, Path>,
+    page: View.Component<{ readonly params: Reactive.Reactive<Params> }, never, R>,
+  ) =>
+  () =>
+    Effect.map(
+      Router.outlet({ routes: [Router.live(route, page)], otherwise: DeepMissingView }),
+      (inner) => ({ inner }),
+    )
+
+const ReportPage = compose(
+  withProps({ params: Props.Reactive(Report) }),
+  withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
+  withQuery("author", AuthorQuery, (props) =>
+    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
   ),
-)
+)((props) => (
+  <section class="segment" aria-label="Report">
+    <h1>
+      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+    </h1>
+    <p>
+      <output aria-label="Report status">{props.report.status}</output>
+    </p>
+    <p>
+      Written by{" "}
+      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
+      <output aria-label="Author status">{props.author.status}</output>
+    </p>
+  </section>
+))
+
+const Reports = compose(
+  withProps({ params: Props.Reactive(Member) }),
+  withSegment("Reports", ReportsQuery, (now: typeof Member.Type) => now.member),
+  withInner(reportRoute, ReportPage),
+)(SegmentView)
+
+const MemberSegment = compose(
+  withProps({ params: Props.Reactive(Member) }),
+  withSegment("Member", MemberQuery, (now: typeof Member.Type) => now.member),
+  withInner(reportsRoute, Reports),
+)(SegmentView)
+
+const TeamSegment = compose(
+  withProps({ params: Props.Reactive(Team) }),
+  withSegment("Team", TeamQuery, (now: typeof Team.Type) => now.team),
+  withInner(memberRoute, MemberSegment),
+)(SegmentView)
+
+export const OrgSegment = compose(
+  withProps({ params: Props.Reactive(Org) }),
+  withSegment("Organisation", OrgQuery, (now: typeof Org.Type) => now.org),
+  withInner(teamRoute, TeamSegment),
+)(SegmentView)
 ```
 
-## apps/sidebar/src/AgentPage.ts
+## apps/sidebar/src/AgentPage.tsx
 
-A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit mounted as a child.
+A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit, both written as JSX tags.
 
-```ts
+```tsx
 import { Effect, Option, Schedule, Schema, pipe } from "effect"
-import { Query, Reactive, Router, View } from "spar"
+import { Query, Reactive, Router, View, compose, withProps, withQuery, withStore } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
-import { Notes } from "./Notes.ts"
+import { Notes } from "./Notes.tsx"
 import { home } from "./routes.ts"
 import { Started } from "./api.ts"
 import { NoRecord, Server, ServerUnreachable } from "./server/Server.ts"
-import {
-  AgentLoadingView,
-  AgentMissingView,
-  AgentPageView,
-  ServerRecordView,
-} from "./SidebarView.tsx"
+import { AgentLoadingView, AgentMissingView } from "./SidebarView.tsx"
 
 class AgentNotFound extends Schema.TaggedError<AgentNotFound, { readonly brand: unique symbol }>()(
   "AgentNotFound",
@@ -4919,15 +4928,19 @@ const recordText = (
   return `Asking the server about ${name}.`
 }
 
-const ServerRecord = View.taking(
-  { name: Schema.String },
-  Effect.fnUntraced(function* ({ name }) {
-    const record = yield* RecordQuery.ask(name)
-    const answer = yield* Reactive.zip(record.value, record.error)
+const withText = (props: {
+  readonly name: string
+  readonly record: Query.Handle<Started, NoRecord | ServerUnreachable>
+}) =>
+  Effect.map(Reactive.zip(props.record.value, props.record.error), (answer) => ({
+    text: Reactive.map(answer, ([found, problem]) => recordText(props.name, found, problem)),
+  }))
 
-    return { text: Reactive.map(answer, ([found, problem]) => recordText(name, found, problem)) }
-  }),
-)(ServerRecordView)
+const ServerRecordView = compose(
+  withProps({ name: Schema.String }),
+  withQuery("record", RecordQuery, (props) => props.name),
+  withText,
+)((props) => <p aria-label="Server record">{props.text}</p>)
 
 const projectOf = (board: Board, agent: Agent): string =>
   Option.match(Option.fromNullishOr(board.spaces.find((space) => space.id === agent.spaceId)), {
@@ -4935,101 +4948,138 @@ const projectOf = (board: Board, agent: Agent): string =>
     onSome: (space) => space.name,
   })
 
+const withAgent = Effect.fnUntraced(function* (props: { readonly id: string }) {
+  const store = yield* BoardStore
+  const board = yield* store.select.board.get
+  const found = board.agents.find((agent) => agent.id === props.id)
+
+  yield* Effect.annotateCurrentSpan("agent.id", props.id)
+  if (found === undefined) return yield* new AgentNotFound({ id: props.id })
+
+  const current = (now: Board): Agent =>
+    Option.getOrElse(
+      Option.fromNullishOr(now.agents.find((other) => other.id === found.id)),
+      () => found,
+    )
+  const agent = Reactive.map(store.select.board, current)
+
+  return {
+    agentName: found.name,
+    name: Reactive.map(agent, (now) => now.name),
+    status: Reactive.map(agent, (now) => now.status),
+    tags: Reactive.map(agent, (now) => (now.tags.length === 0 ? "None" : now.tags.join(", "))),
+    project: Reactive.map(store.select.board, (now) => projectOf(now, current(now))),
+    pinLabel: Reactive.map(agent, (now) => (now.pinned ? "Unpin" : "Pin to the top")),
+    onPin: store.commands.pinToggled({ id: found.id }),
+  }
+})
+
 export const AgentPage = pipe(
-  View.taking(
-    { id: Schema.String },
-    Effect.fnUntraced(function* ({ id }) {
-      const store = yield* BoardStore
-      const router = yield* Router.Router
-      const board = yield* store.select.board.get
-      const found = board.agents.find((agent) => agent.id === id)
-
-      yield* Effect.annotateCurrentSpan("agent.id", id)
-      if (found === undefined) return yield* new AgentNotFound({ id })
-
-      const agent = Reactive.map(store.select.board, (now) =>
-        Option.getOrElse(
-          Option.fromNullishOr(now.agents.find((other) => other.id === found.id)),
-          () => found,
-        ),
-      )
-
-      return {
-        record: yield* View.child(ServerRecord, { name: found.name }),
-        notes: yield* View.child(Notes, { id: "agent-note", title: "Notes on this agent" }),
-        name: Reactive.map(agent, (now) => now.name),
-        status: Reactive.map(agent, (now) => now.status),
-        tags: Reactive.map(agent, (now) => (now.tags.length === 0 ? "None" : now.tags.join(", "))),
-        project: Reactive.map(store.select.board, (now) =>
-          projectOf(
-            now,
-            Option.getOrElse(
-              Option.fromNullishOr(now.agents.find((other) => other.id === found.id)),
-              () => found,
-            ),
-          ),
-        ),
-        pinLabel: Reactive.map(agent, (now) => (now.pinned ? "Unpin" : "Pin to the top")),
-        idle: Reactive.succeed(false),
-        onPin: store.commands.pinToggled({ id: found.id }),
-        home: router.link(home, {}),
-      }
-    }),
-  )(AgentPageView),
+  compose(
+    withProps({ id: Schema.String }),
+    withAgent,
+    withStore(Router.Router, (router) => ({ home: router.link(home, {}) })),
+  )((props) => (
+    <section>
+      <p>
+        <a
+          href={props.home.href}
+          onClick={props.home.onClick}
+          onPointerenter={props.home.onIntent}
+          onFocus={props.home.onIntent}
+        >
+          All agents
+        </a>
+      </p>
+      <h1>{props.name}</h1>
+      <dl>
+        <dt>Status</dt>
+        <dd>{props.status}</dd>
+        <dt>Project</dt>
+        <dd>{props.project}</dd>
+        <dt>Tags</dt>
+        <dd>{props.tags}</dd>
+      </dl>
+      <ServerRecordView name={props.agentName} />
+      <Notes id="agent-note" title="Notes on this agent" />
+      <button type="button" class="spar-button spar-quiet" onClick={props.onPin}>
+        {props.pinLabel}
+      </button>
+    </section>
+  )),
   View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
 )
 ```
 
-## apps/sidebar/src/Shell.ts
+## apps/sidebar/src/Shell.tsx
 
-The shell: the router's outlet and the second place the notes unit is mounted.
+The shell: the router's outlet and the second place the notes unit is mounted, every child a JSX tag.
 
-```ts
+```tsx
 import { Effect } from "effect"
-import { Handle, Router, View } from "spar"
+import { Handle, Router, View, compose, withEffect, withStore } from "spar"
 import { Toast } from "@spar/ui"
-import { AgentPage } from "./AgentPage.ts"
+import { AgentPage } from "./AgentPage.tsx"
 import { deepExample, orgRoute, reportRoute } from "./Deep.ts"
 import { DeepLoadingView } from "./DeepLoadingView.tsx"
-import { Notes } from "./Notes.ts"
-import { People } from "./People.ts"
-import { ResetCounter } from "./ResetCounter.ts"
+import { Notes } from "./Notes.tsx"
+import { People } from "./PeoplePanel.tsx"
+import { ResetCounter } from "./ResetCounter.tsx"
 import { agentRoute, home } from "./routes.ts"
 import { Sidebar } from "./Sidebar.ts"
-import { EmptyPageView, MissingPageView, ShellView } from "./SidebarView.tsx"
+import { EmptyPageView, MissingPageView } from "./SidebarView.tsx"
 
-export const Shell = View.connect(
-  Effect.fnUntraced(function* () {
-    const main = yield* Handle.make
-    const router = yield* Router.Router
+const withMain = () => Effect.map(Handle.make, (main) => ({ main }))
 
-    yield* Router.focusOnChange(main)
-
-    return {
-      main,
-      sidebar: yield* View.child(Sidebar, {}),
-      deep: router.link(reportRoute, deepExample),
-      scratch: yield* View.child(Notes, { id: "scratch-note", title: "Scratchpad" }),
-      counter: yield* View.child(ResetCounter, {}),
-      people: yield* View.child(People, {}),
-      page: yield* Router.outlet({
-        routes: [
-          Router.on(home, EmptyPageView),
-          Router.on(agentRoute, AgentPage),
-          Router.live(
-            orgRoute,
-            View.split(DeepLoadingView, () =>
-              import("./DeepPage.ts").then((module) => module.OrgSegment),
-            ),
+const withPage = () =>
+  Effect.map(
+    Router.outlet({
+      routes: [
+        Router.on(home, EmptyPageView),
+        Router.on(agentRoute, AgentPage),
+        Router.live(
+          orgRoute,
+          View.split(DeepLoadingView, () =>
+            import("./DeepPage.tsx").then((module) => module.OrgSegment),
           ),
-        ],
-        otherwise: MissingPageView,
-      }),
-      toasts: yield* View.child(Toast.Viewport, {}),
-    }
-  }),
-)(ShellView)
+        ),
+      ],
+      otherwise: MissingPageView,
+    }),
+    (page) => ({ page }),
+  )
+
+export const Shell = compose(
+  withMain,
+  withEffect((props: { readonly main: Handle.Handle }) => Router.focusOnChange(props.main)),
+  withStore(Router.Router, (router) => ({ deep: router.link(reportRoute, deepExample) })),
+  withPage,
+)((props) => (
+  <div class="shell">
+    <header class="topbar">
+      <strong class="brand">Spar showcase</strong>
+      <a
+        href={props.deep.href}
+        onClick={props.deep.onClick}
+        onPointerenter={props.deep.onIntent}
+        onFocus={props.deep.onIntent}
+      >
+        Open a page five segments deep
+      </a>
+    </header>
+    <Sidebar />
+    <main ref={props.main} tabIndex={-1}>
+      <div class="page">{props.page}</div>
+      <div class="features">
+        <Notes id="scratch-note" title="Scratchpad" />
+        <ResetCounter />
+        <People />
+      </div>
+    </main>
+    <Toast.Viewport />
+  </div>
+))
 ```
 
 ## apps/sidebar/src/main.ts
@@ -5048,7 +5098,7 @@ import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "./BoardStore.ts"
 import { deepQueries } from "./Deep.ts"
 import { Server } from "./server/Server.ts"
-import { Shell } from "./Shell.ts"
+import { Shell } from "./Shell.tsx"
 
 const telemetry = Otlp.layerJson({
   baseUrl: `${location.origin}/otlp`,
@@ -5139,7 +5189,7 @@ import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "../src/BoardStore.ts"
 import { deepQueries } from "../src/Deep.ts"
 import { Server } from "../src/server/Server.ts"
-import { Shell } from "../src/Shell.ts"
+import { Shell } from "../src/Shell.tsx"
 
 const addressOf = (input: URL | RequestInfo): string => {
   if (typeof input === "string") return input
