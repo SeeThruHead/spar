@@ -591,19 +591,20 @@ it over Effect RPC; the demo does when opened with `?devtools=http://127.0.0.1:4
 connects to `http://127.0.0.1:4188/mcp` (MCP over HTTP) and can ask what the app is doing right
 now:
 
-| Tool                                     | What it gives                                                                                  |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                              |
-| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                        |
-| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema)   |
-| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                        |
-| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures       |
-| `get_trace`                              | The spans the page recorded for a trace                                                        |
-| `get_navigation`                         | The newest route change, its trace id and its spans; `back` counts back, `lens` keeps one kind |
-| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                      |
-| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one      |
-| `count_moments`                          | How many times each thing happened, most frequent first                                        |
-| `diff_states`                            | What changed in a store between two of its actions, by path                                    |
+| Tool                                     | What it gives                                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `list_stores`, `get_state`, `get_log`    | The stores, a store's state, its recorded actions                                                  |
+| `travel_to`, `run_action`, `load_log`    | Step one store through its log, carry out an action, replay another log                            |
+| `get_ui_state`, `set_ui_state`           | Every piece of UI state by component path; set one (refused when it does not fit its Schema)       |
+| `get_timeline`, `rewind`                 | The one log with trace ids; show the whole app as it was after a moment                            |
+| `list_components`, `get_component`       | The mounted components; one component's props, UI state, services and recovered failures           |
+| `get_trace`                              | The spans the page recorded for a trace                                                            |
+| `get_navigation`                         | The newest route change, its trace id and its spans; `back` counts back, `lens` keeps one kind     |
+| `step`                                   | One moment earlier or later; gives the moment and every span of its trace                          |
+| `fork`, `list_branches`, `switch_branch` | Fork the program at the moment shown, list the branches, make another one the running one          |
+| `count_moments`                          | How many times each thing happened, most frequent first                                            |
+| `diff_states`                            | What changed in a store between two of its actions, by path                                        |
+| `export_session`, `load_session`         | Every store's log and all UI state as one JSON value; replay it here or in another copy of the app |
 
 The same tools answer from a shell: `bun run --filter @spar/devtools-mcp cli tools` lists them and
 `bun run --filter @spar/devtools-mcp cli call <tool> '<json>'` asks one (add `--url` when the

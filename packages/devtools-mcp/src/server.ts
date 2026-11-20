@@ -257,6 +257,26 @@ const LoadLog = Tool.make("load_log", {
   failure: Schema.String,
 })
 
+const Session = Schema.Struct({
+  stores: Schema.Array(Schema.Struct({ store: Schema.String, entries: Store.Entries })),
+  ui: UiState.Snapshot,
+})
+
+const ExportSession = Tool.make("export_session", {
+  description:
+    "The whole session as one JSON value: every store's log and every piece of UI state. Save it, and give it to load_session later, here or in another copy of the app, to see the same thing again.",
+  parameters: Tool.EmptyParams,
+  success: Session,
+})
+
+const LoadSession = Tool.make("load_session", {
+  description:
+    "Replay a session from export_session: each store's log from its first state, without changing the live state (travel_to with null returns to live), then each piece of UI state set. Refused at the first store or UI state the open app does not have. Returns each store's state shown.",
+  parameters: Session,
+  success: Schema.Array(Schema.Struct({ store: Schema.String, state: Schema.String })),
+  failure: Schema.String,
+})
+
 const GetUiState = Tool.make("get_ui_state", {
   description:
     "Every piece of UI state in the open app, each with the path of the component that owns it, its name and its value now.",
@@ -477,6 +497,8 @@ export const Tools = Toolkit.make(
   RunActions,
   ListPages,
   UsePage,
+  ExportSession,
+  LoadSession,
 )
 
 const ToolHandlers = Tools.toLayer(
@@ -550,6 +572,32 @@ const ToolHandlers = Tools.toLayer(
         ),
       get_navigation: ({ back, lens }) =>
         Effect.map(pages.page, (page) => navigationOf(page, back ?? 0, lens ?? "all")),
+      export_session: () =>
+        Effect.flatMap(pages.stores, (stores) =>
+          Effect.map(pages.page, (page) => ({
+            stores: stores.map((each) => ({ store: each.store, entries: each.log })),
+            ui: page.ui,
+          })),
+        ),
+      load_session: ({ stores, ui }) =>
+        Effect.andThen(
+          Effect.forEach(
+            stores,
+            ({ store: key, entries }) =>
+              Effect.andThen(found(key), pages.ask({ _tag: "Load", store: key, entries })),
+            { discard: true },
+          ),
+          Effect.andThen(
+            Effect.forEach(
+              ui,
+              ({ path, name, value }) => pages.ask({ _tag: "SetUi", path, name, value }),
+              { discard: true },
+            ),
+            Effect.forEach(stores, ({ store: key }) =>
+              Effect.map(found(key), (now) => ({ store: key, state: now.state })),
+            ),
+          ),
+        ),
       list_pages: () => pages.listed,
       use_page: ({ page }) => Effect.andThen(pages.choose(page), pages.listed),
       get_actions: ({ store: key }) => Effect.map(found(key), (now) => now.actions),

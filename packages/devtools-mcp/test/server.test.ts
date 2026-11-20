@@ -166,6 +166,8 @@ describe("the devtools server for agents", () => {
         "run_actions",
         "list_pages",
         "use_page",
+        "export_session",
+        "load_session",
       ])
 
       yield* tally.commands.added({ by: 1 })
@@ -247,6 +249,16 @@ describe("the devtools server for agents", () => {
           true,
           "[SPAR_TOOL_NO_UI_STATE] There is no UI state called text there, or the value does not fit its Schema.",
         ])
+
+        yield* mcp.call("load_session", {
+          stores: [],
+          ui: [{ path: ["NoteView"], name: "text", value: "from a session" }],
+        })
+
+        expect((yield* mcp.call("get_ui_state", {})).said).toEqual([
+          { path: ["NoteView"], name: "text", value: "from a session" },
+        ])
+        yield* mcp.call("set_ui_state", { path: ["NoteView"], name: "text", value: "typed" })
         expect((yield* mcp.call("list_components", {})).said).toEqual([
           { name: "NoteView", place: "NoteView" },
         ])
@@ -318,6 +330,31 @@ describe("the devtools server for agents", () => {
       const live = yield* mcp.call("travel_to", { store: "test/Tally", seq: null })
 
       expect(stateOf(live.said)).toEqual({ count: 6 })
+
+      const session = yield* mcp.call("export_session", {})
+      const saved = JSON.parse(JSON.stringify(session.said))
+
+      expect(JSON.stringify(saved)).toContain('"store":"test/Tally"')
+      expect(JSON.stringify(saved)).toContain('"by":5')
+
+      yield* tally.commands.added({ by: 100 })
+
+      const replayed = yield* mcp.call("load_session", saved)
+
+      expect([replayed.failed, replayed.said]).toEqual([
+        false,
+        [{ store: "test/Tally", state: expect.stringMatching(/"count": 6\b/) }],
+      ])
+
+      const elsewhere = yield* mcp.call("load_session", {
+        stores: [{ store: "test/Missing", entries: [] }],
+        ui: [],
+      })
+
+      expect([elsewhere.failed, JSON.stringify(elsewhere.said)]).toEqual([
+        true,
+        expect.stringContaining("SPAR_TOOL_NO_STORE"),
+      ])
     }).pipe(Effect.scoped, Effect.provide(Served)),
   )
 
