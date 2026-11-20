@@ -1,5 +1,16 @@
 import { Effect, Option, Schema, pipe } from "effect"
-import { Markup, Props, Reactive, Router, UiState, View, compose, withProps, withStore } from "spar"
+import {
+  Events,
+  Markup,
+  Props,
+  Reactive,
+  Router,
+  UiState,
+  View,
+  compose,
+  withProps,
+  withStore,
+} from "spar"
 import type { Heading, Hit, Page } from "./api.ts"
 import { Loads } from "./Loads.ts"
 import { groups } from "./nav.ts"
@@ -63,12 +74,17 @@ const NavGroup = compose(
 
 const docFields = { params: Props.Reactive(DocParams) }
 
+export const titleOf = (page: string | undefined): string =>
+  page === undefined ? "Spar" : `${page} · Spar`
+
 const DocPage = compose(
   withProps(docFields),
   Effect.fnUntraced(function* ({ params }: Schema.Struct<typeof docFields>["Type"]) {
     const page = yield* PageQuery.ask(Reactive.map(params, (now) => now.slug))
     const current = Reactive.map(params, (now) => now.slug)
     const state = yield* Reactive.zip(page.status, current)
+
+    yield* Events.title(Reactive.map(page.latest, (shown) => titleOf(shown?.title)))
 
     return {
       groups: yield* Effect.forEach(groups, (group) =>
@@ -98,6 +114,8 @@ const Home = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
     const page = yield* PageQuery.ask("home")
+
+    yield* Events.title(Reactive.succeed(titleOf(undefined)))
 
     return {
       before: Reactive.map(page.value, (shown) => partOf(shown, 0)),

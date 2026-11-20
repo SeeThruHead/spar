@@ -7,6 +7,8 @@ import { events, listen, on } from "./internal/listen.ts"
 import type { Source } from "./internal/listen.ts"
 import { ViewScope } from "./internal/viewScope.ts"
 import { OnServer } from "./internal/server.ts"
+import * as Dom from "./internal/dom.ts"
+import { observed } from "./internal/reactive.ts"
 import { fromStream, succeed } from "./Reactive.ts"
 import type { Reactive } from "./Reactive.ts"
 
@@ -20,6 +22,15 @@ const inBrowser = <A, R>(
 
 const streamInBrowser = <A>(there: Stream.Stream<A>): Stream.Stream<A> =>
   Stream.unwrap(Effect.map(onServer, (server) => (server ? Stream.empty : there)))
+
+export const title = (text: Reactive<string>): Effect.Effect<void, never, Scope.Scope> =>
+  inBrowser(
+    Effect.andThen(
+      Effect.flatMap(text.get, (now) => Effect.sync(() => Dom.setTitle(now))),
+      observed(text, Dom.setTitle),
+    ),
+    undefined,
+  )
 
 export const prevent = <Event>(handler: Handler<Event>): Modified<Event> =>
   modify("preventDefault", handler)

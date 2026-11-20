@@ -81,6 +81,10 @@ export const setMarkup = (node: Host, html: string): void => {
   node.innerHTML = html
 }
 
+export const setTitle = (text: string): void => {
+  document.title = text
+}
+
 export const toggleClass = (node: Host, names: string, on: unknown): void => {
   names
     .split(/\s+/)

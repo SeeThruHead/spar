@@ -3,7 +3,7 @@ import { HttpRouter } from "effect/http"
 import { RpcSerialization, RpcServer } from "effect/rpc"
 import { Server } from "spar"
 import { Library } from "../src/api.ts"
-import { Site } from "../src/Site.ts"
+import { Site, titleOf } from "../src/Site.ts"
 import { Content } from "../server/content.ts"
 import { LibraryLive, layer } from "../server/layers.ts"
 
@@ -11,15 +11,25 @@ const root = new URL("../dist/", import.meta.url).pathname
 
 const guide = new URL("../../../LLMS.md", import.meta.url).pathname
 
-const open = [
-  "<!doctype html>",
-  '<html lang="en">',
-  '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
-  "<title>Spar</title>",
-  '<meta name="description" content="Spar: a front-end framework built on Effect, for agents that write front-end code.">',
-  '<link rel="stylesheet" href="/site.css"></head>',
-  '<body><div id="root">',
-].join("")
+const escaped = (text: string): string =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+
+const titleFor = (content: Content, url: string): string => {
+  const slug = /^\/docs\/([a-z0-9-]+)/.exec(url)?.[1]
+
+  return titleOf(content.pages.find((page) => page.slug === slug)?.title)
+}
+
+const opening = (title: string) =>
+  [
+    "<!doctype html>",
+    '<html lang="en">',
+    '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escaped(title)}</title>`,
+    '<meta name="description" content="Spar: a front-end framework built on Effect, for agents that write front-end code.">',
+    '<link rel="stylesheet" href="/site.css"></head>',
+    '<body><div id="root">',
+  ].join("")
 
 const endWith = (script: string): string =>
   `<script type="module" src="/${script}"></script></body></html>`
@@ -36,7 +46,7 @@ const page = (content: Content, url: string, tools: boolean) =>
           Stream.encodeText(
             Server.renderToStream(Site, {
               layer: layer(content, url),
-              open,
+              open: opening(titleFor(content, url)),
               close: "</div>",
               end: endWith(tools ? "entry-devtools.js" : "entry.js"),
             }),

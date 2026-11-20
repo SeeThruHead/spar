@@ -253,6 +253,7 @@ other tabs when something was added. The service has `pending`, `dead`, `retry(k
 | `Events.fromDocument(type)`, `Events.fromWindow(type)`               | The same events as streams.                                              |
 | `Events.prevent(handler)`, `Events.stop(handler)`                    | A handler that prevents the default or stops propagation, synchronously. |
 | `Events.online`, `Events.visible`, `Events.mediaQuery(query)`        | Reactive values for the connection, tab visibility and a media query.    |
+| `Events.title(text)`                                                 | Keeps the document's title in step with a reactive value while mounted.  |
 
 Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`, `onPointerdown`.
 

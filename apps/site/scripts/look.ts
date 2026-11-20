@@ -65,6 +65,9 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
 
   const homeWide = await wide(page)
 
+  const sent = await fetch(`${origin}/docs/getting-started`).then((answer) => answer.text())
+  const sentTitle = /<title>([^<]*)<\/title>/.exec(sent)?.[1] ?? ""
+
   await page.goto(`${origin}/docs/getting-started`)
   await ready(page)
   await shot(page, size, "docs")
@@ -76,6 +79,7 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await page.getByRole("heading", { level: 1, name: "Principles" }).waitFor({ timeout: 5000 })
 
   const reloaded = (await page.evaluate(() => Reflect.get(window, "stayed"))) !== true
+  const titled = await page.title()
 
   await page.goBack()
   await page.getByRole("heading", { level: 1, name: "Getting started" }).waitFor({ timeout: 5000 })
@@ -96,6 +100,12 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
     ...docsWide,
     ...drawn,
     ...(reloaded ? [`${size.name}: a link inside a doc page reloaded the page`] : []),
+    ...(titled === "Principles · Spar"
+      ? []
+      : [`${size.name}: the Principles page was titled "${titled}"`]),
+    ...(sentTitle === "Getting started · Spar"
+      ? []
+      : [`${size.name}: the server titled Getting started "${sentTitle}"`]),
   ]
 }
 

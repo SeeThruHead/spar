@@ -6,6 +6,7 @@ import { TestClock } from "effect/testing"
 import { Events, Reactive, UiState, compose } from "spar"
 import { MenuItemsView, MenuView, SearchView, StatusView } from "./menus.tsx"
 import { eventually, find, gone, mount } from "spar/testing"
+import { OnServer } from "../src/internal/server.ts"
 
 const yesNo = (value: boolean): string => (value ? "yes" : "no")
 
@@ -82,6 +83,31 @@ const open = Effect.gen(function* () {
   yield* find("menu", "Options")
 
   return button
+})
+
+describe("the document's title", () => {
+  it.live("follows a reactive value while it is in scope, and is left alone on the server", () =>
+    Effect.gen(function* () {
+      const named = yield* SubscriptionRef.make("First")
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Events.title(Reactive.fromSubscriptionRef(named))
+          expect(document.title).toBe("First")
+          yield* SubscriptionRef.set(named, "Second")
+          yield* eventually(() => expect(document.title).toBe("Second"))
+        }),
+      )
+      yield* SubscriptionRef.set(named, "After")
+      yield* Effect.yieldNow
+      expect(document.title).toBe("Second")
+
+      yield* Effect.scoped(Events.title(Reactive.succeed("On the server"))).pipe(
+        Effect.provideService(OnServer, true),
+      )
+      expect(document.title).toBe("Second")
+    }),
+  )
 })
 
 describe("events beyond one element", () => {
