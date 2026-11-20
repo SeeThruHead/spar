@@ -417,7 +417,7 @@ sequenceDiagram
 
 `Server.render(Component, { layer })` runs the same component on a server and gives its HTML
 and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
-trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the page drawn again as finished HTML (`docs/routing-and-data.md`). Loading parts (`View.pending`)
+trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the finished HTML of each component it changed, put in place between that component's marks (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
 

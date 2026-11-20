@@ -7,7 +7,9 @@ import type { Element } from "./internal/element.ts"
 import * as Cell from "./internal/cell.ts"
 import { Dehydrated, Text, stateId } from "./internal/dehydrated.ts"
 import { Frame, noPage } from "./internal/frame.ts"
-import { toHtml } from "./internal/html.ts"
+import { Marked, toHtml } from "./internal/html.ts"
+import { partsOf, replacements } from "./internal/parts.ts"
+import type { Part, Replacement } from "./internal/parts.ts"
 import { OnServer } from "./internal/server.ts"
 import { Tree, UiTree } from "./internal/uiTree.ts"
 import type { NoProps } from "./App.ts"
@@ -151,58 +153,82 @@ const redrawn = Effect.fnUntraced(function* (
 ) {
   const registered = stores.read()
   const draw = yield* Scope.make()
-  const html = yield* Scope.provide(toHtml(element), draw)
+  const html = yield* Scope.provide(markedHtml(element), draw)
 
   yield* Scope.close(draw, Exit.void)
   yield* Effect.sync(() => stores.write(registered))
 
-  return html
+  return partsOf(html)
 })
 
+const markedHtml = (element: Element) => Effect.provideService(toHtml(element), Marked, true)
+
 type Drawing = { readonly element: Element; readonly root: string }
+
+const pieceOf = (root: string, replacement: Replacement): string =>
+  replacement.open === -1
+    ? Pieces.html(root, replacement.html)
+    : Pieces.part(root, replacement.open, replacement.close, replacement.html)
+
+const sentAgain = (drawing: Drawing, sent: Part, now: Part) => {
+  const replaced = replacements(sent, now).toReversed()
+
+  return Effect.as(
+    Effect.annotateCurrentSpan({
+      "spar.parts": replaced.length,
+      "spar.whole": replaced.some((replacement) => replacement.open === -1),
+    }),
+    replaced.map((replacement) => pieceOf(drawing.root, replacement)),
+  ).pipe((annotated) => Effect.withSpan(annotated, "Server.piece", { captureStackTrace: false }))
+}
 
 const piecesFor = (
   drawing: Drawing,
   stores: Held<ReadonlyArray<Inspected>>,
   changed: ReadonlyArray<readonly [string, Schema.Json]>,
-) =>
+  sent: Part,
+): Effect.Effect<{ readonly chunks: ReadonlyArray<string>; readonly parts: Part }> =>
   changed.length === 0
-    ? Effect.succeed([])
-    : Effect.map(redrawn(drawing.element, stores), (html) => [
-        Pieces.script({ stores: Object.fromEntries(changed) }),
-        Pieces.html(drawing.root, html),
-      ])
+    ? Effect.succeed({ chunks: [], parts: sent })
+    : Effect.flatMap(redrawn(drawing.element, stores), (now) =>
+        Effect.map(sentAgain(drawing, sent, now), (replaced) => ({
+          chunks: [Pieces.script({ stores: Object.fromEntries(changed) }), ...replaced],
+          parts: now,
+        })),
+      )
+
+type Following = {
+  readonly sent: Readonly<Record<string, string>>
+  readonly parts: Part
+  readonly quiet: number
+}
 
 const followed = <E>(
   drawing: Drawing,
   stores: Held<ReadonlyArray<Inspected>>,
   queue: Queue.Queue<string, E | Cause.Done>,
-  sent: Readonly<Record<string, string>>,
-  quiet: number,
+  following: Following,
 ): Effect.Effect<void> =>
-  quiet === 2
+  following.quiet === 2
     ? Effect.void
     : Effect.gen(function* () {
         yield* Effect.sleep("1 milli")
 
         const now = yield* Effect.forEach(stores.read(), encodedOf)
-        const changed = changedSince(sent, now)
+        const changed = changedSince(following.sent, now)
         const busy = yield* stillLoading(stores)
+        const sending = yield* piecesFor(drawing, stores, changed, following.parts)
 
-        yield* Effect.flatMap(piecesFor(drawing, stores, changed), (chunks) =>
-          Queue.offerAll(queue, chunks),
-        )
+        yield* Queue.offerAll(queue, sending.chunks)
 
-        return yield* followed(
-          drawing,
-          stores,
-          queue,
-          {
-            ...sent,
+        return yield* followed(drawing, stores, queue, {
+          sent: {
+            ...following.sent,
             ...Object.fromEntries(changed.map(([key, held]) => [key, Formatter.formatJson(held)])),
           },
-          busy || changed.length > 0 ? 0 : quiet + 1,
-        )
+          parts: sending.parts,
+          quiet: busy || changed.length > 0 ? 0 : following.quiet + 1,
+        })
       })
 
 export const renderInPieces = <R, LayerError = never>(
@@ -223,12 +249,12 @@ export const renderInPieces = <R, LayerError = never>(
       yield* Queue.offer(queue, options.open)
 
       const element = yield* component.mount({})
-      const html = yield* toHtml(element)
+      const marked = yield* markedHtml(element)
       const span = yield* Effect.orDie(Effect.currentSpan)
       const states = yield* Effect.forEach(stores.read(), encodedOf)
 
       yield* Queue.offerAll(queue, [
-        html,
+        marked,
         options.close,
         stateScript({
           stores: Object.fromEntries(states),
@@ -238,13 +264,11 @@ export const renderInPieces = <R, LayerError = never>(
         }),
         options.script,
       ])
-      yield* followed(
-        { element, root: options.root ?? "#root" },
-        stores,
-        queue,
-        Object.fromEntries(states.map(([key, held]) => [key, Formatter.formatJson(held)])),
-        0,
-      )
+      yield* followed({ element, root: options.root ?? "#root" }, stores, queue, {
+        sent: Object.fromEntries(states.map(([key, held]) => [key, Formatter.formatJson(held)])),
+        parts: partsOf(marked),
+        quiet: 0,
+      })
       yield* Queue.offerAll(queue, [Pieces.script({ stores: {}, done: true }), options.end])
       yield* Queue.end(queue)
     }).pipe(

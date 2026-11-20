@@ -42,9 +42,9 @@ Built since, and smaller than they sound, but not done:
   wins, and when the swap is shown).
 - **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
-- **A page sent in pieces is redrawn whole.** Each piece of finished HTML is the whole page drawn
-  again, not only the part that changed, and it needs scripts turned on (a one-line script, not
-  the app's bundle).
+- **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
+  the components that changed, put in place by a one-line script (not the app's bundle); with
+  scripts off the page stays as first drawn.
 - **An event's span names its view only with the devtools on.** The renderer does not know
   which view drew a node; the inspector does.
 - **A query's default stale time is 0,** so a preload that finishes before the click, or a page

@@ -22,8 +22,16 @@ const unclosed = (html: string): string => html.replaceAll("</template", "<\\/te
 
 const Selector = Schema.fromJsonString(Schema.String)
 
+const Position = Schema.fromJsonString(Schema.Int)
+
+const quoted = (root: string): string =>
+  Schema.encodeSync(Selector)(root).replaceAll("<", "\\u003c")
+
 export const html = (root: string, drawn: string): string =>
-  `<template data-spar-piece>${unclosed(drawn)}</template><script>(function(t){var r=document.querySelector(${Schema.encodeSync(Selector)(root).replaceAll("<", "\\u003c")});if(r&&!r.hasAttribute("${taken}"))r.replaceChildren(t.content)})(document.currentScript.previousElementSibling)</script>`
+  `<template data-spar-piece>${unclosed(drawn)}</template><script>(function(t){var r=document.querySelector(${quoted(root)});if(r&&!r.hasAttribute("${taken}"))r.replaceChildren(t.content)})(document.currentScript.previousElementSibling)</script>`
+
+export const part = (root: string, open: number, close: number, drawn: string): string =>
+  `<template data-spar-piece>${unclosed(drawn)}</template><script>(function(t){var r=document.querySelector(${quoted(root)});if(!r||r.hasAttribute("${taken}"))return;var e=function(n,d){return Array.from(n.childNodes).flatMap(function(c){return c.nodeType===8?(c.data===d?[c]:[]):e(c,d)})};var a=e(r,"spar(")[${Schema.encodeSync(Position)(open)}],b=e(r,"spar)")[${Schema.encodeSync(Position)(close)}];if(!a||!b)return;var g=document.createRange();g.setStartAfter(a);g.setEndBefore(b);g.deleteContents();g.insertNode(t.content)})(document.currentScript.previousElementSibling)</script>`
 
 const decodePiece = Schema.decodeUnknownOption(Piece)
 

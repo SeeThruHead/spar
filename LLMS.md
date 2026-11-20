@@ -512,10 +512,17 @@ piece to the query's store (the store's log shows it as `streamed`), the views u
 browser asks the backend for nothing. The whole response is one render in one trace. The server
 code chooses per page which of the two to call.
 
-Each data piece is followed by the page drawn again on the server with that data, as finished
-HTML in a `<template>` with a one-line script that puts it in the root (`#root`, or the `root`
-option's selector). That script does nothing once the app has started taking the page over (the
-root is marked `data-spar-taken`), so the server's HTML never lands on a page the app is drawing.
+Each data piece is followed by the parts of the page that data changed. The server draws the page
+again, compares each component with what it last sent, and sends only the components whose own
+markup changed, each as finished HTML in a `<template>` with a one-line script that puts it
+between that component's two marks. In a page sent in pieces every component is wrapped in
+`<!--spar(-->` and `<!--spar)-->`, and the takeover removes the marks as it reaches them, without
+making any node again. A slow supplier on a product page arrives as the product's component
+alone, not the page around it. When what changed is outside every component, the whole root
+(`#root`, or the `root` option's selector) is sent instead. Each round is a `Server.piece` span
+in the trace of the render, with how many parts it sent. The script does nothing once the app has
+started taking the page over (the root is marked `data-spar-taken`), so the server's HTML never
+lands on a page the app is drawing.
 So a slow or blocked bundle still leaves the reader with the finished page, and when the bundle
 does arrive, the pieces that came before it are applied before its first draw, so it takes over
 the finished page as it is.
@@ -530,12 +537,13 @@ notices the end and asks for what is missing itself.
 From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
 and picked up in the browser, a typed server boundary, and a choice per page between a complete
 page and one sent in pieces. It does not take: routes from files, or server functions made by a
-compiler. What is sent in pieces is data, not HTML: the server does not send finished fragments to
-swap in. There are no server components and no second kind of component.
+compiler. What is sent in pieces is data and the finished HTML of each component it changed, drawn
+by the same components the browser runs. There are no server components and no second kind of
+component.
 
 ### Not built
 
-- Sending finished HTML for a piece, so a page sent in pieces fills in without JavaScript.
+- Filling in a page sent in pieces with scripts turned off: each piece needs its one-line script.
 - A span for the code of a split page arriving.
 
 
@@ -1189,7 +1197,7 @@ sequenceDiagram
 
 `Server.render(Component, { layer })` runs the same component on a server and gives its HTML
 and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
-trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the page drawn again as finished HTML (`docs/routing-and-data.md`). Loading parts (`View.pending`)
+trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the finished HTML of each component it changed, put in place between that component's marks (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
 
@@ -2797,9 +2805,9 @@ Built since, and smaller than they sound, but not done:
   wins, and when the swap is shown).
 - **Queries:** an optimistic change stays shown if its
   send fails for good, until something invalidates the query.
-- **A page sent in pieces is redrawn whole.** Each piece of finished HTML is the whole page drawn
-  again, not only the part that changed, and it needs scripts turned on (a one-line script, not
-  the app's bundle).
+- **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
+  the components that changed, put in place by a one-line script (not the app's bundle); with
+  scripts off the page stays as first drawn.
 - **An event's span names its view only with the devtools on.** The renderer does not know
   which view drew a node; the inspector does.
 - **A query's default stale time is 0,** so a preload that finishes before the click, or a page

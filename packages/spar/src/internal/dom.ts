@@ -338,6 +338,10 @@ export const listEnd = "]"
 
 export const textBreak = ","
 
+export const partStart = "spar("
+
+export const partEnd = "spar)"
+
 export type Cursor = { next: ChildNode | null }
 
 export const cursorIn = (parent: Node): Cursor => ({ next: parent.firstChild })
@@ -358,10 +362,23 @@ const skipTextBreak = (cursor: Cursor): void => {
   taken(cursor, node).remove()
 }
 
+const isMark = (node: Node | null): node is Comment =>
+  isComment(node, partStart) || isComment(node, partEnd)
+
+const dropMarks = (cursor: Cursor): void => {
+  const node = cursor.next
+  if (!isMark(node)) return
+
+  taken(cursor, node).remove()
+  dropMarks(cursor)
+}
+
 const isHost = (node: Node | null): node is Host =>
   node instanceof HTMLElement || node instanceof SVGElement
 
 export const claimElement = (cursor: Cursor, tag: string): Host | undefined => {
+  dropMarks(cursor)
+
   const node = cursor.next
   if (!isHost(node)) return undefined
   if (node.localName !== tag.toLowerCase() && node.localName !== tag) return undefined
@@ -370,6 +387,7 @@ export const claimElement = (cursor: Cursor, tag: string): Host | undefined => {
 }
 
 export const claimText = (cursor: Cursor, parent: Node): Text => {
+  dropMarks(cursor)
   skipTextBreak(cursor)
 
   const node = cursor.next
@@ -379,6 +397,8 @@ export const claimText = (cursor: Cursor, parent: Node): Text => {
 }
 
 export const claimComment = (cursor: Cursor, parent: Node, data: string): Comment => {
+  dropMarks(cursor)
+
   const node = cursor.next
   if (isComment(node, data)) return taken(cursor, node)
 
@@ -398,6 +418,8 @@ export const claimList = (
   cursor: Cursor,
   parent: Node,
 ): { readonly anchor: Comment; readonly rows: Cursor } => {
+  dropMarks(cursor)
+
   const start = cursor.next
   const end = isComment(start, listStart) ? closing(start.nextSibling, 0) : undefined
   if (!isComment(start, listStart) || end === undefined) {

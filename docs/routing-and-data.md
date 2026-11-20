@@ -263,10 +263,17 @@ piece to the query's store (the store's log shows it as `streamed`), the views u
 browser asks the backend for nothing. The whole response is one render in one trace. The server
 code chooses per page which of the two to call.
 
-Each data piece is followed by the page drawn again on the server with that data, as finished
-HTML in a `<template>` with a one-line script that puts it in the root (`#root`, or the `root`
-option's selector). That script does nothing once the app has started taking the page over (the
-root is marked `data-spar-taken`), so the server's HTML never lands on a page the app is drawing.
+Each data piece is followed by the parts of the page that data changed. The server draws the page
+again, compares each component with what it last sent, and sends only the components whose own
+markup changed, each as finished HTML in a `<template>` with a one-line script that puts it
+between that component's two marks. In a page sent in pieces every component is wrapped in
+`<!--spar(-->` and `<!--spar)-->`, and the takeover removes the marks as it reaches them, without
+making any node again. A slow supplier on a product page arrives as the product's component
+alone, not the page around it. When what changed is outside every component, the whole root
+(`#root`, or the `root` option's selector) is sent instead. Each round is a `Server.piece` span
+in the trace of the render, with how many parts it sent. The script does nothing once the app has
+started taking the page over (the root is marked `data-spar-taken`), so the server's HTML never
+lands on a page the app is drawing.
 So a slow or blocked bundle still leaves the reader with the finished page, and when the bundle
 does arrive, the pieces that came before it are applied before its first draw, so it takes over
 the finished page as it is.
@@ -281,10 +288,11 @@ notices the end and asks for what is missing itself.
 From TanStack Start this takes: the same loading code on both sides, the cache sent with the page
 and picked up in the browser, a typed server boundary, and a choice per page between a complete
 page and one sent in pieces. It does not take: routes from files, or server functions made by a
-compiler. What is sent in pieces is data, not HTML: the server does not send finished fragments to
-swap in. There are no server components and no second kind of component.
+compiler. What is sent in pieces is data and the finished HTML of each component it changed, drawn
+by the same components the browser runs. There are no server components and no second kind of
+component.
 
 ## Not built
 
-- Sending finished HTML for a piece, so a page sent in pieces fills in without JavaScript.
+- Filling in a page sent in pieces with scripts turned off: each piece needs its one-line script.
 - A span for the code of a split page arriving.

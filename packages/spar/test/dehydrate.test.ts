@@ -276,12 +276,35 @@ describe("a page sent in pieces", () => {
 
       const drawn = parts.filter((part) => part.startsWith("<template data-spar-piece>"))
 
-      expect(drawn.length).toBe(piecesOf(parts).length - 1)
+      expect(drawn.length).toBeGreaterThanOrEqual(1)
       expect(drawn.at(-1)).toContain('<output aria-label="Orders status">loaded</output>')
       expect(drawn.at(-1)).toContain('<output aria-label="Orders count">3</output>')
       expect(drawn.at(-1)).toContain('document.querySelector("#root")')
-      expect(drawn.at(-1)).toContain('!r.hasAttribute("data-spar-taken")')
+      expect(drawn.at(-1)).toContain('r.hasAttribute("data-spar-taken")')
+      expect(drawn.join("")).toContain("createRange")
+      expect(drawn.join("")).not.toContain("replaceChildren")
+      expect(parts[1]).toContain("<!--spar(-->")
     }),
+  )
+
+  it.live(
+    "is drawn again whole when what changed is the page's own markup, outside every part",
+    () =>
+      Effect.gen(function* () {
+        const parts = yield* Stream.runCollect(
+          Server.renderInPieces(Priced, {
+            layer: queries,
+            open: "<main>",
+            close: "</main>",
+            script: "",
+            end: "",
+          }),
+        )
+        const drawn = parts.filter((part) => part.startsWith("<template data-spar-piece>"))
+
+        expect(drawn.at(-1)).toContain("replaceChildren")
+        expect(drawn.at(-1)).toContain('<output aria-label="Orders count">3</output>')
+      }),
   )
 
   it.live("pieces that arrived before the app started are in its first draw", () =>

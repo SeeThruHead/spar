@@ -1,4 +1,4 @@
-import { Effect, Predicate } from "effect"
+import { Context, Effect, Predicate } from "effect"
 import type { Scope } from "effect"
 import * as Cell from "./cell.ts"
 import * as Dom from "./dom.ts"
@@ -112,11 +112,22 @@ const intrinsic: (element: Intrinsic) => Pieces = Effect.fnUntraced(function* (e
   return solid(`${open}${joined(inside)}</${element.tag}>`)
 })
 
-const span = (element: Element): Effect.Effect<string, never, Scope.Scope> => {
+export const Marked = Context.Reference<boolean>("spar/internal/html/Marked", {
+  defaultValue: () => false,
+})
+
+const plain = (element: Element): Effect.Effect<string, never, Scope.Scope> => {
   if (element[TypeId] === "Intrinsic") return Effect.map(intrinsic(element), joined)
 
   return Effect.map(pieces(element), (inside) => `${comment("")}${joined(inside)}${comment("")}`)
 }
+
+const span = (element: Element): Effect.Effect<string, never, Scope.Scope> =>
+  Effect.flatMap(Effect.service(Marked), (marked) =>
+    Effect.map(plain(element), (html) =>
+      marked ? `${comment(Dom.partStart)}${html}${comment(Dom.partEnd)}` : html,
+    ),
+  )
 
 const rowElement = <A>(rows: Rows<A>, item: A): Effect.Effect<Element, never, Scope.Scope> => {
   const key = rows.key(item)

@@ -197,16 +197,51 @@ const sentInPieces = async (): Promise<void> => {
     )
   if (!all.slice(first.length).includes("__sparPieces") || !all.includes("Valley dairy"))
     throw new Error("The slow supplier did not follow as a piece")
+  if (all.slice(first.length).includes("replaceChildren"))
+    throw new Error("The slow supplier was sent as the whole page drawn again")
+  if (!all.slice(first.length).includes("createRange"))
+    throw new Error("The slow supplier was not sent as its own component")
+  if (all.slice(first.length).includes("About the bread"))
+    throw new Error("The piece for the slow supplier carried the page around it")
   if (!all.trimEnd().endsWith("</body></html>")) throw new Error("The document was not closed")
 }
 
+const markSent = (): void => {
+  document.querySelectorAll("#root *").forEach((node) => Reflect.set(node, "spar-sent", true))
+}
+
+const madeAgain = (): number =>
+  [...document.querySelectorAll("#root *")].filter(
+    (node) => Reflect.get(node, "spar-sent") !== true,
+  ).length
+
 const takenInPieces = async (page: Page): Promise<void> => {
+  const bundle = Promise.withResolvers<void>()
+
+  await page.route("**/client.js", async (route) => {
+    await bundle.promise
+    await route.continue()
+  })
   await page.goto(`${origin}/slow/cheese`, { waitUntil: "commit" })
   await said(page, "Product", "Cheese & crackers")
   await said(page, "Supplier", "Valley dairy")
   await said(page, "Supplier status", "loaded")
+  await page.evaluate(markSent)
+  bundle.resolve()
   await page.locator("#root[data-ready]").waitFor()
-  await sameTrace(page, ["Server.render", "Database.product", "Database.supplier", "App.hydrate"])
+  await page.unroute("**/client.js")
+
+  const again = await page.evaluate(madeAgain)
+  if (again !== 0)
+    throw new Error(`Taking over the page sent in pieces made ${again} elements again`)
+
+  await sameTrace(page, [
+    "Server.render",
+    "Server.piece",
+    "Database.product",
+    "Database.supplier",
+    "App.hydrate",
+  ])
   await page.waitForTimeout(200)
 
   const afterPieces = await asked(page)
