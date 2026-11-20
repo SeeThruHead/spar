@@ -86,6 +86,50 @@ are checked while the app runs; they are not proved.
 
 (`packages/spar/test/rules.test.ts`)
 
+### Commands declared for each state
+
+A guard has to be remembered on every action, and one forgotten guard is a hole: a second
+"reset" that starts the flow again, or a stray "reset completed" that ends it early. For a store
+with states, say instead which commands each state accepts. Anything not listed is refused, by
+name, with nothing to remember.
+
+```ts
+export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
+  state: State,
+  initialState,
+  actions: { incremented, resetClicked, resetCompleted },
+  selectors: { count, resetting },
+  phases: {
+    of: (state) => state.phase,
+    accepts: {
+      idle: ["incremented", "resetClicked"],
+      resetting: ["resetCompleted"],
+    },
+    internal: ["resetCompleted"],
+  },
+}) {}
+
+export const resetAfterDelay = Store.during("resetting", (_state: State, send) =>
+  Effect.andThen(
+    Effect.sleep(Duration.seconds(2)),
+    send(CounterStore.actions.resetCompleted, undefined),
+  ),
+)
+```
+
+- `accepts` lists the actions each state takes. A command sent in a state that does not list it
+  is refused: `resetClicked: it is not accepted while resetting`.
+- `internal` names actions only the store's own effects may send. From a view, a key or another
+  store they are refused in every state, so a completion cannot arrive from outside.
+- `Store.during(state, effect)` is an effect that belongs to a state: it starts when the store
+  enters the state, including when the store opens already in it, and is interrupted when the
+  store leaves. There is never a second timer, and nothing is left running after the state ends.
+
+The action names are checked by the compiler. The state names are plain strings: a misspelt one
+means nothing is accepted there.
+
+(`packages/spar/test/phases.test.ts`)
+
 ## Five mistakes Spar reports while the app runs
 
 None of these can be refused by the compiler, because each is ordinary code that is wrong only in

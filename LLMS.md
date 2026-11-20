@@ -823,6 +823,8 @@ on screen until they mount. Give an app its own tree with
 | `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                                   |
 | `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                        |
 | `invariants`, `transitions` (on the definition)                       | Named rules for the whole store: what no state may be, and what no command may do. A command that would break one is refused by name.   |
+| `phases` (on the definition)                                          | The commands each state accepts, and the ones only the store's own effects may send. Anything not listed is refused by name.            |
+| `Store.during(state, effect)`                                         | An effect that runs while the store is in a state: started on entry, interrupted on exit.                                               |
 | `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                                            |
 | `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                          |
 | `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
@@ -1299,6 +1301,50 @@ should be a sentence for the user, and a rule for what must hold whatever is add
 are checked while the app runs; they are not proved.
 
 (`packages/spar/test/rules.test.ts`)
+
+#### Commands declared for each state
+
+A guard has to be remembered on every action, and one forgotten guard is a hole: a second
+"reset" that starts the flow again, or a stray "reset completed" that ends it early. For a store
+with states, say instead which commands each state accepts. Anything not listed is refused, by
+name, with nothing to remember.
+
+```ts
+export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
+  state: State,
+  initialState,
+  actions: { incremented, resetClicked, resetCompleted },
+  selectors: { count, resetting },
+  phases: {
+    of: (state) => state.phase,
+    accepts: {
+      idle: ["incremented", "resetClicked"],
+      resetting: ["resetCompleted"],
+    },
+    internal: ["resetCompleted"],
+  },
+}) {}
+
+export const resetAfterDelay = Store.during("resetting", (_state: State, send) =>
+  Effect.andThen(
+    Effect.sleep(Duration.seconds(2)),
+    send(CounterStore.actions.resetCompleted, undefined),
+  ),
+)
+```
+
+- `accepts` lists the actions each state takes. A command sent in a state that does not list it
+  is refused: `resetClicked: it is not accepted while resetting`.
+- `internal` names actions only the store's own effects may send. From a view, a key or another
+  store they are refused in every state, so a completion cannot arrive from outside.
+- `Store.during(state, effect)` is an effect that belongs to a state: it starts when the store
+  enters the state, including when the store opens already in it, and is interrupted when the
+  store leaves. There is never a second timer, and nothing is left running after the state ends.
+
+The action names are checked by the compiler. The state names are plain strings: a misspelt one
+means nothing is accepted there.
+
+(`packages/spar/test/phases.test.ts`)
 
 ### Five mistakes Spar reports while the app runs
 

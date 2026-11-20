@@ -28,20 +28,22 @@ export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
     count: Store.selector(Schema.Int, (state: State) => state.count),
     resetting: Store.selector(Schema.Boolean, (state: State) => state.phase === "resetting"),
   },
+  phases: {
+    of: (state) => state.phase,
+    accepts: {
+      idle: ["incremented", "resetClicked"],
+      resetting: ["resetCompleted"],
+    },
+    internal: ["resetCompleted"],
+  },
   invariants: {
     CountIsNeverNegative: (state) => state.count >= 0,
   },
-  transitions: {
-    NothingChangesDuringAReset: ({ before, after, action }) =>
-      before.phase !== "resetting" || action === "resetCompleted" || after === before,
-  },
 }) {}
 
-export const resetAfterDelay = Store.after(
-  CounterStore.actions.resetClicked,
-  (_payload, _state, send) =>
-    Effect.andThen(
-      Effect.sleep(Duration.seconds(2)),
-      send(CounterStore.actions.resetCompleted, undefined),
-    ),
+export const resetAfterDelay = Store.during("resetting", (_state: State, send) =>
+  Effect.andThen(
+    Effect.sleep(Duration.seconds(2)),
+    send(CounterStore.actions.resetCompleted, undefined),
+  ),
 )

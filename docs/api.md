@@ -112,6 +112,8 @@ on screen until they mount. Give an app its own tree with
 | `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                                   |
 | `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                        |
 | `invariants`, `transitions` (on the definition)                       | Named rules for the whole store: what no state may be, and what no command may do. A command that would break one is refused by name.   |
+| `phases` (on the definition)                                          | The commands each state accepts, and the ones only the store's own effects may send. Anything not listed is refused by name.            |
+| `Store.during(state, effect)`                                         | An effect that runs while the store is in a state: started on entry, interrupted on exit.                                               |
 | `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                                            |
 | `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                          |
 | `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
