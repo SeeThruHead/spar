@@ -1,4 +1,4 @@
-import { Context, Effect, Fiber, Option, Queue, Stream, Tracer } from "effect"
+import { Context, Effect, Fiber, Option, Predicate, Queue, Stream, Tracer } from "effect"
 import type { Scope } from "effect"
 import { run, toAction } from "./action.ts"
 import type { Action } from "./action.ts"
@@ -43,16 +43,14 @@ const causedBy = (effect: Effect.Effect<void>, cause: Option.Option<Tracer.AnySp
 const rootOf = (span: Tracer.AnySpan): Tracer.AnySpan =>
   span._tag === "Span" && Option.isSome(span.parent) ? rootOf(span.parent.value) : span
 
-const eventOf = (span: Tracer.AnySpan): number => {
-  if (span._tag !== "Span") return 0
+const eventOf = (span: Tracer.AnySpan): Option.Option<number> => {
+  if (span._tag !== "Span") return Option.none()
 
-  const event: unknown = span.attributes.get("spar.event")
-
-  return typeof event === "number" ? event : 0
+  return Option.liftPredicate(span.attributes.get("spar.event"), Predicate.isNumber)
 }
 
-export const causedAt = (): number =>
-  Option.match(causing(), { onNone: () => 0, onSome: (span) => eventOf(rootOf(span)) })
+export const causedAt = (): Option.Option<number> =>
+  Option.flatMap(causing(), (span) => eventOf(rootOf(span)))
 
 export const starterIn = Effect.fnUntraced(function* (scope: Scope.Scope) {
   const services = yield* Effect.context()

@@ -540,12 +540,12 @@ export const typingReplaced = (
   node: Host,
   name: string,
   value: unknown,
-  causedAt: number,
+  causedAt: Option.Option<number>,
 ): boolean => {
   if (name !== "value" || Reflect.get(node, "value") === value) return false
   if (!isTextEntry(node)) return false
 
-  return (typedAt.get(node) ?? 0) > causedAt
+  return Option.exists(causedAt, (cause) => (typedAt.get(node) ?? 0) > cause)
 }
 
 export const described = (node: Host): string =>

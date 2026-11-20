@@ -88,7 +88,10 @@ describe("a field the user is typing in", () => {
         typedIn("textarea", []),
         typedIn("select", []),
         typedIn("input", [["type", "checkbox"]]),
-      ].map((node) => Dom.typingReplaced(node, "value", "from elsewhere", 0)),
+      ].map((node) => Dom.typingReplaced(node, "value", "from elsewhere", Option.some(0))),
     ).toEqual([true, true, true, false, false])
+    expect(Dom.typingReplaced(typedIn("input", []), "value", "from elsewhere", Option.none())).toBe(
+      false,
+    )
   })
 })
