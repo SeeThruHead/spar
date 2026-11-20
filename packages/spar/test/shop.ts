@@ -1,5 +1,5 @@
 import { Effect, pipe, Schema, Stream, SubscriptionRef } from "effect"
-import { Events, Handle, Props, Reactive, UiState, View } from "spar"
+import { Events, Handle, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import {
   DialogView,
   Fruit,
@@ -16,18 +16,16 @@ export const fruits: ReadonlyArray<Fruit> = [
 ]
 
 const Report = pipe(
-  View.connect(() => Effect.as(Effect.sleep("5 millis"), { lines: 3 }))(ReportView),
+  compose(() => Effect.as(Effect.sleep("5 millis"), { lines: 3 }))(ReportView),
   View.pending(LoadingView),
 )
 
-const Dialog = pipe(View.connect(() => Effect.succeed({}))(DialogView), View.portal)
+const Dialog = pipe(compose(() => Effect.succeed({}))(DialogView), View.portal)
 
-const Row = View.taking({ fruit: Props.Reactive(Fruit) }, ({ fruit }) => Effect.succeed({ fruit }))(
-  FruitView,
-)
+const Row = compose(withProps({ fruit: Props.Reactive(Fruit) }))(FruitView)
 
 export const Page = (all: Reactive.Reactive<ReadonlyArray<Fruit>>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const count = yield* UiState.make("count", Schema.Finite, 2)
       const busy = yield* UiState.make("busy", Schema.Boolean, true)

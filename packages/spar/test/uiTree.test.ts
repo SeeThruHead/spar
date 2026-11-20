@@ -1,13 +1,13 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Fiber, Layer, Schema, Stream, SubscriptionRef, pipe } from "effect"
-import { Reactive, Server, UiState, View } from "spar"
+import { Reactive, Server, UiState, View, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { BoardView, NoteView, PanelView, TwiceView } from "./tree.tsx"
 
 type Item = { readonly id: string }
 
-const Note = View.taking({ id: Schema.String }, ({ id }) =>
+const Note = compose(withProps({ id: Schema.String }), ({ id }) =>
   Effect.map(UiState.make("text", Schema.String, "new"), (text) => ({
     id,
     text,
@@ -15,12 +15,12 @@ const Note = View.taking({ id: Schema.String }, ({ id }) =>
   })),
 )(NoteView)
 
-const Panel = View.connect(() =>
+const Panel = compose(() =>
   Effect.map(UiState.make("open", Schema.Boolean, false), (open) => ({ open })),
 )(PanelView)
 
 const Board = (items: Reactive.Reactive<ReadonlyArray<Item>>, shown: Reactive.Reactive<boolean>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       return {
         title: yield* UiState.make("title", Schema.String, "Board"),
@@ -38,7 +38,7 @@ const Board = (items: Reactive.Reactive<ReadonlyArray<Item>>, shown: Reactive.Re
     }),
   )(BoardView)
 
-const Twice = View.connect(
+const Twice = compose(
   Effect.fnUntraced(function* () {
     const first = yield* UiState.make("same", Schema.String, "one")
 
@@ -79,10 +79,10 @@ describe("one tree of all UI state", () => {
 
         expect(sorted(yield* UiState.snapshot)).toEqual([
           'BoardView . title = "Board"',
-          'BoardView / NoteView[a] . text = "new"',
-          'BoardView / NoteView[b] . text = "new"',
-          "BoardView / PanelView . open = false",
-          "BoardView / PanelView#2 . open = false",
+          'BoardView / Note[a] . text = "new"',
+          'BoardView / Note[b] . text = "new"',
+          "BoardView / Panel . open = false",
+          "BoardView / Panel#2 . open = false",
         ])
       }),
     ),
@@ -114,13 +114,13 @@ describe("one tree of all UI state", () => {
         yield* Testing.eventually(() => expect(screen.getAllByText("Panel")).toHaveLength(1))
         expect(sorted(yield* UiState.snapshot)).toEqual([
           'BoardView . title = "Board"',
-          'BoardView / NoteView[b] . text = "new"',
-          "BoardView / PanelView . open = false",
+          'BoardView / Note[b] . text = "new"',
+          "BoardView / Panel . open = false",
         ])
 
         yield* SubscriptionRef.set(shown, true)
         yield* Testing.eventually(() => expect(screen.getAllByText("Panel")).toHaveLength(2))
-        expect(sorted(yield* UiState.snapshot)).toContain("BoardView / PanelView#2 . open = false")
+        expect(sorted(yield* UiState.snapshot)).toContain("BoardView / Panel#2 . open = false")
       }),
     ),
   )
@@ -147,13 +147,13 @@ describe("one tree of all UI state", () => {
 
         expect(told).toEqual([
           'added BoardView.title="Board"',
-          "added PanelView.open=false",
-          'added NoteView[a].text="new"',
-          'added NoteView[b].text="new"',
-          "added PanelView#2.open=false",
-          'set NoteView[a].text=""',
-          'removed NoteView[a].text=""',
-          'removed NoteView[b].text="new"',
+          "added Panel.open=false",
+          'added Note[a].text="new"',
+          'added Note[b].text="new"',
+          "added Panel#2.open=false",
+          'set Note[a].text=""',
+          'removed Note[a].text=""',
+          'removed Note[b].text="new"',
         ])
       }),
     ),
@@ -175,8 +175,8 @@ describe("one tree of all UI state", () => {
         yield* SubscriptionRef.set(items, [{ id: "b" }])
         yield* Testing.eventually(() => expect(notes()).toHaveLength(1))
         yield* UiState.restore([
-          { path: ["BoardView", "NoteView[a]"], name: "text", value: "kept" },
-          { path: ["BoardView", "NoteView[b]"], name: "text", value: "seen" },
+          { path: ["BoardView", "Note[a]"], name: "text", value: "kept" },
+          { path: ["BoardView", "Note[b]"], name: "text", value: "seen" },
         ])
         yield* Testing.eventually(() => expect(notes()).toEqual(["seen"]))
         yield* SubscriptionRef.set(items, [{ id: "a" }, { id: "b" }])
@@ -187,7 +187,7 @@ describe("one tree of all UI state", () => {
         yield* SubscriptionRef.set(items, [{ id: "a" }, { id: "b" }])
         yield* Testing.eventually(() => expect(notes()).toEqual(["new", "seen"]))
 
-        yield* UiState.restore([{ path: ["BoardView", "NoteView[c]"], name: "text", value: "old" }])
+        yield* UiState.restore([{ path: ["BoardView", "Note[c]"], name: "text", value: "old" }])
         yield* UiState.restore([])
         yield* SubscriptionRef.set(items, [{ id: "c" }])
         yield* Testing.eventually(() => expect(notes()).toEqual(["new"]))
@@ -202,8 +202,8 @@ describe("one tree of all UI state", () => {
         yield* Testing.findText("one")
 
         expect(sorted(yield* UiState.snapshot)).toEqual([
-          'TwiceView . same = "one"',
-          'TwiceView . same#2 = "two"',
+          'Twice . same = "one"',
+          'Twice . same#2 = "two"',
         ])
       }),
     ),

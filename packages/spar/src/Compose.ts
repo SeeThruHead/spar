@@ -16,7 +16,7 @@ import type { Fields } from "./Props.ts"
 import type * as Query from "./Query.ts"
 import * as UiState from "./UiState.ts"
 import { component, inViewScope } from "./View.ts"
-import type { Component } from "./View.ts"
+import type { Component, Declared, View } from "./View.ts"
 
 export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Effect<Add, E, R>) & {
   readonly fields?: Fields
@@ -26,6 +26,10 @@ export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Eff
 type Outside<R> = Exclude<R, Scope.Scope | ViewScope>
 
 type Composed<Outer, Inner, Add, E, R> = {
+  <ViewProps>(
+    view: View<ViewProps> & Declared & ([Inner] extends [ViewProps] ? unknown : never),
+    name?: string,
+  ): Component<Outer, E, Outside<R>, ViewProps>
   (view: (props: Inner) => Element, name?: string): Component<Outer, E, Outside<R>, Outer>
   (props: Outer): Effect.Effect<Add, E, R>
 }
@@ -53,7 +57,7 @@ const servicesOf = (steps: ReadonlyArray<Step>): ReadonlyArray<string> =>
 export const uses = (services: ReadonlyArray<string>): Enhancer<unknown, unknown> =>
   Object.assign(() => Effect.succeed({}), { services })
 
-const isNamedView = (view: (props: Props) => Element): boolean =>
+const isNamedView = (view: View<Props>): view is View<Props> & Declared =>
   Predicate.hasProperty(view, "displayName")
 
 const shown = (
@@ -99,7 +103,9 @@ const made = (
     )
 
   return component(
-    Object.assign((props: Props) => view(props), { displayName: name, props: fields, at }),
+    isNamedView(view)
+      ? view
+      : Object.assign((props: Props) => view(props), { displayName: name, props: fields, at }),
     mount,
   )
 }

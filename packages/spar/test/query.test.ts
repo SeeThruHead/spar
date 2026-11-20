@@ -16,7 +16,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, Store, Timeline, View } from "spar"
+import { Props, Query, Reactive, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
@@ -330,7 +330,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
   it.live("a list read a page at a time: the pages so far, whether there is more, and more", () =>
     Effect.gen(function* () {
-      const Feed = View.connect(
+      const Feed = compose(
         Effect.fnUntraced(function* () {
           const feed = yield* Orders.pages({
             first: 1,
@@ -387,7 +387,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
   it.live("a list whose next page is one it already has says there is no more", () =>
     Effect.gen(function* () {
-      const Feed = View.connect(
+      const Feed = compose(
         Effect.fnUntraced(function* () {
           const feed = yield* Orders.pages({ first: 1, next: () => Option.some(1) })
 
@@ -428,7 +428,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
   it.live("the report of a needless wait names the component and where its view was made", () =>
     Effect.gen(function* () {
       const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
-      const Chained = View.connect(
+      const Chained = compose(
         Effect.fnUntraced(function* () {
           const users = yield* Users.ask()
           const stock = yield* Stock.ask(
@@ -449,7 +449,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
       const [waited] = (yield* Ref.get(noted)).filter((seen) => seen.kind === "waited")
 
       expect(JSON.stringify(waited?.detail)).toMatch(
-        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Orders","at":"[^"]+:\d+:\d+"/,
+        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Chained","at":"[^"]+query\.test\.ts:\d+:\d+"/,
       )
     }).pipe(
       Effect.provide(Layer.merge(Users.live, Stock.live).pipe(Layer.provideMerge(Directory.layer))),
@@ -458,8 +458,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
-      const OrdersOf = View.taking(
-        { userId: Props.Reactive(Schema.Int) },
+      const OrdersOf = compose(
+        withProps({ userId: Props.Reactive(Schema.Int) }),
         Effect.fnUntraced(function* ({ userId }) {
           const orders = yield* Orders.ask(userId)
 
@@ -470,7 +470,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
         }),
       )(OrdersView)
       const selected = yield* SubscriptionRef.make(1)
-      const Shelf = View.connect(
+      const Shelf = compose(
         Effect.fnUntraced(function* () {
           return {
             orders: yield* View.child(OrdersOf, {
@@ -1043,7 +1043,7 @@ describe("server data in a store", () => {
   it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
     Effect.gen(function* () {
       const Shown = Stock.beside(
-        View.connect(
+        compose(
           Effect.fnUntraced(function* () {
             const stock = yield* Stock.ask()
 

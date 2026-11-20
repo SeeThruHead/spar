@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Context, Deferred, Effect, Layer, Ref, Schema, pipe } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Store, UiState, View } from "spar"
+import { Reactive, Store, UiState, View, compose, withProps } from "spar"
 import { eventually, find, findText, gone, mount } from "spar/testing"
 import {
   BoardView,
@@ -79,7 +79,7 @@ const layer = Layer.mergeAll(Board.layer(), Probe.layer).pipe(
   Layer.provide(SecureRandom.layerWebCrypto),
 )
 
-const BoardPanel = View.connect(
+const BoardPanel = compose(
   Effect.fnUntraced(function* () {
     const board = yield* Board
     const probe = yield* Probe
@@ -101,8 +101,8 @@ const BoardPanel = View.connect(
   }),
 )(BoardView)
 
-const Details = View.taking(
-  { note: Schema.String },
+const Details = compose(
+  withProps({ note: Schema.String }),
   Effect.fnUntraced(function* ({ note }) {
     const probe = yield* Probe
 
@@ -113,7 +113,7 @@ const Details = View.taking(
   }),
 )(DetailsView)
 
-const Disclosure = View.connect(
+const Disclosure = compose(
   Effect.fnUntraced(function* () {
     const open = yield* UiState.make("open", Schema.Boolean, false)
 
@@ -121,8 +121,8 @@ const Disclosure = View.connect(
   }),
 )(DisclosureView)
 
-const Loaded = View.taking(
-  { id: Schema.String },
+const Loaded = compose(
+  withProps({ id: Schema.String }),
   Effect.fnUntraced(function* ({ id }) {
     const probe = yield* Probe
 

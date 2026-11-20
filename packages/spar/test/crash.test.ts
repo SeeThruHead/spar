@@ -1,19 +1,19 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Context, Effect, Layer, SubscriptionRef, pipe, Schema } from "effect"
-import { App, Props, Reactive, View } from "spar"
+import { App, Props, Reactive, View, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { BrokenPartView, FussyItemView, PageView, WidgetView } from "./crashes.tsx"
 import { RowsView } from "./graphics.tsx"
 import { Item, ItemView, LoadingView } from "./views.tsx"
 
 const Widget = pipe(
-  View.connect(() => Effect.die("the widget's data is corrupt"))(WidgetView),
+  compose(() => Effect.die("the widget's data is corrupt"))(WidgetView),
   View.crash(BrokenPartView),
 )
 
 const SlowWidget = pipe(
-  View.taking({ id: Schema.String }, ({ id }) =>
+  compose(withProps({ id: Schema.String }), ({ id }) =>
     Effect.andThen(Effect.sleep("10 millis"), Effect.die(`${id} never loaded`)),
   )(WidgetView),
   View.pending(LoadingView),
@@ -27,7 +27,7 @@ const upper = (text: string): string => {
 }
 
 const Page = (widget: View.Mountable<App.NoProps>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const label = yield* SubscriptionRef.make("calm")
       const reports = yield* SubscriptionRef.make(0)
@@ -148,7 +148,7 @@ describe("crashes", () => {
       const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
 
       yield* Testing.mount(
-        View.connect(
+        compose(
           Effect.fnUntraced(function* () {
             return {
               rows: yield* pipe(
@@ -173,8 +173,8 @@ describe("crashes", () => {
       const reports = yield* Reports
       const released = yield* SubscriptionRef.make(0)
       const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
-      const Fragile = View.taking(
-        { item: Props.Reactive(Item) },
+      const Fragile = compose(
+        withProps({ item: Props.Reactive(Item) }),
         Effect.fnUntraced(function* ({ item }) {
           const now = yield* item.get
 
@@ -186,7 +186,7 @@ describe("crashes", () => {
       )(ItemView)
 
       yield* Testing.mount(
-        View.connect(
+        compose(
           Effect.fnUntraced(function* () {
             return {
               rows: yield* pipe(
@@ -217,7 +217,7 @@ describe("crashes", () => {
       const list = yield* SubscriptionRef.make<ReadonlyArray<Item>>([{ id: "a", label: "Alpha" }])
 
       yield* Testing.mount(
-        View.connect(
+        compose(
           Effect.fnUntraced(function* () {
             return {
               rows: yield* pipe(

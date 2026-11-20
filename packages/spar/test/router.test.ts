@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest"
 import { fireEvent } from "@testing-library/dom"
 import { Context, Effect, Latch, Layer, Option, Ref, Schema, pipe } from "effect"
-import { Handle, Props, Router, Timeline, View } from "spar"
+import { Handle, Props, Router, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import {
@@ -41,8 +41,8 @@ const paramsAt = <Params>(target: Router.Route<Params>, url: string) =>
 
 const Thread = (loads: Ref.Ref<ReadonlyArray<string>>, server: Latch.Latch) =>
   pipe(
-    View.taking(
-      { id: Schema.String },
+    compose(
+      withProps({ id: Schema.String }),
       Effect.fnUntraced(function* ({ id }) {
         yield* Ref.update(loads, (all) => [...all, id])
         yield* Latch.whenOpen(server, Effect.void)
@@ -54,7 +54,7 @@ const Thread = (loads: Ref.Ref<ReadonlyArray<string>>, server: Latch.Latch) =>
   )
 
 const Settings = (mounts: Ref.Ref<number>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const router = yield* Router.Router
 
@@ -76,7 +76,7 @@ const Shell = (
   mounts: Ref.Ref<number>,
   server: Latch.Latch,
 ) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const router = yield* Router.Router
       const main = yield* Handle.make
@@ -286,8 +286,8 @@ describe("the router", () => {
     Effect.gen(function* () {
       const router = yield* Router.Router
       const mounts = yield* Ref.make(0)
-      const LiveSearch = View.taking(
-        LiveSearchView.props,
+      const LiveSearch = compose(
+        withProps(LiveSearchView.props),
         Effect.fnUntraced(function* (props) {
           yield* Ref.update(mounts, (count) => count + 1)
 
@@ -296,7 +296,7 @@ describe("the router", () => {
       )(LiveSearchView)
 
       yield* Testing.mount(
-        View.connect(
+        compose(
           Effect.fnUntraced(function* () {
             return {
               page: yield* Router.outlet({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
-import { Query, Reactive, Router, Server, Store, View } from "spar"
+import { Query, Reactive, Router, Server, Store, compose } from "spar"
 import { NothingView, ShelfView, TeaView } from "./instantData.tsx"
 
 class TeaQuery extends Query.Tag<TeaQuery>()("test/Tea", {
@@ -12,7 +12,7 @@ class TeaQuery extends Query.Tag<TeaQuery>()("test/Tea", {
 
 const home = Router.route("/")
 
-const Tea = View.connect(
+const Tea = compose(
   Effect.fnUntraced(function* () {
     const tea = yield* TeaQuery.ask("green")
 
@@ -20,7 +20,7 @@ const Tea = View.connect(
   }),
 )(TeaView)
 
-const Shelf = View.connect(
+const Shelf = compose(
   Effect.fnUntraced(function* () {
     return {
       page: yield* Router.outlet({ routes: [Router.on(home, Tea)], otherwise: NothingView }),
@@ -42,7 +42,7 @@ class VisitsStore extends Store.Tag<VisitsStore>()("test/Visits", {
 }) {}
 
 const Restless = VisitsStore.with(
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const store = yield* VisitsStore
 
@@ -53,7 +53,7 @@ const Restless = VisitsStore.with(
   )(TeaView),
 )
 
-const RestlessShelf = View.connect(
+const RestlessShelf = compose(
   Effect.fnUntraced(function* () {
     return {
       page: yield* Router.outlet({ routes: [Router.on(home, Restless)], otherwise: NothingView }),

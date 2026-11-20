@@ -2,13 +2,13 @@ import { describe, expect, it } from "@effect/vitest"
 import { vi } from "vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, pipe, Schema } from "effect"
-import { App, Handle, Overlay, Props, Reactive, UiState, View } from "spar"
+import { App, Handle, Overlay, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { ConfirmView, DialogView, MenuView, PageView } from "./overlays.tsx"
 
 const Confirm = pipe(
-  View.taking(
-    { onClose: Props.Action },
+  compose(
+    withProps({ onClose: Props.Action }),
     Effect.fnUntraced(function* ({ onClose }) {
       yield* Overlay.modal({ onDismiss: onClose })
 
@@ -19,8 +19,8 @@ const Confirm = pipe(
 )
 
 const Dialog = pipe(
-  View.taking(
-    { onClose: Props.Action },
+  compose(
+    withProps({ onClose: Props.Action }),
     Effect.fnUntraced(function* ({ onClose }) {
       const close = yield* Handle.make
       const confirming = yield* UiState.make("confirming", Schema.Boolean, false)
@@ -43,8 +43,8 @@ const Dialog = pipe(
 )
 
 const Menu = pipe(
-  View.taking(
-    { anchor: Props.Handle, onClose: Props.Action },
+  compose(
+    withProps({ anchor: Props.Handle, onClose: Props.Action }),
     Effect.fnUntraced(function* (props) {
       yield* Overlay.dismissable({ onDismiss: props.onClose, anchor: props.anchor })
 
@@ -55,7 +55,7 @@ const Menu = pipe(
 )
 
 const LooseMenu = pipe(
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const nowhere = yield* Handle.make
 
@@ -67,7 +67,7 @@ const LooseMenu = pipe(
   View.portal,
 )
 
-const Page = View.connect(
+const Page = compose(
   Effect.fnUntraced(function* () {
     const dialogOpen = yield* UiState.make("dialogOpen", Schema.Boolean, false)
     const menuOpen = yield* UiState.make("menuOpen", Schema.Boolean, false)
