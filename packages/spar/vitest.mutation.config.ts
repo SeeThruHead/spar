@@ -17,7 +17,7 @@ export default defineConfig({
     name: "spar-mutation",
     environment: "happy-dom",
     include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
-    exclude: ["test/transform.test.ts"],
+    exclude: ["test/bunBuild.test.ts"],
     coverage: { enabled: false },
   },
 })
