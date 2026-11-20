@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { KeyValueStore } from "effect/persistence"
+import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { Tree as UiTreeClass, UiTree } from "./internal/uiTree.ts"
@@ -9,6 +10,7 @@ export type { Snapshot, Written } from "./internal/uiTree.ts"
 
 export type Slot<A> = {
   readonly value: Reactive<A>
+  readonly pick: <B>(part: (value: A) => B) => Reactive<B>
   readonly set: (name: string, next: A, payload?: Schema.Json) => Effect.Effect<void>
   readonly update: (
     name: string,
@@ -112,6 +114,13 @@ const slotIn = (tree: Tree) =>
 
     return {
       value: fromCell(kept),
+      pick: (part) => {
+        const held = Cell.make(part(kept.read()))
+
+        kept.subscribe((now) => held.write(part(now)))
+
+        return fromCell(held)
+      },
       set,
       update: (name, change, payload) =>
         Effect.suspend(() => set(name, change(kept.read()), payload)),

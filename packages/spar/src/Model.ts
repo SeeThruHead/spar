@@ -62,7 +62,7 @@ const made = Effect.fnUntraced(function* <
   )
   const select = Struct.map(
     definition.selectors,
-    Struct.lambda<ToReactive<State>>((chosen) => map(slot.value, chosen.select)),
+    Struct.lambda<ToReactive<State>>((chosen) => slot.pick(chosen.select)),
   )
   const inspector = yield* Inspector
   const encodeState = Schema.encodeEffect(Schema.toCodecJson(definition.state))
