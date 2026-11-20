@@ -106,7 +106,9 @@ export const make = <const F extends Fields>(
     at: Diagnostics.locationIn(new Error("where this view was made").stack, 1),
   })
 
-const aFrame = 16
+export const SlowAfter = Context.Reference<number>("spar/View/SlowAfter", {
+  defaultValue: () => 16,
+})
 
 export const noticed = <A, E, R>(
   name: string,
@@ -114,10 +116,10 @@ export const noticed = <A, E, R>(
   made: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R | ViewScope> =>
   Effect.flatMap(
-    Effect.zip(Effect.timed(made), Effect.service(ViewScope)),
-    ([[took, value], mounted]) => {
+    Effect.all([Effect.timed(made), Effect.service(ViewScope), Effect.service(SlowAfter)]),
+    ([[took, value], mounted, slowAfter]) => {
       const millis = Math.round(Duration.toMillis(took))
-      if (millis < aFrame) return Effect.succeed(value)
+      if (millis < slowAfter) return Effect.succeed(value)
 
       return Effect.as(
         Effect.andThen(

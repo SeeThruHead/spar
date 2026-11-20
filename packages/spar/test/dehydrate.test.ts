@@ -304,12 +304,16 @@ describe("a page sent in pieces", () => {
       const parts = yield* Stream.runCollect(sentInPieces)
       const pieces = JSON.stringify(piecesOf(parts))
 
-      expect([parts[0], parts[2], parts[4], parts.at(-1)]).toEqual([
+      expect([parts[0], parts[2], parts[5], parts.at(-1)]).toEqual([
         "<main>",
         "</main>",
         "<script async></script>",
         "</body>",
       ])
+      expect(parts[4]).toContain("<noscript><style>")
+      expect(
+        parts.filter((part) => part.startsWith("<noscript data-spar-round>")).at(-1),
+      ).toContain('<output aria-label="Orders count">3</output>')
       expect(parts[1]).toContain('<output aria-label="Orders status">waiting</output>')
       expect(parts[3]).toContain('id="spar-state"')
       expect(parts[3]).toContain('"status":"loading"')

@@ -280,7 +280,11 @@ does arrive, the pieces that came before it are applied before its first draw, s
 the finished page as it is.
 
 What to know: the client script must be `async`, or the browser runs it only after the last
-piece. With scripts turned off entirely the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
+piece. With scripts turned off, the pieces cannot run, so each round that changed the page also
+sends the whole page as drawn so far inside `<noscript>`, which such a browser shows; a style
+sent with the first draw shows only the newest round and hides the page as first drawn. The page
+then fills in round by round, every component in its place. A browser with scripts on reads
+`<noscript>` as text and uses the pieces. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
 server is done, and whatever is still missing then is asked for by the browser. That covers a
 query first asked for by a component that only mounts once data is there (a row of a loaded
 list), which the server does not run. If the connection drops part way, the document ends without that last piece; the browser
@@ -295,5 +299,4 @@ component.
 
 ## Not built
 
-- Filling in a page sent in pieces with scripts turned off: each piece needs its one-line script.
 - A span for the code of a split page arriving.

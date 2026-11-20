@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Router, Store, Timeline, UiState, compose } from "spar"
+import { Reactive, Router, Store, Timeline, UiState, View, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
@@ -42,6 +42,7 @@ const layer = Layer.mergeAll(Tally.layer(), Router.Router.layerMemory("/")).pipe
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
   Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+  Layer.provideMerge(Layer.succeed(View.SlowAfter, Number.POSITIVE_INFINITY)),
 )
 
 const shown = (): ReadonlyArray<string | null> => {

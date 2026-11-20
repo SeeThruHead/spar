@@ -33,6 +33,14 @@ export const html = (root: string, drawn: string): string =>
 export const part = (root: string, open: number, close: number, drawn: string): string =>
   `<template data-spar-piece>${unclosed(drawn)}</template><script>(function(t){var r=document.querySelector(${quoted(root)});if(!r||r.hasAttribute("${taken}"))return;var e=function(n,d){return Array.from(n.childNodes).flatMap(function(c){return c.nodeType===8?(c.data===d?[c]:[]):e(c,d)})};var a=e(r,"spar(")[${Schema.encodeSync(Position)(open)}],b=e(r,"spar)")[${Schema.encodeSync(Position)(close)}];if(!a||!b)return;var g=document.createRange();g.setStartAfter(a);g.setEndBefore(b);g.deleteContents();g.insertNode(t.content)})(document.currentScript.previousElementSibling)</script>`
 
+const inNoScript = (drawn: string): string => drawn.replaceAll("</noscript", "&lt;/noscript")
+
+export const withoutScripts = (root: string): string =>
+  `<noscript><style>noscript[data-spar-round]:has(~ noscript[data-spar-round]){display:none}body:has(noscript[data-spar-round]) ${root}{display:none}</style></noscript>`
+
+export const round = (drawn: string): string =>
+  `<noscript data-spar-round>${inNoScript(drawn)}</noscript>`
+
 const decodePiece = Schema.decodeUnknownOption(Piece)
 
 export const arrivedEarly = (waiting: unknown): ReadonlyArray<Piece> =>

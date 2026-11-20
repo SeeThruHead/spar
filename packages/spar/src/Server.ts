@@ -8,7 +8,7 @@ import * as Cell from "./internal/cell.ts"
 import { Dehydrated, Text, stateId } from "./internal/dehydrated.ts"
 import { Frame, noPage } from "./internal/frame.ts"
 import { Marked, toHtml } from "./internal/html.ts"
-import { partsOf, replacements } from "./internal/parts.ts"
+import { partsOf, replacements, unmarked } from "./internal/parts.ts"
 import type { Part, Replacement } from "./internal/parts.ts"
 import { OnServer } from "./internal/server.ts"
 import { Tree, UiTree } from "./internal/uiTree.ts"
@@ -178,7 +178,10 @@ const sentAgain = (drawing: Drawing, sent: Part, now: Part) => {
       "spar.parts": replaced.length,
       "spar.whole": replaced.some((replacement) => replacement.open === -1),
     }),
-    replaced.map((replacement) => pieceOf(drawing.root, replacement)),
+    [
+      ...replaced.map((replacement) => pieceOf(drawing.root, replacement)),
+      ...(replaced.length === 0 ? [] : [Pieces.round(unmarked(now.html))]),
+    ],
   ).pipe((annotated) => Effect.withSpan(annotated, "Server.piece", { captureStackTrace: false }))
 }
 
@@ -262,6 +265,7 @@ export const renderInPieces = <R, LayerError = never>(
           trace: { traceId: span.traceId, spanId: span.spanId },
           pieces: true,
         }),
+        Pieces.withoutScripts(options.root ?? "#root"),
         options.script,
       ])
       yield* followed({ element, root: options.root ?? "#root" }, stores, queue, {

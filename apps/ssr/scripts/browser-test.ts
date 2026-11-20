@@ -201,10 +201,13 @@ const sentInPieces = async (): Promise<void> => {
     throw new Error("The slow supplier was sent as the whole page drawn again")
   if (!all.slice(first.length).includes("createRange"))
     throw new Error("The slow supplier was not sent as its own component")
-  if (all.slice(first.length).includes("About the bread"))
+  if (scripted(all.slice(first.length)).includes("About the bread"))
     throw new Error("The piece for the slow supplier carried the page around it")
   if (!all.trimEnd().endsWith("</body></html>")) throw new Error("The document was not closed")
 }
+
+const scripted = (streamed: string): string =>
+  streamed.replaceAll(/<noscript data-spar-round>[\s\S]*?<\/noscript>/g, "")
 
 const markSent = (): void => {
   document.querySelectorAll("#root *").forEach((node) => Reflect.set(node, "spar-sent", true))
@@ -299,7 +302,7 @@ const bundleAfterTheStream = async (browser: Browser): Promise<void> => {
 
 const piecesAt = async (path: string): Promise<ReadonlyArray<string>> => {
   const all = await (await fetch(`${origin}${path}`)).text()
-  const after = all.slice(all.indexOf('id="spar-state"'))
+  const after = scripted(all.slice(all.indexOf('id="spar-state"')))
   if (after.includes("replaceChildren")) throw new Error(`${path} was sent as the whole page again`)
 
   return after.split("<template data-spar-piece>").slice(1)
@@ -327,6 +330,33 @@ const takenWithNothingMadeAgain = async (
   if (again !== 0) throw new Error(`Taking over ${path} made ${again} elements again`)
 
   await page.close()
+}
+
+const shownWithoutScripts = async (page: Page, label: string, text: string): Promise<void> => {
+  const shown = page.locator(`[aria-label="${label}"]:visible`)
+
+  await shown.filter({ hasText: text }).waitFor()
+
+  const count = await shown.count()
+  if (count !== 1)
+    throw new Error(`With scripts off, ${count} "${label}" outputs show, not 1 in its place`)
+}
+
+const filledWithoutScripts = async (browser: Browser): Promise<void> => {
+  const context = await browser.newContext({ javaScriptEnabled: false })
+  const page = await context.newPage()
+
+  await page.goto(`${origin}/slow/cheese`)
+  await shownWithoutScripts(page, "Product", "Cheese & crackers")
+  await shownWithoutScripts(page, "Supplier", "Valley dairy")
+  await shownWithoutScripts(page, "Supplier status", "loaded")
+  await page.getByRole("link", { name: "About the bread" }).waitFor()
+
+  await page.goto(`${origin}/slow/nested`)
+  await shownWithoutScripts(page, "Outer", "Valley dairy")
+  await shownWithoutScripts(page, "Inner", "Valley dairy")
+
+  await context.close()
 }
 
 const streamedByPart = async (browser: Browser): Promise<void> => {
@@ -357,7 +387,8 @@ const run = async (): Promise<void> => {
       .then(() => takenInPieces(page))
       .then(() => withoutTheBundle(browser))
       .then(() => bundleAfterTheStream(browser))
-      .then(() => streamedByPart(browser)),
+      .then(() => streamedByPart(browser))
+      .then(() => filledWithoutScripts(browser)),
     broke,
   ]).finally(() => browser.close())
 }

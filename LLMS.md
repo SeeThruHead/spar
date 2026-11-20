@@ -529,7 +529,11 @@ does arrive, the pieces that came before it are applied before its first draw, s
 the finished page as it is.
 
 What to know: the client script must be `async`, or the browser runs it only after the last
-piece. With scripts turned off entirely the page stays as first drawn. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
+piece. With scripts turned off, the pieces cannot run, so each round that changed the page also
+sends the whole page as drawn so far inside `<noscript>`, which such a browser shows; a style
+sent with the first draw shows only the newest round and hides the page as first drawn. The page
+then fills in round by round, every component in its place. A browser with scripts on reads
+`<noscript>` as text and uses the pieces. While pieces are still coming the browser does not ask for data it lacks; the last piece says the
 server is done, and whatever is still missing then is asked for by the browser. That covers a
 query first asked for by a component that only mounts once data is there (a row of a loaded
 list), which the server does not run. If the connection drops part way, the document ends without that last piece; the browser
@@ -544,7 +548,6 @@ component.
 
 ### Not built
 
-- Filling in a page sent in pieces with scripts turned off: each piece needs its one-line script.
 - A span for the code of a split page arriving.
 
 
@@ -898,17 +901,18 @@ What a component made with `compose` can be wrapped in. A view made with `View.m
 the last thing given to `compose`, in place of an inline view; the component then keeps that view
 as `.view` and the inspector shows its name.
 
-| Function                               | What it does                                                                                     |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.            |
-| `View.child(component, props)`         | Mounts a child from an enhancer and gives back its element, for a child that can still fail.     |
-| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                               |
-| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.           |
-| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props. |
-| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                 |
-| `View.mapProps(f)`                     | Changes the props a component takes.                                                             |
-| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                 |
-| `View.portal`                          | Mounts the component in a layer above the app.                                                   |
+| Function                               | What it does                                                                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                                                                                              |
+| `View.child(component, props)`         | Mounts a child from an enhancer and gives back its element, for a child that can still fail.                                                                                                       |
+| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                                                                                                 |
+| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                                                                                             |
+| `View.SlowAfter`                       | How many milliseconds a component's Effect may take before it is reported as `SPAR_COMPONENT_WAITED` (16). Provide a larger number for slow devices, or `Infinity` in a test that is not about it. |
+| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props.                                                                                                   |
+| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                                                                                                   |
+| `View.mapProps(f)`                     | Changes the props a component takes.                                                                                                                                                               |
+| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                                                                                                   |
+| `View.portal`                          | Mounts the component in a layer above the app.                                                                                                                                                     |
 
 ```tsx
 export const AgentPage = pipe(
@@ -2808,9 +2812,6 @@ Built since, and smaller than they sound, but not done:
   kept on the device, so the server cannot know what the browser will show, and taking over a
   server-drawn page whose data then changes under it needs a rule Spar does not have yet (which
   wins, and when the swap is shown).
-- **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
-  the components that changed, put in place by a one-line script (not the app's bundle); with
-  scripts off the page stays as first drawn.
 - **What a JSX child needs is checked by the build, not by the types.** TypeScript gives every JSX
   expression one type, so the Vite build reads the code instead (`SPAR_CHILD_NEEDS_A_SERVICE`). It
   follows components across files and reads the layer given to `App.mount`, but not through

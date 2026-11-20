@@ -117,17 +117,18 @@ What a component made with `compose` can be wrapped in. A view made with `View.m
 the last thing given to `compose`, in place of an inline view; the component then keeps that view
 as `.view` and the inspector shows its name.
 
-| Function                               | What it does                                                                                     |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.            |
-| `View.child(component, props)`         | Mounts a child from an enhancer and gives back its element, for a child that can still fail.     |
-| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                               |
-| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.           |
-| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props. |
-| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                 |
-| `View.mapProps(f)`                     | Changes the props a component takes.                                                             |
-| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                 |
-| `View.portal`                          | Mounts the component in a layer above the app.                                                   |
+| Function                               | What it does                                                                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                                                                                              |
+| `View.child(component, props)`         | Mounts a child from an enhancer and gives back its element, for a child that can still fail.                                                                                                       |
+| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                                                                                                 |
+| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                                                                                             |
+| `View.SlowAfter`                       | How many milliseconds a component's Effect may take before it is reported as `SPAR_COMPONENT_WAITED` (16). Provide a larger number for slow devices, or `Infinity` in a test that is not about it. |
+| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props.                                                                                                   |
+| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                                                                                                   |
+| `View.mapProps(f)`                     | Changes the props a component takes.                                                                                                                                                               |
+| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                                                                                                   |
+| `View.portal`                          | Mounts the component in a layer above the app.                                                                                                                                                     |
 
 ```tsx
 export const AgentPage = pipe(

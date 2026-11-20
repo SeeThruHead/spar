@@ -77,6 +77,9 @@ export const partsOf = (marked: string): Part => {
   return { ...read.stack.frame, close: -1 }
 }
 
+export const unmarked = (html: string): string =>
+  html.replaceAll(opening, "").replaceAll(closing, "")
+
 export const replacements = (sent: Part, now: Part): ReadonlyArray<Replacement> => {
   if (sent.self !== now.self || sent.children.length !== now.children.length) {
     return [{ open: sent.open, close: sent.close, html: now.html }]

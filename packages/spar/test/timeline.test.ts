@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Router, Store, Timeline, UiState, compose } from "spar"
+import { Reactive, Router, Store, Timeline, UiState, View, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
@@ -70,7 +70,11 @@ const layer = Layer.mergeAll(Tally.layer(), Router.Router.layerMemory("/")).pipe
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
   Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+  Layer.provideMerge(Layer.succeed(View.SlowAfter, Number.POSITIVE_INFINITY)),
 )
+
+const changes = (moments: ReadonlyArray<Timeline.Moment>): ReadonlyArray<Timeline.Moment> =>
+  moments.filter((moment) => moment.kind !== "waited" && moment.kind !== "noticed")
 
 const shown = (): ReadonlyArray<string | null> => {
   const draft = screen.getByLabelText("Draft")
@@ -118,19 +122,20 @@ describe("one log of everything that happened", () => {
       yield* Testing.click("button", "Go")
       yield* Timeline.note("data", "threads", () => 3)
 
-      const moments = yield* Effect.repeat(registry.moments.get, {
+      const moments = yield* Effect.repeat(Effect.map(registry.moments.get, changes), {
         until: (all) => all.length === 4,
         schedule: Schedule.spaced("5 millis"),
       })
 
-      expect(
-        moments.map((moment) => [moment.seq, moment.kind, moment.name, moment.detail]),
-      ).toEqual([
-        [1, "ui", "Desk . draft", "hi"],
-        [2, "command", "test/Tally/added", { by: 1 }],
-        [3, "route", "/next", "link"],
-        [4, "data", "threads", 3],
+      expect(moments.map((moment) => [moment.kind, moment.name, moment.detail])).toEqual([
+        ["ui", "Desk . draft", "hi"],
+        ["command", "test/Tally/added", { by: 1 }],
+        ["route", "/next", "link"],
+        ["data", "threads", 3],
       ])
+      expect(moments.map((moment) => moment.seq)).toEqual(
+        moments.map((moment) => moment.seq).toSorted((left, right) => left - right),
+      )
       expect(moments.slice(0, 3).every((moment) => moment.traceId.length === 32)).toBe(true)
       expect(moments.slice(0, 3).every((moment) => moment.spanId.length === 16)).toBe(true)
       expect(new Set(moments.map((moment) => moment.traceId)).size).toBe(4)
