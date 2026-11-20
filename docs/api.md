@@ -42,7 +42,12 @@ export const Card = compose(
   withProps({ title: Schema.String }),
   withHover,
 )((props) => (
-  <article class={{ raised: props.hovered }} onPointerenter={props.onEnter}>
+  <article
+    aria-label={props.title}
+    class={{ card: true, raised: props.hovered }}
+    onPointerenter={props.onEnter}
+    onPointerleave={props.onLeave}
+  >
     {props.title}
   </article>
 ))
@@ -70,7 +75,15 @@ as `.view` and the inspector shows its name.
 
 ```tsx
 export const AgentPage = pipe(
-  compose(withProps({ id: Schema.String }), withAgent)((props) => <h1>{props.name}</h1>),
+  compose(
+    withProps({ id: Schema.String }),
+    withAgent,
+    withStore(Router.Router, (router) => ({ home: router.link(home, {}) })),
+  )((props) => (
+
+    ...
+
+  )),
   View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
 )
@@ -127,7 +140,7 @@ const rows =
     Reactive.mapBy(
       (agent: Agent) => agent.id,
       AgentRow,
-      (agent, id) => ({ agent, id, editing: props.editing }),
+      (agent, id) => ({ agent, id, editing: props.editing, dragging: props.dragging }),
     ),
   )
 ```

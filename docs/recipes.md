@@ -44,10 +44,10 @@ is mounted fresh each time the dialog opens.
 ```ts
 yield *
   pipe(
-    Reactive.map(editing, (now) => now._tag === "AddingProject"),
+    when("AddingProject"),
     Reactive.when(
       Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
-      { onClose },
+      closing,
     ),
   )
 ```

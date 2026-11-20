@@ -24,5 +24,10 @@ tasks:
     command: bun run build
     inputs: ["src/**/*", "content/**/*", "scripts/**/*", "@group(upstream)"]
     outputs: ["dist"]
+  look:
+    command: bun run look
+    inputs: ["src/**/*", "content/**/*", "scripts/**/*", "server/**/*", "@group(upstream)"]
+    options:
+      cache: false
   check:
     deps: [typecheck, lint, format]
