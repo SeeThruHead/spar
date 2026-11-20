@@ -9,8 +9,12 @@ export type { Snapshot, Written } from "./internal/uiTree.ts"
 
 export type Slot<A> = {
   readonly value: Reactive<A>
-  readonly set: (name: string, next: A) => Effect.Effect<void>
-  readonly update: (name: string, change: (now: A) => A) => Effect.Effect<void>
+  readonly set: (name: string, next: A, payload?: Schema.Json) => Effect.Effect<void>
+  readonly update: (
+    name: string,
+    change: (now: A) => A,
+    payload?: Schema.Json,
+  ) => Effect.Effect<void>
 }
 
 export type Service = {
@@ -40,8 +44,17 @@ export const tracedBy: Effect.Effect<Trace> = Effect.map(
     }),
 )
 
-export const writeTo = <A>(kept: Kept<A>, name: string, next: A): Effect.Effect<void> =>
-  Effect.flatMap(tracedBy, (trace) => Effect.sync(() => kept.writtenAs(name, next, trace)))
+export const writeTo = <A>(
+  kept: Kept<A>,
+  name: string,
+  next: A,
+  payload?: Schema.Json,
+): Effect.Effect<void> =>
+  Effect.flatMap(tracedBy, (trace) =>
+    Effect.sync(() =>
+      kept.writtenAs(name, next, payload === undefined ? trace : { ...trace, payload }),
+    ),
+  )
 
 const storedKey = (path: ReadonlyArray<string>): string => `spar/state/${path.join(" / ")}`
 
@@ -94,13 +107,14 @@ const slotIn = (tree: Tree) =>
       Effect.sync(() => tree.hold(tree.root(), path.join(" / "), schema, start)),
       (held) => Effect.sync(() => tree.release(held)),
     )
-    const set = (name: string, next: A) =>
-      Effect.andThen(writeTo(kept, name, next), savedAfter(saving, path, schema, next))
+    const set = (name: string, next: A, payload?: Schema.Json) =>
+      Effect.andThen(writeTo(kept, name, next, payload), savedAfter(saving, path, schema, next))
 
     return {
       value: fromCell(kept),
       set,
-      update: (name, change) => Effect.suspend(() => set(name, change(kept.read()))),
+      update: (name, change, payload) =>
+        Effect.suspend(() => set(name, change(kept.read()), payload)),
     }
   })
 

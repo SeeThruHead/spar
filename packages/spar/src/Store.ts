@@ -105,7 +105,7 @@ interface ToAccepted<State> extends Struct.Lambda {
   readonly "~lambda.out": Stream.Stream<Accepted<State, PayloadOf<this["~lambda.in"]>>>
 }
 
-interface ToReactive<State> extends Struct.Lambda {
+export interface ToReactive<State> extends Struct.Lambda {
   (selector: Selector<State, unknown>): Reactive<unknown>
   readonly "~lambda.out": this["~lambda.in"] extends Selector<never, infer A> ? Reactive<A> : never
 }

@@ -50,8 +50,8 @@ export class Kept<A> implements Cell.Cell<A> {
     this.tree.tell("set", this)
   }
 
-  writtenAs(name: string, value: A, trace: Trace): void {
-    this.tree.written(this, name, value, trace)
+  writtenAs(name: string, value: A, about: About): void {
+    this.tree.written(this, name, value, about)
   }
 
   subscribe(listener: Cell.Listener<A>): Cell.Stop {
@@ -88,12 +88,15 @@ type AnyKept = {
 
 export type Trace = { readonly traceId: string; readonly spanId: string }
 
+export type About = Trace & { readonly payload?: Schema.Json }
+
 export type Written = Trace & {
   readonly seq: number
   readonly path: Path
   readonly slot: string
   readonly name: string
   readonly value: Schema.Json
+  readonly payload?: Schema.Json
 }
 type Place = { readonly owner: object; readonly path: Path; readonly keys: Cell.Waiting<string> }
 
@@ -107,7 +110,7 @@ export class Tree {
   readonly log = Cell.make<ReadonlyArray<Written>>([])
   readonly viewing = Cell.make<number | null>(null)
 
-  written<A>(kept: Kept<A>, name: string, value: A, trace: Trace): void {
+  written<A>(kept: Kept<A>, name: string, value: A, about: About): void {
     if (this.viewing.read() !== null) this.travelTo(null)
 
     kept.write(value)
@@ -120,7 +123,7 @@ export class Tree {
           slot: kept.name,
           name,
           value: encoded,
-          ...trace,
+          ...about,
         },
       ]),
     )
