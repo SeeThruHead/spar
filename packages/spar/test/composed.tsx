@@ -105,7 +105,10 @@ export const Dropdown = compose(
   </div>
 ))
 
-export const Toolbar = compose(withUiState("sort", Schema.String, "Newest"))((props) => (
+export const Toolbar = compose(
+  withUiState("sort", Schema.String, "Newest"),
+  withUiState("show", Schema.String, "Everything"),
+)((props) => (
   <header>
     <Dropdown
       label="Sort by"
@@ -115,9 +118,10 @@ export const Toolbar = compose(withUiState("sort", Schema.String, "Newest"))((pr
     <Dropdown
       label="Show"
       items={["Everything", "Mine"]}
-      onPick={(item) => UiState.set(props.sort, item)}
+      onPick={(item) => UiState.set(props.show, item)}
     />
     <output aria-label="Sort">{props.sort}</output>
+    <output aria-label="Shown">{props.show}</output>
   </header>
 ))
 

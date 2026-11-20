@@ -67,11 +67,16 @@ describe("a component composed from enhancers, its view last and inline", () => 
       yield* Testing.find("menu", "Show")
       yield* Effect.sync(() => fireEvent.keyDown(window, { key: "Escape" }))
       yield* Testing.gone("menu", "Show")
+      yield* Testing.click("button", "Show")
+      yield* Testing.click("menuitem", "Mine")
+      yield* shows("Shown", "Mine")
+      yield* shows("Sort", "Oldest")
 
       const tree = yield* UiState.snapshot
 
       expect(tree.map((piece) => [piece.path.join(" / "), piece.name])).toEqual([
         ["Toolbar", "sort"],
+        ["Toolbar", "show"],
         ["Toolbar / Dropdown", "open"],
         ["Toolbar / Dropdown#2", "open"],
       ])
