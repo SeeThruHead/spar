@@ -1,6 +1,6 @@
 import { Effect, pipe } from "effect"
 import type { Scope } from "effect"
-import { Handle, Overlay, Props, View } from "spar"
+import { Handle, Overlay, Props, View, compose, withProps } from "spar"
 import type { Element } from "spar"
 import { DialogView } from "./DialogView.tsx"
 
@@ -9,8 +9,8 @@ export const Dialog = <R = never>(
   content: Effect.Effect<Element, never, R | Scope.Scope>,
 ) =>
   pipe(
-    View.taking(
-      { onClose: Props.Action },
+    compose(
+      withProps({ onClose: Props.Action }),
       Effect.fnUntraced(function* ({ onClose }) {
         const close = yield* Handle.make
 

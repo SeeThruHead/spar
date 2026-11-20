@@ -1,5 +1,5 @@
 import { Array, Effect, Option, pipe, Schema } from "effect"
-import { Handle, Overlay, Props, Reactive, UiState, View } from "spar"
+import { Handle, Overlay, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import { MenuItemView, MenuListView, MenuView } from "./MenuView.tsx"
 import { focusAt, target } from "./roving.ts"
 
@@ -8,13 +8,13 @@ export const Item = Schema.Struct({ label: Schema.String, onChoose: Props.Action
 export type Item = typeof Item.Type
 
 const List = pipe(
-  View.taking(
-    {
+  compose(
+    withProps({
       label: Schema.String,
       items: Schema.Array(Item),
       anchor: Props.Handle,
       onClose: Props.Action,
-    },
+    }),
     Effect.fnUntraced(function* ({ label, items, anchor, onClose }) {
       const handles = yield* Effect.forEach(items, () => Handle.make)
       const place = yield* Overlay.position(anchor)
@@ -46,8 +46,8 @@ const List = pipe(
   View.portal,
 )
 
-export const Menu = View.taking(
-  { label: Schema.String, text: Schema.String, items: Schema.Array(Item) },
+export const Menu = compose(
+  withProps({ label: Schema.String, text: Schema.String, items: Schema.Array(Item) }),
   Effect.fnUntraced(function* (props) {
     const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make

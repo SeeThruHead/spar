@@ -1,5 +1,5 @@
 import { Array, Effect, Option, Schema } from "effect"
-import { Handle, Props, Reactive, UiState, View } from "spar"
+import { Handle, Props, Reactive, UiState, compose, withProps } from "spar"
 import type { Action } from "spar"
 import { focusAt, target } from "./roving.ts"
 import { TabPanelView, TabView, TabsView } from "./TabsView.tsx"
@@ -12,8 +12,8 @@ export const Tab = Schema.Struct({
 
 export type Tab = typeof Tab.Type
 
-export const Tabs = View.taking(
-  { label: Schema.String, tabs: Schema.NonEmptyArray(Tab) },
+export const Tabs = compose(
+  withProps({ label: Schema.String, tabs: Schema.NonEmptyArray(Tab) }),
   Effect.fnUntraced(function* (props) {
     const selected = yield* UiState.make("selected", Schema.String, props.tabs[0].id)
     const handles = yield* Effect.forEach(props.tabs, () => Handle.make)

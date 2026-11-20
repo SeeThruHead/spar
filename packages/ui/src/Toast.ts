@@ -1,6 +1,6 @@
 import { Context, Duration, Effect, Layer, Schema, pipe } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Store, View } from "spar"
+import { Reactive, Store, compose } from "spar"
 import { ToastView, ToastsView } from "./ToastView.tsx"
 
 const Tone = Schema.Literals(["info", "success", "problem"])
@@ -69,7 +69,7 @@ export class Toasts extends Context.Service<
   )
 }
 
-export const Viewport = View.connect(
+export const Viewport = compose(
   Effect.fnUntraced(function* () {
     const service = yield* Toasts
     const toasts = yield* pipe(

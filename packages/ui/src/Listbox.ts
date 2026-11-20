@@ -1,5 +1,5 @@
 import { Array, Effect, Option, pipe, Schema } from "effect"
-import { Events, Handle, Overlay, Props, Reactive, UiState, View } from "spar"
+import { Events, Handle, Overlay, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import { ListboxListView, ListboxOptionView, ListboxView } from "./ListboxView.tsx"
 import { Ids } from "./ids.ts"
 import { focusAt, target } from "./roving.ts"
@@ -32,8 +32,8 @@ const moveTo = (
 const choosing: ReadonlySet<string> = new Set(["Enter", " "])
 
 const List = pipe(
-  View.taking(
-    {
+  compose(
+    withProps({
       id: Schema.String,
       label: Schema.String,
       choices: Schema.Array(Choice),
@@ -41,7 +41,7 @@ const List = pipe(
       anchor: Props.Handle,
       onChange: Props.Callback(Schema.String),
       onClose: Props.Action,
-    },
+    }),
     Effect.fnUntraced(function* (props) {
       const handles = yield* Effect.forEach(props.choices, () => Handle.make)
       const place = yield* Overlay.position(props.anchor)
@@ -93,14 +93,14 @@ const labelOf = (choices: ReadonlyArray<Choice>, value: string): string =>
     { onNone: () => "", onSome: (choice) => choice.label },
   )
 
-export const Listbox = View.taking(
-  {
+export const Listbox = compose(
+  withProps({
     label: Schema.String,
     name: Schema.String,
     choices: Schema.Array(Choice),
     value: Props.Reactive(Schema.String),
     onChange: Props.Callback(Schema.String),
-  },
+  }),
   Effect.fnUntraced(function* (props) {
     const ids = yield* Ids
     const listId = yield* ids.next

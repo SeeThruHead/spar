@@ -1,11 +1,11 @@
 import { Effect, pipe, Schema } from "effect"
-import { Handle, Overlay, Props, Reactive, UiState, View } from "spar"
+import { Handle, Overlay, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import { Ids } from "./ids.ts"
 import { TooltipBubbleView } from "./TooltipView.tsx"
 
 const Bubble = pipe(
-  View.taking(
-    { id: Schema.String, text: Schema.String, anchor: Props.Handle },
+  compose(
+    withProps({ id: Schema.String, text: Schema.String, anchor: Props.Handle }),
     Effect.fnUntraced(function* (props) {
       return { id: props.id, text: props.text, place: yield* Overlay.position(props.anchor) }
     }),

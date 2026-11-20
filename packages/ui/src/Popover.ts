@@ -1,10 +1,15 @@
 import { Effect, pipe, Schema } from "effect"
-import { Handle, Overlay, Props, Reactive, UiState, View } from "spar"
+import { Handle, Overlay, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import { PopoverPanelView, PopoverView } from "./PopoverView.tsx"
 
 const Panel = pipe(
-  View.taking(
-    { label: Schema.String, content: Props.Element, anchor: Props.Handle, onClose: Props.Action },
+  compose(
+    withProps({
+      label: Schema.String,
+      content: Props.Element,
+      anchor: Props.Handle,
+      onClose: Props.Action,
+    }),
     Effect.fnUntraced(function* ({ label, content, anchor, onClose }) {
       const panel = yield* Handle.make
       const place = yield* Overlay.position(anchor)
@@ -18,8 +23,8 @@ const Panel = pipe(
   View.portal,
 )
 
-export const Popover = View.taking(
-  { label: Schema.String, text: Schema.String, content: Props.Element },
+export const Popover = compose(
+  withProps({ label: Schema.String, text: Schema.String, content: Props.Element }),
   Effect.fnUntraced(function* (props) {
     const open = yield* UiState.make("open", Schema.Boolean, false)
     const trigger = yield* Handle.make
