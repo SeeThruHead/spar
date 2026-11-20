@@ -441,7 +441,7 @@ export const StoreView = View.make(
     state: Props.Reactive(Schema.String),
     entries: Props.Element,
     exported: Props.Reactive(Schema.String),
-    pasted: Props.Reactive(Schema.String),
+    pasted: Props.State(Schema.String),
     problem: Props.Reactive(Schema.String),
     onBack: Props.Action,
     onForward: Props.Action,

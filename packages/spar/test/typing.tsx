@@ -4,7 +4,7 @@ import { Props, View } from "spar"
 export const DraftView = View.make(
   "DraftView",
   {
-    text: Props.Reactive(Schema.String),
+    text: Props.State(Schema.String),
     onType: Props.Handler("input"),
     onLoad: Props.Action,
     onClear: Props.Action,

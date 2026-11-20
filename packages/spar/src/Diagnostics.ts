@@ -75,7 +75,7 @@ export const all = {
   SPAR_TYPING_REPLACED: {
     kind: "run",
     what: "A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.",
-    fix: "Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.",
+    fix: "A text input's value can only be UI state or a form field (anything else is a type error), so this comes from writing that UI state from something slow. Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.",
   },
   SPAR_DUPLICATE_KEY: {
     kind: "run",

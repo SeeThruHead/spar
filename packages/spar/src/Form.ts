@@ -3,8 +3,8 @@ import { ActionScope } from "./internal/actionScope.ts"
 import { run } from "./internal/action.ts"
 import type { Action, UiWrite } from "./internal/action.ts"
 import * as Cell from "./internal/cell.ts"
-import { fromCell, map } from "./internal/reactive.ts"
-import type { Reactive } from "./internal/reactive.ts"
+import { fromCell, map, typed } from "./internal/reactive.ts"
+import type { Reactive, Typed } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
 import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
@@ -20,7 +20,7 @@ export class Rejected extends Schema.TaggedError<Rejected, { readonly brand: uni
 
 export type Field<Value> = {
   readonly name: string
-  readonly value: Reactive<Value>
+  readonly value: Typed<Value>
   readonly error: Reactive<string>
   readonly invalid: Reactive<boolean>
   readonly change: (value: Value) => UiWrite
@@ -152,7 +152,7 @@ export const make = Effect.fnUntraced(function* <Valid, Input extends Inputs>(
 
     return {
       name,
-      value: map(current, (now) => now.values[name]),
+      value: typed(map(current, (now) => now.values[name])),
       error,
       invalid: map(error, (message) => message.length > 0),
       change: (value) =>

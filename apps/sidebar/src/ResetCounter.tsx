@@ -1,5 +1,20 @@
-import { Reactive, compose, withKey, withStore } from "spar"
+import { Effect, Schema } from "effect"
+import { Reactive, UiState, compose, withKey, withStore } from "spar"
 import { ResetCounterStore, resetAfterDelay, told } from "./ResetCounterStore.ts"
+
+const withDelay = Effect.fnUntraced(function* () {
+  const store = yield* ResetCounterStore
+  const saved = yield* store.select.resetDuration.get
+  const delay = yield* UiState.make("delay", Schema.String, String(saved))
+
+  return {
+    delay,
+    onDelay: (typed: string) => [
+      UiState.set(delay, typed),
+      store.commands.resetDurationChanged(Number(typed)),
+    ],
+  }
+})
 
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
@@ -7,12 +22,11 @@ const ResetCounterPanel = compose(
     status: Reactive.map(store.select.resetting, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
-    resetDuration: Reactive.map(store.select.resetDuration, String),
     refused: Reactive.map(store.refused, told),
     onIncrement: store.commands.incremented(),
     onReset: store.commands.resetClicked(),
-    onDuration: store.commands.resetDurationChanged,
   })),
+  withDelay,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -34,8 +48,8 @@ const ResetCounterPanel = compose(
       <input
         type="number"
         min="0"
-        value={props.resetDuration}
-        onInput={(event) => props.onDuration(Number(event.currentTarget.value))}
+        value={props.delay}
+        onInput={(event) => props.onDelay(event.currentTarget.value)}
       />
     </label>
     <p>

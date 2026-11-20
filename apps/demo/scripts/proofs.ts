@@ -101,6 +101,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "CounterStore",
   },
   {
+    file: "input-bound-to-a-store.tsx",
+    rule: "Binding a text input's value to a store selector, so the store's echo replaces what is typed",
+    by: "types",
+    expect: "is not assignable to type 'InputElement'",
+  },
+  {
     file: "ui-state-in-command.ts",
     rule: "Passing UI state to a store command",
     by: "types",

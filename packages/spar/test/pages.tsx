@@ -23,7 +23,7 @@ export const PageView = View.make(
     count: Props.Reactive(Schema.Finite),
     busy: Props.Reactive(Schema.Boolean),
     tone: Props.Reactive(Schema.NullOr(Schema.String)),
-    note: Props.Reactive(Schema.String),
+    note: Props.State(Schema.String),
     online: Props.Reactive(Schema.Boolean),
     field: Props.Handle,
     fruits: Props.Element,

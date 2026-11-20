@@ -3,7 +3,7 @@ import type { Handler } from "./internal/action.ts"
 import { fragment, intrinsic } from "./internal/element.ts"
 import type { Element as SparElement } from "./internal/element.ts"
 import type { Handle } from "./internal/handle.ts"
-import type { Reactive } from "./internal/reactive.ts"
+import type { Reactive, Typed } from "./internal/reactive.ts"
 import type { Markup } from "./Markup.ts"
 import type { View } from "./View.ts"
 
@@ -126,10 +126,30 @@ type SvgAttributeNames =
 
 type SvgAttributes = { readonly [K in SvgAttributeNames]?: Attribute<string | number> }
 
+type Html<Tag extends keyof HTMLElementTagNameMap> = Common &
+  Properties<HTMLElementTagNameMap[Tag]> &
+  Events<HTMLElementTagNameMap[Tag], HTMLElementEventMap>
+
+type TypedValue = string | Typed<string>
+
+type InputElement = Omit<Html<"input">, "type" | "value"> &
+  (
+    | { readonly type: "hidden"; readonly value?: Attribute<string> }
+    | { readonly type?: Attribute<string>; readonly value?: TypedValue }
+  )
+
+type TextareaElement = Omit<Html<"textarea">, "readOnly" | "value"> &
+  (
+    | { readonly readOnly: true; readonly value?: Attribute<string> }
+    | { readonly readOnly?: Attribute<boolean>; readonly value?: TypedValue }
+  )
+
 type HtmlElements = {
-  readonly [Tag in keyof HTMLElementTagNameMap]: Common &
-    Properties<HTMLElementTagNameMap[Tag]> &
-    Events<HTMLElementTagNameMap[Tag], HTMLElementEventMap>
+  readonly [Tag in keyof HTMLElementTagNameMap]: Tag extends "input"
+    ? InputElement
+    : Tag extends "textarea"
+      ? TextareaElement
+      : Html<Tag>
 }
 
 type SvgElements = {

@@ -106,7 +106,7 @@ export const SectionView = View.make(
 export const SidebarView = View.make(
   "SidebarView",
   {
-    filter: Props.Reactive(Schema.String),
+    filter: Props.State(Schema.String),
     onFilter: Props.Handler("input", "input"),
     waiting: Props.Reactive(Schema.Finite),
     unsent: Props.Reactive(Schema.Finite),

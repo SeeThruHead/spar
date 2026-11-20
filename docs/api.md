@@ -294,6 +294,11 @@ field and a refused submit are entries in the log, and rewinding puts a form bac
 Whether a send is in flight (`submitting`) is not kept there: going back to a moment does not
 restart a send.
 
+A text input's or textarea's `value` takes a plain string, UI state, or a form field's value, and
+nothing else: binding it to a store selector or a query's data is a type error, because whatever
+changes that value would replace what is being typed. A hidden input, and a textarea marked
+`readOnly`, can show any reactive value.
+
 `Form.text(field)` and `Form.checkbox(field)` are the props to spread on an input. A field's problem
 shows once the field has been left or a submit was tried. Fail the submit Effect with
 `new Form.Rejected({ message, fields })` to put a server's messages on their fields.

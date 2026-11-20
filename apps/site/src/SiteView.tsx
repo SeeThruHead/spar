@@ -173,7 +173,7 @@ export const SiteView = View.make(
     home: Router.Link,
     docs: Router.Link,
     errors: Router.Link,
-    text: Props.Reactive(Schema.String),
+    text: Props.State(Schema.String),
     onSearch: Props.Handler("input"),
     summary: Props.Reactive(Schema.String),
     searching: Props.Reactive(Schema.Boolean),

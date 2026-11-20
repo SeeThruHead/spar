@@ -31,6 +31,25 @@ export type Backed<A, Held extends Cell.Cell<A> = Cell.Cell<A>> = Reactive<A> & 
   readonly [Backing]: Held
 }
 
+export const Typed: unique symbol = Symbol.for("~spar/Reactive/typed")
+
+export type Typed<A> = Reactive<A> & ({ readonly [Backing]: unknown } | { readonly [Typed]: true })
+
+export const typed = <A>(source: Reactive<A>): Typed<A> => ({
+  [TypeId]: TypeId,
+  get get() {
+    return source.get
+  },
+  get changes() {
+    return source.changes
+  },
+  [Observe]: (listener, onError) => source[Observe](listener, onError),
+  get [Direct]() {
+    return source[Direct]
+  },
+  [Typed]: true,
+})
+
 export const make = <A>(get: Effect.Effect<A>, changes: Stream.Stream<A>): Reactive<A> => ({
   [TypeId]: TypeId,
   get,

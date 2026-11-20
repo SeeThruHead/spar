@@ -1,4 +1,4 @@
-import { Effect, pipe, Schema, Stream, SubscriptionRef } from "effect"
+import { Effect, pipe, Schema, Stream } from "effect"
 import { Events, Handle, Props, Reactive, UiState, View, compose, withProps } from "spar"
 import {
   DialogView,
@@ -29,7 +29,7 @@ export const Page = (all: Reactive.Reactive<ReadonlyArray<Fruit>>) =>
     Effect.fnUntraced(function* () {
       const count = yield* UiState.make("count", Schema.Finite, 2)
       const busy = yield* UiState.make("busy", Schema.Boolean, true)
-      const note = yield* SubscriptionRef.make("")
+      const note = yield* UiState.make("note", Schema.String, "")
       const online = yield* Events.online
 
       yield* Events.onWindow("keydown", [])
@@ -44,7 +44,7 @@ export const Page = (all: Reactive.Reactive<ReadonlyArray<Fruit>>) =>
         count,
         busy,
         tone: Reactive.succeed<string | null>("red"),
-        note: Reactive.fromSubscriptionRef(note),
+        note,
         online,
         field: yield* Handle.make,
         fruits: yield* pipe(

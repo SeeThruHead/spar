@@ -1023,6 +1023,11 @@ field and a refused submit are entries in the log, and rewinding puts a form bac
 Whether a send is in flight (`submitting`) is not kept there: going back to a moment does not
 restart a send.
 
+A text input's or textarea's `value` takes a plain string, UI state, or a form field's value, and
+nothing else: binding it to a store selector or a query's data is a type error, because whatever
+changes that value would replace what is being typed. A hidden input, and a textarea marked
+`readOnly`, can show any reactive value.
+
 `Form.text(field)` and `Form.checkbox(field)` are the props to spread on an input. A field's problem
 shows once the field has been left or a submit was tried. Fail the submit Effect with
 `new Form.Rejected({ message, fields })` to put a server's messages on their fields.
@@ -2355,7 +2360,7 @@ Reported by: The running app: an error's message, or an entry in the log.
 
 A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.
 
-Fix: Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.
+Fix: A text input's value can only be UI state or a form field (anything else is a type error), so this comes from writing that UI state from something slow. Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.
 
 Reported by: The running app: an error's message, or an entry in the log.
 
@@ -3154,8 +3159,23 @@ export const told = (refused: Option.Option<Store.Refusal>): string =>
 Its component, composed with `withStore`. The buttons are never disabled; the store decides.
 
 ```tsx
-import { Reactive, compose, withKey, withStore } from "spar"
+import { Effect, Schema } from "effect"
+import { Reactive, UiState, compose, withKey, withStore } from "spar"
 import { ResetCounterStore, resetAfterDelay, told } from "./ResetCounterStore.ts"
+
+const withDelay = Effect.fnUntraced(function* () {
+  const store = yield* ResetCounterStore
+  const saved = yield* store.select.resetDuration.get
+  const delay = yield* UiState.make("delay", Schema.String, String(saved))
+
+  return {
+    delay,
+    onDelay: (typed: string) => [
+      UiState.set(delay, typed),
+      store.commands.resetDurationChanged(Number(typed)),
+    ],
+  }
+})
 
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
@@ -3163,12 +3183,11 @@ const ResetCounterPanel = compose(
     status: Reactive.map(store.select.resetting, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
-    resetDuration: Reactive.map(store.select.resetDuration, String),
     refused: Reactive.map(store.refused, told),
     onIncrement: store.commands.incremented(),
     onReset: store.commands.resetClicked(),
-    onDuration: store.commands.resetDurationChanged,
   })),
+  withDelay,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -3190,8 +3209,8 @@ const ResetCounterPanel = compose(
       <input
         type="number"
         min="0"
-        value={props.resetDuration}
-        onInput={(event) => props.onDuration(Number(event.currentTarget.value))}
+        value={props.delay}
+        onInput={(event) => props.onDelay(event.currentTarget.value)}
       />
     </label>
     <p>
