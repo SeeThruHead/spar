@@ -49,7 +49,7 @@ That dependency is written down, so the trace viewer can draw it and name what w
 
 **What it removes.** Accidental request waterfalls, the same request made by every row of a list,
 and an old answer landing over a newer one: an answer carries the number of the request it answers
-and a late one is refused.
+and a late one is ignored.
 
 ## A store is an Effect over one state
 

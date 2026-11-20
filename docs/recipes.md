@@ -56,20 +56,33 @@ yield *
 
 ## Work that must reach the server
 
-Declare it beside the store. The item is saved before the state changes, sent with one idempotency
-key, and retried until it lands.
+Queue it on an outbox channel from the service that changes the store. The item is saved on the
+device, sent with one idempotency key, and retried until it lands; the store is saved too, so a
+reload loses nothing.
 
 ```ts
-export const BoardStoreLive = BoardStore.layerDurable({}, [
-  Store.outbox(
-    BoardStore.actions.started,
-    Effect.fnUntraced(function* ({ name }, idempotencyKey) {
+export class AgentStarts extends Context.Service<
+  AgentStarts,
+  { readonly start: (name: string) => Effect.Effect<void> }
+>()("sidebar/AgentStarts") {
+  static readonly layer = Layer.effect(
+    AgentStarts,
+    Effect.gen(function* () {
+      const store = yield* BoardStore
       const server = yield* Server
+      const queued = yield* Outbox.channel("sidebar/agents/started", Started, ({ name }, key) =>
+        server.start(name, key),
+      )
 
-      yield* server.start(name, idempotencyKey)
+      return AgentStarts.of({
+        start: Effect.fn("AgentStarts.start")(function* (name: string) {
+          yield* store.commands.started({ name })
+          yield* queued({ name })
+        }),
+      })
     }),
-  ),
-])
+  )
+}
 ```
 
 Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.

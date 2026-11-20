@@ -36,7 +36,7 @@ Three rules that break the build most often:
    list of actions: `onReset: [UiState.set(props.name, ""), UiState.set(props.open, false)]`.
 3. A handler (an event prop, a `withKey` action) takes an `Effect<void>` with no error and no
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
-   already fits: a refusal shows in the store, not as an error.
+   already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
 
 ## The shape of an app
@@ -91,20 +91,20 @@ in an enhancer and pass `props.shown` instead.
 | Use a child component                     | Write it in JSX in the view: `<Dropdown label="Sort" onPick={pick} />`                                                                  | Passing elements down as props                                                                                 |
 | Hold data the app cares about             | A `Store.Tag` with actions and selectors                                                                                                | UI state seeded from a store, a service with a Ref                                                             |
 | Put a store where one component uses it   | `SomeStore.with(Component)`, then mount the result                                                                                      | Wiring a layer at the root for a store one screen owns                                                         |
-| Share a store across the app              | `SomeStore.layer()` in the layers given to `App.mount`                                                                                  | A global                                                                                                       |
+| Share a store across the app              | `SomeStore.layer` in the layers given to `App.mount`                                                                                    | A global                                                                                                       |
 | Change app state                          | `store.commands.<action>(payload)`                                                                                                      | Writing to state anywhere else                                                                                 |
 | Change UI state                           | `UiState.set` or `UiState.update` in a handler                                                                                          | Writing UI state from a command, a stream or a service                                                         |
 | Show a list                               | `<For each={props.items} by={(item) => item.id}>{(item) => <li>...</li>}</For>`                                                         | `.map` inside JSX                                                                                              |
 | Show a tree (a component inside itself)   | `const Row: View.Component<Props> = compose(...)(... <Row node={child} /> ...)`, a `Schema.suspend` Schema                              | Flattening the tree by hand; leaving the type off                                                              |
 | Show one thing or another                 | `<Show when={props.open}>...</Show>`                                                                                                    | A ternary inside JSX                                                                                           |
 | Load data from the server                 | A `Query.Tag`, and `withQuery(name, TheQuery, (props) => input)` where it is needed                                                     | Fetching in a component and passing the result down                                                            |
-| Use loaded data in an action              | Read the query store in the action's `Store.after` effect, then `send` the result                                                       | Props or arguments that carry server data                                                                      |
-| Stop a command that is wrong right now    | A guard as the third argument of `Store.action`, returning the reason                                                                   | Disabling the button and hoping nothing else sends it                                                          |
-| Run a flow with a wait in it              | A state field, an action that starts it, `Store.after` that waits and `send`s the finish                                                | A lock, a queue, a flag in UI state                                                                            |
+| Use loaded data in an action              | An Effect that reads `TheQuery.read(input)` and then sends a command with the result                                                    | Props or arguments that carry server data                                                                      |
+| Stop a second run while one is going      | Run the work with `FiberHandle.run(handle, effect, { onlyIfMissing: true })`                                                            | Disabling the button and hoping nothing else starts it                                                         |
+| Run a flow with a wait in it              | One Effect: a command, `Effect.sleep` or the call, a command with the result                                                            | A lock, a queue, a flag in UI state                                                                            |
 | Call your backend                         | `Backend.rpc(Group, url)` and call the client                                                                                           | `fetch`, axios, tRPC, a hand-rolled client                                                                     |
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                        | `fetch`, `FetchHttpClient.layer`                                                                               |
-| Send something that must not be lost      | `Store.outbox(action, send)`: saved on the device, retried with an idempotency key                                                      | Calling the server from a handler and hoping                                                                   |
-| Do something after an action              | `Store.after(action, effect)`                                                                                                           | An Effect inside a reducer                                                                                     |
+| Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                              | Calling the server from a handler and hoping                                                                   |
+| Keep a store across a reload              | `SomeStore.layerSaved`, with a `KeyValueStore`; other tabs that save it are followed                                                    | Writing to `localStorage` by hand                                                                              |
 | Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                                                                               | `catchAll` that hides it; leaving it (compile error)                                                           |
 | Show something while a component loads    | `View.pending(LoadingView)`                                                                                                             | A loading flag in UI state                                                                                     |
 | Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)`                                                  | `location.href`, string paths                                                                                  |
@@ -170,23 +170,20 @@ its own state, each registered in the same root registry the devtools read. So i
 view, update: one registry, one log, every change an action. It only does not look like it,
 because the store and its view sit in the same file.
 
-## Flows, refusals and server data
+## Flows and server data
 
 Read the "State, events that interleave, and server data" part below before writing any store
 with async work. The short version:
 
-- A store is plain unless some commands are wrong in some states. Then give it a state field and
-  give those actions a guard. A refused command is visible in the log, the trace and
-  `store.refused`. Never guard only in the view.
-- Async work is always three steps in a store: a command records the intent, a `Store.after`
-  effect does the work, and it `send`s a command with the result.
-- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an action
-  that needs it reads the query store itself.
-- There is no way to make a command wait for another to finish, on purpose.
-- When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
-  `Store.after`, or a Query. With `Store.after` an older answer can land last.
-- When a second press must not start the work again (Pay, Save, Send), use `Store.afterLeading`:
-  the store refuses the repeat while the first run lasts, and says why.
+- A store accepts every command; there are no guards. Work that takes time is an Effect on a
+  service (or an enhancer): it sends a command, does the work, and sends a command with the
+  result. Every command is in the log and the trace.
+- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
+  that needs it reads `TheQuery.read(input)` itself.
+- When only the newest run matters (a search box, a filter), run it with
+  `FiberHandle.run(handle, effect)`, which stops the one before; or load it with a Query.
+- When a second press must not start the work again (Pay, Save, Send), run it with
+  `FiberHandle.run(handle, effect, { onlyIfMissing: true })`, which ignores the repeat.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the

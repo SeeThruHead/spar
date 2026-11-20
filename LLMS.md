@@ -36,7 +36,7 @@ Three rules that break the build most often:
    list of actions: `onReset: [UiState.set(props.name, ""), UiState.set(props.open, false)]`.
 3. A handler (an event prop, a `withKey` action) takes an `Effect<void>` with no error and no
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
-   already fits: a refusal shows in the store, not as an error.
+   already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
 
 ## The shape of an app
@@ -91,20 +91,20 @@ in an enhancer and pass `props.shown` instead.
 | Use a child component                     | Write it in JSX in the view: `<Dropdown label="Sort" onPick={pick} />`                                                                  | Passing elements down as props                                                                                 |
 | Hold data the app cares about             | A `Store.Tag` with actions and selectors                                                                                                | UI state seeded from a store, a service with a Ref                                                             |
 | Put a store where one component uses it   | `SomeStore.with(Component)`, then mount the result                                                                                      | Wiring a layer at the root for a store one screen owns                                                         |
-| Share a store across the app              | `SomeStore.layer()` in the layers given to `App.mount`                                                                                  | A global                                                                                                       |
+| Share a store across the app              | `SomeStore.layer` in the layers given to `App.mount`                                                                                    | A global                                                                                                       |
 | Change app state                          | `store.commands.<action>(payload)`                                                                                                      | Writing to state anywhere else                                                                                 |
 | Change UI state                           | `UiState.set` or `UiState.update` in a handler                                                                                          | Writing UI state from a command, a stream or a service                                                         |
 | Show a list                               | `<For each={props.items} by={(item) => item.id}>{(item) => <li>...</li>}</For>`                                                         | `.map` inside JSX                                                                                              |
 | Show a tree (a component inside itself)   | `const Row: View.Component<Props> = compose(...)(... <Row node={child} /> ...)`, a `Schema.suspend` Schema                              | Flattening the tree by hand; leaving the type off                                                              |
 | Show one thing or another                 | `<Show when={props.open}>...</Show>`                                                                                                    | A ternary inside JSX                                                                                           |
 | Load data from the server                 | A `Query.Tag`, and `withQuery(name, TheQuery, (props) => input)` where it is needed                                                     | Fetching in a component and passing the result down                                                            |
-| Use loaded data in an action              | Read the query store in the action's `Store.after` effect, then `send` the result                                                       | Props or arguments that carry server data                                                                      |
-| Stop a command that is wrong right now    | A guard as the third argument of `Store.action`, returning the reason                                                                   | Disabling the button and hoping nothing else sends it                                                          |
-| Run a flow with a wait in it              | A state field, an action that starts it, `Store.after` that waits and `send`s the finish                                                | A lock, a queue, a flag in UI state                                                                            |
+| Use loaded data in an action              | An Effect that reads `TheQuery.read(input)` and then sends a command with the result                                                    | Props or arguments that carry server data                                                                      |
+| Stop a second run while one is going      | Run the work with `FiberHandle.run(handle, effect, { onlyIfMissing: true })`                                                            | Disabling the button and hoping nothing else starts it                                                         |
+| Run a flow with a wait in it              | One Effect: a command, `Effect.sleep` or the call, a command with the result                                                            | A lock, a queue, a flag in UI state                                                                            |
 | Call your backend                         | `Backend.rpc(Group, url)` and call the client                                                                                           | `fetch`, axios, tRPC, a hand-rolled client                                                                     |
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                        | `fetch`, `FetchHttpClient.layer`                                                                               |
-| Send something that must not be lost      | `Store.outbox(action, send)`: saved on the device, retried with an idempotency key                                                      | Calling the server from a handler and hoping                                                                   |
-| Do something after an action              | `Store.after(action, effect)`                                                                                                           | An Effect inside a reducer                                                                                     |
+| Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                              | Calling the server from a handler and hoping                                                                   |
+| Keep a store across a reload              | `SomeStore.layerSaved`, with a `KeyValueStore`; other tabs that save it are followed                                                    | Writing to `localStorage` by hand                                                                              |
 | Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                                                                               | `catchAll` that hides it; leaving it (compile error)                                                           |
 | Show something while a component loads    | `View.pending(LoadingView)`                                                                                                             | A loading flag in UI state                                                                                     |
 | Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)`                                                  | `location.href`, string paths                                                                                  |
@@ -170,23 +170,20 @@ its own state, each registered in the same root registry the devtools read. So i
 view, update: one registry, one log, every change an action. It only does not look like it,
 because the store and its view sit in the same file.
 
-## Flows, refusals and server data
+## Flows and server data
 
 Read the "State, events that interleave, and server data" part below before writing any store
 with async work. The short version:
 
-- A store is plain unless some commands are wrong in some states. Then give it a state field and
-  give those actions a guard. A refused command is visible in the log, the trace and
-  `store.refused`. Never guard only in the view.
-- Async work is always three steps in a store: a command records the intent, a `Store.after`
-  effect does the work, and it `send`s a command with the result.
-- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an action
-  that needs it reads the query store itself.
-- There is no way to make a command wait for another to finish, on purpose.
-- When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
-  `Store.after`, or a Query. With `Store.after` an older answer can land last.
-- When a second press must not start the work again (Pay, Save, Send), use `Store.afterLeading`:
-  the store refuses the repeat while the first run lasts, and says why.
+- A store accepts every command; there are no guards. Work that takes time is an Effect on a
+  service (or an enhancer): it sends a command, does the work, and sends a command with the
+  result. Every command is in the log and the trace.
+- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
+  that needs it reads `TheQuery.read(input)` itself.
+- When only the newest run matters (a search box, a filter), run it with
+  `FiberHandle.run(handle, effect)`, which stops the one before; or load it with a Query.
+- When a second press must not start the work again (Pay, Save, Send), run it with
+  `FiberHandle.run(handle, effect, { onlyIfMissing: true })`, which ignores the repeat.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
@@ -445,7 +442,7 @@ panel, lenses show one kind at a time:
 | --------- | -------------------------------------------------------------------------------------- |
 | Rendering | Components mounting, and each event a component handled (`on click`, with its view)    |
 | Data      | Queries: each request, its call, its answer, and what a dependent one's input was from |
-| Stores    | Store commands and refusals                                                            |
+| Stores    | Store commands                                                                         |
 | Backend   | Spans the backend recorded                                                             |
 
 A request that waited for another query's value draws that wait as a line before its bar, from
@@ -748,14 +745,14 @@ Every backend call goes through `Backend`. Effect RPC is the way to talk to a ba
 HttpApi and JSON clients plug into the same client; everything that would go around it is refused
 by the build. A call the framework cannot see is a call missing from the trace.
 
-### 18a. A store says which commands it accepts, and server data is a store
+### 18a. Work that takes time is an Effect, and server data is a store
 
-Events interleave: anything can arrive while a multi-step flow is waiting. Spar has no holding or
-queueing primitive. A flow is states in a store, and each action's guard says in which states it
-applies; a command that does not apply is refused with a reason that the log, the trace and the
-view can all show. The rule is in the model, so a button, a key and an agent get the same answer.
-Server data is no exception: a query is a store with typed loading, loaded and failed states, and
-any other store's action reads it directly, so no prop carries server data.
+Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
+command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
+`FiberHandle` that ignores or replaces it, a `Semaphore` that queues it). The rule is in that one
+Effect, so a button, a key and an agent get the same behaviour, and every command it sends is in
+the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
+and failed states, and any Effect reads it directly, so no prop carries server data.
 
 ### 18. The past can be walked and branched
 
@@ -1890,20 +1887,33 @@ yield *
 
 ### Work that must reach the server
 
-Declare it beside the store. The item is saved before the state changes, sent with one idempotency
-key, and retried until it lands.
+Queue it on an outbox channel from the service that changes the store. The item is saved on the
+device, sent with one idempotency key, and retried until it lands; the store is saved too, so a
+reload loses nothing.
 
 ```ts
-export const BoardStoreLive = BoardStore.layerDurable({}, [
-  Store.outbox(
-    BoardStore.actions.started,
-    Effect.fnUntraced(function* ({ name }, idempotencyKey) {
+export class AgentStarts extends Context.Service<
+  AgentStarts,
+  { readonly start: (name: string) => Effect.Effect<void> }
+>()("sidebar/AgentStarts") {
+  static readonly layer = Layer.effect(
+    AgentStarts,
+    Effect.gen(function* () {
+      const store = yield* BoardStore
       const server = yield* Server
+      const queued = yield* Outbox.channel("sidebar/agents/started", Started, ({ name }, key) =>
+        server.start(name, key),
+      )
 
-      yield* server.start(name, idempotencyKey)
+      return AgentStarts.of({
+        start: Effect.fn("AgentStarts.start")(function* (name: string) {
+          yield* store.commands.started({ name })
+          yield* queued({ name })
+        }),
+      })
     }),
-  ),
-])
+  )
+}
 ```
 
 Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.
@@ -1972,7 +1982,7 @@ outbox, or a form's submit (which ignores a second submit while the first is run
 | Suspense                                          | `View.pending(Placeholder)`                                                                  |
 | Portals                                           | `View.portal`                                                                                |
 | React Router                                      | `Router.route`, `Router.outlet`, `router.link`                                               |
-| Redux and middleware                              | `Store.Tag`, `Store.after`, `Store.afterLatest`, `Store.afterLeading`, `Store.outbox`        |
+| Redux and middleware                              | `Store.Tag`, with async work as Effects on a service, and `Outbox.channel`                   |
 | Testing Library                                   | `spar/testing` (it uses the same queries by role)                                            |
 
 ### Things that will feel different
@@ -1999,7 +2009,7 @@ Both are built on Effect and both keep app state changes explicit and replayable
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | One Model for the whole app, described by a Schema   | Stores for app state, `UiState` for a component's own state (open menus, what was typed) |
 | Messages and one `update`                            | Store actions with a reducer each; commands are `store.commands.<name>(payload)`         |
-| Commands returned from `update`                      | `Store.after(action, effect)` and `Store.outbox(action, send)` beside the store          |
+| Commands returned from `update`                      | An Effect on a service that sends commands, and `Outbox.channel` for what must be sent   |
 | `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                    |
 | `h.div([...], [...])`                                | JSX                                                                                      |
 | Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                  |
@@ -2146,11 +2156,11 @@ independent pieces load side by side.
 - Typed failure and typed requirements. A query's failure is a Schema and its services are in its
   type; a component cannot be mounted without the layers its queries need.
 - A cache with a key and a stale time, in the framework.
-- One log. Every request, answer and refusal is an action in the same log as every store command
+- One log. Every request and answer is an entry in the same log as every store command
   and UI state change, so the app can be rewound and forked with its server data.
 - Traces without a collector: one navigation is one trace, with lenses and the wait of a
   dependent query drawn.
-- Stores as state machines, where a command that does not apply is refused with a reason.
+- One state for everything: stores, components' own state and queries are slots in one tree.
 - An outbox that keeps what was sent across a reload and sends it again.
 
 ### Finding a waterfall
@@ -2187,7 +2197,7 @@ column, and points an agent at a skill file with a section for each code. Spar n
 in its own terms: `docs/diagnostics.md`. A crashed part and a component that held its children back
 are reported with the path of owning components and the file, line and column where the view was
 made. What Spar's reports still lack next to Solid's: a location for anything finer than a view
-(a binding, an effect), and an owner path on a store's refusal, which has no component.
+(a binding, an effect), and an owner path on a store command, which has no component.
 
 ### Routing and preloading
 
@@ -2216,35 +2226,35 @@ page sets its model beside Spar's, from Treflex's own README and reference (`act
 `restart-and-records.md`). Both keep work out of components; they differ in where the work lives
 and how two pieces of work on the same thing relate.
 
-| Question                      | Treflex                                                                                                           | Spar                                                                                                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | On a store (`Store.Tag`): a reducer per action, and reactions (`Store.after`) for the async work                                                                                           |
-| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; reactions send further actions                                                                                                                 |
-| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the reaction's requirements, provided as layers; a test provides other layers                                                                                           |
-| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other, on purpose; each command is decided at once against the current state                                                                                           |
-| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `Store.afterLeading` refuses the repeat with a reason; `Store.afterLatest` stops the one running                                                                                           |
-| Is it running?                | `inFlight(action, owner)`                                                                                         | A phase in the state (`phases`, `Store.during`), so "busy" is state the view and the reducers can read                                                                                     |
-| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | A guard or a phase refuses it, says why, and the refusal is in the log and on `store.refused`                                                                                              |
-| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | Durable stores replay their log on the device; a command recorded just before a reload is carried out by the next tab, or reported as abandoned; the outbox resends what was not confirmed |
-| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its reactions stop with its scope                                                                                                               |
-| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, refusals, UI state and routes, each with its trace; time travel and forks in the devtools                                                                        |
+| Question                      | Treflex                                                                                                           | Spar                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | In an Effect on a service; the store (`Store.Tag`) holds the state, a reducer per action                  |
+| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; an Effect sends commands as its work goes                     |
+| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the Effect's requirements, provided as layers; a test provides other layers            |
+| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other unless the Effect says so (a `Semaphore`); each command applies at once         |
+| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `FiberHandle.run` with `onlyIfMissing` ignores the repeat; plain `FiberHandle.run` stops the one running  |
+| Is it running?                | `inFlight(action, owner)`                                                                                         | A field in the state that the Effect sets at its start and end, so the view can read it                   |
+| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | Written as code in the Effect, before it sends the command                                                |
+| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | A saved store (`layerSaved`) comes back from the device; an outbox channel resends what was not confirmed |
+| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its fibers stop with its scope                                 |
+| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, UI state and routes, each with its trace; time travel and forks in the devtools |
 
 ### What each makes impossible
 
 - **Treflex:** an entity changing under an action while that action waits (the hold), and work
   stopping because its view went away.
-- **Spar:** a command that waits on another (there is no way to write one), state that changes
-  outside a reducer, a busy flag nobody resets (busy is a phase the state machine leaves), and an
-  older answer landing over a newer one (`Store.afterLatest`, queries numbering their requests).
+- **Spar:** state that changes outside a reducer, work that runs twice (one Effect in a
+  `FiberHandle` ignores or replaces a repeat), and an older answer landing over a newer one
+  (queries numbering their requests).
 
 ### Where they differ in spirit
 
 Treflex makes the action the unit: it holds its entity, runs step by step, and the runtime can
 pause, cancel, record and restore it between steps. Spar makes the state the unit: every change is
-one action that the reducer accepts or refuses at once, and async work is a reaction that reports
-back as more actions. Treflex queues a second click behind the first; Spar answers it at once,
-either by refusing it (with the reason shown) or by letting the state machine's current phase
-decide what it means.
+one command applied at once, and async work is a plain Effect that sends commands as it goes.
+Treflex queues a second click behind the first; in Spar the Effect says what a second click does,
+with Effect's own tools: a `FiberHandle` that ignores it or replaces the first run, or a
+`Semaphore` that queues it.
 
 
 # Diagnostics

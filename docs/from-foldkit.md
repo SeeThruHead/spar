@@ -6,7 +6,7 @@ Both are built on Effect and both keep app state changes explicit and replayable
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | One Model for the whole app, described by a Schema   | Stores for app state, `UiState` for a component's own state (open menus, what was typed) |
 | Messages and one `update`                            | Store actions with a reducer each; commands are `store.commands.<name>(payload)`         |
-| Commands returned from `update`                      | `Store.after(action, effect)` and `Store.outbox(action, send)` beside the store          |
+| Commands returned from `update`                      | An Effect on a service that sends commands, and `Outbox.channel` for what must be sent   |
 | `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                    |
 | `h.div([...], [...])`                                | JSX                                                                                      |
 | Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                  |

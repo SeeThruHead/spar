@@ -41,11 +41,11 @@ independent pieces load side by side.
 - Typed failure and typed requirements. A query's failure is a Schema and its services are in its
   type; a component cannot be mounted without the layers its queries need.
 - A cache with a key and a stale time, in the framework.
-- One log. Every request, answer and refusal is an action in the same log as every store command
+- One log. Every request and answer is an entry in the same log as every store command
   and UI state change, so the app can be rewound and forked with its server data.
 - Traces without a collector: one navigation is one trace, with lenses and the wait of a
   dependent query drawn.
-- Stores as state machines, where a command that does not apply is refused with a reason.
+- One state for everything: stores, components' own state and queries are slots in one tree.
 - An outbox that keeps what was sent across a reload and sends it again.
 
 ## Finding a waterfall
@@ -82,7 +82,7 @@ column, and points an agent at a skill file with a section for each code. Spar n
 in its own terms: `docs/diagnostics.md`. A crashed part and a component that held its children back
 are reported with the path of owning components and the file, line and column where the view was
 made. What Spar's reports still lack next to Solid's: a location for anything finer than a view
-(a binding, an effect), and an owner path on a store's refusal, which has no component.
+(a binding, an effect), and an owner path on a store command, which has no component.
 
 ## Routing and preloading
 
