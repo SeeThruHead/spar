@@ -72,6 +72,31 @@ export type Definition<State, A extends Actions<State>, S extends Selectors<Stat
   readonly selectors: S
   readonly invariants?: Readonly<Record<string, (state: NoInfer<State>) => boolean>>
   readonly transitions?: Readonly<Record<string, (step: Transition<NoInfer<State>>) => boolean>>
+  readonly phases?: Phases<NoInfer<State>, keyof NoInfer<A> & string>
+}
+
+export type Phases<State, Name extends string> = {
+  readonly of: (state: State) => string
+  readonly accepts: Readonly<Record<string, ReadonlyArray<Name>>>
+  readonly internal?: ReadonlyArray<Name>
+}
+
+export const unfitFor = <State>(
+  phases: Phases<State, string> | undefined,
+  state: State,
+  action: string,
+  fromItsOwnEffect: boolean,
+): string | null => {
+  if (phases === undefined) return null
+  if (phases.internal?.includes(action) === true && !fromItsOwnEffect) {
+    return "it is internal to the store: only the store's own effects may send it"
+  }
+
+  const phase = phases.of(state)
+
+  return phases.accepts[phase]?.includes(action) === true
+    ? null
+    : `it is not accepted while ${phase}`
 }
 
 export const brokenBy = <State>(rules: Rules<State>, step: Transition<State>): string | null => {

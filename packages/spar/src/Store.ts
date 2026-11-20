@@ -29,6 +29,7 @@ import {
   UnknownAction,
   Unreadable,
   brokenBy,
+  unfitFor,
   inMemory,
   lastSeqOf,
   onDevice,
@@ -65,11 +66,12 @@ export type Send<State> = <Payload>(
 ) => Effect.Effect<void>
 
 export type Reaction<State, R = never> = {
-  readonly action: Action<State, unknown>
+  readonly action?: Action<State, unknown>
   readonly detached?: (entry: Entry) => Effect.Effect<string>
   readonly queued?: boolean
   readonly latest?: boolean
   readonly unwatched?: boolean
+  readonly during?: string
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
   readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
   readonly start: (channel: string) => Effect.Effect<void, never, R | Scope.Scope>
@@ -262,6 +264,12 @@ const isOlderAnswer = <State, R>(
   return overwrites(last, mine)
 }
 
+const lastingIn = <State, R>(
+  reactions: ReadonlyArray<Reaction<State, R>>,
+  phase: string | null,
+): ReadonlyArray<Reaction<State, R>> =>
+  reactions.filter((reaction) => reaction.during !== undefined && reaction.during === phase)
+
 const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => {
   if (reaction.detached !== undefined) return false
 
@@ -434,7 +442,11 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         cell.write({ ...cell.read(), refused: Option.some({ action: name, reason, payload }) })
         yield* Timeline.note("refused", channelOf(key, name), () => ({ payload, reason }))
 
-        return Option.none<{ readonly entry: Entry; readonly next: State }>()
+        return Option.none<{
+          readonly entry: Entry
+          readonly next: State
+          readonly before: State
+        }>()
       })
 
       const record = Effect.fnUntraced(function* (
@@ -447,6 +459,15 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         yield* absorb
 
         const before = cell.read()
+        const sender = yield* Effect.service(Sender)
+        const unfit = unfitFor(
+          definition.phases,
+          before.state,
+          name,
+          reactions.some((reaction) => reaction === sender),
+        )
+        if (unfit !== null) return yield* turnAway(name, payload, unfit, intent)
+
         const next = attempt(before.state)
         if (next instanceof Refused) return yield* turnAway(name, payload, next.reason, intent)
 
@@ -486,7 +507,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         yield* journal.tell
         yield* Timeline.note("command", channelOf(key, name), () => payload)
 
-        return Option.some({ entry, next })
+        return Option.some({ entry, next, before: before.state })
       })
 
       const send: Send<State> = (target, payload) =>
@@ -599,16 +620,48 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         )
       }
 
+      const phaseOf = (held: State): string | null => definition.phases?.of(held) ?? null
+      const entered = (entry: Entry, now: State) =>
+        Effect.forEach(
+          lastingIn(reactions, phaseOf(now)),
+          (reaction) =>
+            Effect.flatMap(
+              Effect.forkIn(reaction.run(entry, now, sendFrom(reaction, entry)), scope),
+              (fiber) => kept(reaction, fiber),
+            ),
+          { discard: true },
+        )
+
+      const moved = (
+        done: { readonly entry: Entry; readonly next: State; readonly before: State },
+        sender: object | null,
+      ) => {
+        const from = phaseOf(done.before)
+        if (from === phaseOf(done.next)) return Effect.void
+
+        return Effect.andThen(
+          Effect.forEach(
+            lastingIn(reactions, from).filter((reaction) => reaction !== sender),
+            stoppedEarlier,
+            { discard: true },
+          ),
+          entered(done.entry, done.next),
+        )
+      }
+
       const react = (
         handled: Action<State, unknown>,
-        done: { readonly entry: Entry; readonly next: State },
+        done: { readonly entry: Entry; readonly next: State; readonly before: State },
       ) =>
         Effect.flatMap(Effect.service(Sender), (sender) =>
           Effect.andThen(
             sentAgain(done.entry, reactionsTo(handled), sender),
-            Effect.forEach(reactionsTo(handled), (reaction) => started(reaction, done, sender), {
-              discard: true,
-            }),
+            Effect.andThen(
+              Effect.forEach(reactionsTo(handled), (reaction) => started(reaction, done, sender), {
+                discard: true,
+              }),
+              moved(done, sender),
+            ),
           ),
         )
 
@@ -666,6 +719,10 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       yield* provideTo(
         eachReaction((reaction, channel) => reaction.start(channel)),
         Context.add(context, Scope.Scope, scope),
+      )
+      yield* provideTo(
+        entered({ id: "", action: "", payload: null, seq: journal.lastSeq }, journal.state),
+        context,
       )
 
       const adopted = yield* provideTo(
@@ -817,25 +874,38 @@ export const Tag =
     }
   }
 
+const unstored = {
+  persist: () => Effect.void,
+  start: () => Effect.void,
+  leftovers: () => Effect.succeed([]),
+}
+
 export const after = <State, Payload, R>(
   trigger: Action<State, Payload>,
   effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
 ): Reaction<State, R> => ({
+  ...unstored,
   action: trigger,
-  persist: () => Effect.void,
   run: (entry, state, send) =>
     trigger.decode(entry.payload).pipe(
       Effect.orDie,
       Effect.flatMap((payload) => effect(payload, state, send)),
     ),
-  start: () => Effect.void,
-  leftovers: () => Effect.succeed([]),
 })
 
 export const afterLatest = <State, Payload, R>(
   trigger: Action<State, Payload>,
   effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
 ): Reaction<State, R> => ({ ...after(trigger, effect), latest: true })
+
+export const during = <State, R>(
+  phase: string,
+  effect: (state: State, send: Send<State>) => Effect.Effect<void, never, R>,
+): Reaction<State, R> => ({
+  ...unstored,
+  during: phase,
+  run: (_entry, state, send) => effect(state, send),
+})
 
 export const unwatched = <State, R>(reaction: Reaction<State, R>): Reaction<State, R> => ({
   ...reaction,
