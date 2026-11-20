@@ -27,7 +27,7 @@ import * as Store from "./internal/store.ts"
 import * as Timeline from "./Timeline.ts"
 import * as UiState from "./UiState.ts"
 import type { Mountable } from "./View.ts"
-import { within } from "./View.ts"
+import { within } from "./internal/viewParts.ts"
 
 export const Status = Schema.Literals(["waiting", "loading", "loaded", "failed"])
 

@@ -10,7 +10,7 @@ import { Seed } from "./server.ts"
 import * as State from "../State.ts"
 import * as Timeline from "../Timeline.ts"
 import type { Mountable } from "../View.ts"
-import { within } from "../View.ts"
+import { within } from "./viewParts.ts"
 
 type PayloadOf<A> = A extends {
   readonly decode: (payload: Schema.Json) => Effect.Effect<infer Payload, Schema.SchemaError>
