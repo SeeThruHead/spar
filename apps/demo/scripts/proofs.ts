@@ -80,7 +80,7 @@ const expectations: ReadonlyArray<Expectation> = [
     file: "pending-before-recover.ts",
     rule: "Showing a placeholder for a load whose failure is unhandled",
     by: "types",
-    expect: "ThreadLoadFailed",
+    expect: "Effect<Element, ThreadLoadFailed",
   },
   {
     file: "recover-wrong-tag.ts",
@@ -99,12 +99,6 @@ const expectations: ReadonlyArray<Expectation> = [
     rule: "A view reaching a service through an event handler",
     by: "types",
     expect: "CounterStore",
-  },
-  {
-    file: "service-leaked-into-a-view.ts",
-    rule: "Handing a view a prop it does not take (here, a whole store)",
-    by: "types",
-    expect: '"props the view does not take": "store"',
   },
   {
     file: "ui-state-in-command.ts",
@@ -138,15 +132,9 @@ const expectations: ReadonlyArray<Expectation> = [
   },
   {
     file: "component-props-without-a-schema.ts",
-    rule: "Giving a component outer props without a Schema for them",
+    rule: "Giving a component outer props without withProps and a Schema for them",
     by: "types",
-    expect: "is not assignable to parameter of type '() => Effect<",
-  },
-  {
-    file: "component-from-a-plain-function.ts",
-    rule: "Making a component from a function that is not a view with a props Schema",
-    by: "types",
-    expect: "Declared",
+    expect: "is not assignable to parameter of type 'First<{ readonly start: number; }",
   },
   {
     file: "backend-error-unhandled.ts",

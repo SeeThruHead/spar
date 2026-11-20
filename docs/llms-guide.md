@@ -43,14 +43,15 @@ writes markup. Child components are written in JSX inside the view. Your own beh
 function `(props) => Effect.succeed({ ... })`, or `compose(...)` of other enhancers without a
 view.
 
-Parts of this repo still use the older `View.connect` / `View.taking` with a separate
-`View.make` view. Do not write new components that way.
+`For` reads its item type from `each`. When `each` is an inline expression such as
+`Reactive.map(props.rows, (all) => all.filter(...))`, TypeScript cannot infer it; compute the list
+in an enhancer and pass `props.shown` instead.
 
 ## The one way to do each thing
 
 | You want to                               | Do this                                                                                       | Not this                                               |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Make a component                          | `compose(...enhancers)((props) => <jsx />)` in a `.tsx` file                                  | A plain function returning JSX; `View.connect`         |
+| Make a component                          | `compose(...enhancers)((props) => <jsx />)` in a `.tsx` file                                  | A plain function returning JSX                         |
 | Take props from the parent                | `withProps({ name: Schema })` as the first enhancer                                           | Untyped props                                          |
 | Read a store                              | `withStore(Store, (store) => ({ count: store.select.count, onAdd: store.commands.added() }))` | Reading a store inside the view                        |
 | Hold state only the screen cares about    | `withUiState(name, Schema, initial)`                                                          | `Ref`, `SubscriptionRef`, `let`, a module variable     |

@@ -43,14 +43,15 @@ writes markup. Child components are written in JSX inside the view. Your own beh
 function `(props) => Effect.succeed({ ... })`, or `compose(...)` of other enhancers without a
 view.
 
-Parts of this repo still use the older `View.connect` / `View.taking` with a separate
-`View.make` view. Do not write new components that way.
+`For` reads its item type from `each`. When `each` is an inline expression such as
+`Reactive.map(props.rows, (all) => all.filter(...))`, TypeScript cannot infer it; compute the list
+in an enhancer and pass `props.shown` instead.
 
 ## The one way to do each thing
 
 | You want to                               | Do this                                                                                       | Not this                                               |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Make a component                          | `compose(...enhancers)((props) => <jsx />)` in a `.tsx` file                                  | A plain function returning JSX; `View.connect`         |
+| Make a component                          | `compose(...enhancers)((props) => <jsx />)` in a `.tsx` file                                  | A plain function returning JSX                         |
 | Take props from the parent                | `withProps({ name: Schema })` as the first enhancer                                           | Untyped props                                          |
 | Read a store                              | `withStore(Store, (store) => ({ count: store.select.count, onAdd: store.commands.added() }))` | Reading a store inside the view                        |
 | Hold state only the screen cares about    | `withUiState(name, Schema, initial)`                                                          | `Ref`, `SubscriptionRef`, `let`, a module variable     |
@@ -220,7 +221,7 @@ loaders, fragments or lists of dependencies.
 A parent reads a value from a store and passes it to a child. The child declares a query that
 uses the prop.
 
-```ts
+```tsx
 class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   input: Schema.Int,
   success: Schema.Array(Order),
@@ -229,33 +230,29 @@ class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   staleAfter: "30 seconds",
 }) {}
 
-const Orders = View.taking(
-  { userId: Props.Reactive(Schema.Int) },
-  Effect.fnUntraced(function* ({ userId }) {
-    const orders = yield* OrdersQuery.ask(userId)
+const Orders = compose(
+  withProps({ userId: Props.Reactive(Schema.Int) }),
+  withQuery("orders", OrdersQuery, (props) => props.userId),
+)((props) => (
+  <p>
+    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+  </p>
+))
 
-    return { status: orders.status, count: Reactive.map(orders.value, (all) => all?.length ?? 0) }
-  }),
-)(OrdersView)
-
-const Parent = View.connect(
-  Effect.fnUntraced(function* () {
-    const people = yield* PeopleStore
-
-    return { orders: yield* View.child(Orders, { userId: people.select.selectedId }) }
-  }),
-)(ParentView)
+const Parent = compose(
+  withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
+)((props) => <Orders userId={props.selected} />)
 ```
 
 That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and it works.
 
 What Spar does with it:
 
-1. `ask` returns at once with a handle: `status`, `value`, `error`, `loading`, each a reactive
-   value, and `refetch`. Nothing in a component's Effect waits for data.
-2. Because nothing waits, the parent's Effect goes straight on to mount its children, and theirs
-   mount theirs. Every `ask` in the tree is reached in one pass, and every query with an input
-   starts then, together.
+1. `ask` (which `withQuery` calls) returns at once with a handle: `status`, `value`, `error`,
+   `loading`, each a reactive value, and `refetch`. No enhancer waits for data.
+2. Because nothing waits, the parent goes straight on to draw its children, and they draw theirs.
+   Every query in the tree is reached in one pass, and every query with an input starts then,
+   together.
 3. The query runs in its store, which lives at the root. The component can unmount and the
    answer still arrives and is kept. Two components that ask for the same input share one
    request.
@@ -302,23 +299,25 @@ Segments nest with open-ended routes and an outlet in each layout. `Router.live`
 mounted while only its params change and gives it the params as a reactive value, which is what a
 query wants as its input:
 
-```ts
+```tsx
 const orgRoute = Router.route("/org/:org/*", Org)
 
-const OrgSegment = View.taking(
-  { params: Props.Reactive(Org) },
-  Effect.fnUntraced(function* ({ params }) {
-    const org = yield* OrgQuery.ask(Reactive.map(params, (now) => now.org))
+const withTeams = () =>
+  Effect.map(
+    Router.outlet({ routes: [Router.live(teamRoute, TeamSegment)], otherwise: Missing }),
+    (inner) => ({ inner }),
+  )
 
-    return {
-      label: Reactive.map(org.value, (found) => found?.label ?? ""),
-      inner: yield* Router.outlet({
-        routes: [Router.live(teamRoute, TeamSegment)],
-        otherwise: Missing,
-      }),
-    }
-  }),
-)(SegmentView)
+const OrgSegment = compose(
+  withProps({ params: Props.Reactive(Org) }),
+  withQuery("org", OrgQuery, (props) => Reactive.map(props.params, (now) => now.org)),
+  withTeams,
+)((props) => (
+  <section>
+    <h2>{Reactive.map(props.org.value, (found) => found?.label ?? "")}</h2>
+    {props.inner}
+  </section>
+))
 ```
 
 A route inside another is declared under it, so its path is written once. The parent must end
@@ -380,11 +379,12 @@ and stays `loading` until the schedule gives up.
 One thing: a component whose Effect waits. Everything below it mounts late, so their queries
 start late.
 
-- The build refuses a wait written straight into a component's Effect: `yield*` of
+- The build refuses a wait written straight into an enhancer inside `compose(...)`: `yield*` of
   `Effect.sleep`, `Effect.promise`, `Effect.tryPromise`, `Effect.callback`, `Deferred.await`,
-  `Fiber.join` inside `View.connect` or `View.taking` (rule `no-waiting-in-components`). A wait in
-  a handler, in a store's reaction or anywhere outside a component is fine.
-- The build cannot see a wait behind a call such as `yield* server.describe(name)`. For that,
+  `Fiber.join` (rule `no-waiting-in-components`). A wait in a handler, in a store's reaction or
+  anywhere outside a component is fine.
+- The build cannot see a wait behind a call such as `yield* server.describe(name)`, or in an
+  enhancer written outside the `compose(...)` call. For that,
   any component that takes a frame or more before its children can mount gets a `waited` entry in
   the log with its name and the milliseconds, and `spar.waited_ms` on its span.
 
@@ -519,16 +519,16 @@ returns.
 Rules out: stale closures, dependency arrays, memoization, and every bug that comes from a
 component function running again.
 
-### 2. A component is a pure view plus one Effect that makes its props
+### 2. A component is enhancers that make its props, then a pure view
 
-`View.connect(() => Effect<Props, E, R>)(View)`, with the view last, or
-`View.taking(fields, (outerProps) => Effect<Props, E, R>)(View)` when the parent gives it props. The
-view is made with `View.make(name, fields, draw)`: a function from props to an element that cannot
-reach a service. Both kinds of props are declared with a Schema for each one, and the build rejects a
-view written as a plain function. The Effect is ordinary Effect code. It
-runs once when the component mounts, in the component's own scope, and everything it started is
-cancelled when the component unmounts. Every component keeps its pure view as `.view`, so a test or
-a story can render it with sample props. `connect` rejects props the view does not take.
+`compose(...enhancers)((props) => <jsx />)`. Each enhancer is a plain function from the props so
+far to an Effect of the props it adds; `withProps(fields)` declares the props a parent gives, with
+a Schema for each, and a first enhancer that asks for props any other way does not compile. The
+enhancers are ordinary Effect code. They run once when the component mounts, in the component's
+own scope, and everything they started is cancelled when the component unmounts. The view comes
+last, inline, and only draws: it cannot reach a service, and outside `compose` the build rejects a
+view written as a plain function (use `View.make(name, fields, draw)` there). Every component keeps
+its view as `.view`, so a test or a story can render it with sample props.
 
 Rules out: hook ordering rules, effects that run again, leaked subscriptions and timers, views that
 fetch, and services smuggled into a view.
@@ -633,7 +633,7 @@ Nothing that is data can be declared with a TypeScript type alone. Each of these
 the plain form does not compile or does not build:
 
 - a view's props (`View.make(name, fields, draw)`; a function that just returns JSX is rejected by
-  the build), and a component's outer props (`View.taking(fields, props)`);
+  the build outside `compose`), and a component's outer props (`withProps(fields)`);
 - UI state (`UiState.make(name, schema, initial)`);
 - a store's state, each command's payload and each selector's output;
 - a route's params, whenever its path has any, and the Schema must name every one of them;
@@ -777,33 +777,31 @@ export const Card = compose(
 
 ### View
 
-`View.connect` and `View.taking` are the older way to make a component: an Effect that returns an
-object of props, joined to a separately declared view. They still work while the apps in this repo
-move to `compose`; write new components with `compose`.
+What a component made with `compose` can be wrapped in. A view made with `View.make` can also be
+the last thing given to `compose`, in place of an inline view; the component then keeps that view
+as `.view` and the inspector shows its name.
 
-| Function                               | What it does                                                                                                               |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                      |
-| `View.connect(props)(View)`            | The older way to make a component: `props` is `() => Effect<Props, E, R>`, run once on mount.                              |
-| `View.taking(fields, props)(View)`     | The same for a component its parent gives props to: `fields` is their Schema, `props` is `(outer) => Effect<Props, E, R>`. |
-| `View.child(component, props)`         | Mounts a child from a parent's Effect and gives back its element.                                                          |
-| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                         |
-| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                     |
-| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props.                           |
-| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                           |
-| `View.mapProps(f)`                     | Changes the props a component takes.                                                                                       |
-| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                           |
-| `View.portal`                          | Mounts the component in a layer above the app.                                                                             |
+| Function                               | What it does                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.            |
+| `View.child(component, props)`         | Mounts a child from an enhancer and gives back its element, for a child that can still fail.     |
+| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                               |
+| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.           |
+| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props. |
+| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                 |
+| `View.mapProps(f)`                     | Changes the props a component takes.                                                             |
+| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                 |
+| `View.portal`                          | Mounts the component in a layer above the app.                                                   |
 
-```ts
+```tsx
 export const AgentPage = pipe(
-  View.taking({ id: Schema.String }, agentProps)(AgentPageView),
+  compose(withProps({ id: Schema.String }), withAgent)((props) => <h1>{props.name}</h1>),
   View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
 )
 ```
 
-(`apps/sidebar/src/AgentPage.ts`)
+(`apps/sidebar/src/AgentPage.tsx`)
 
 ### Props
 
@@ -918,15 +916,17 @@ another action of the same store, so async work started by one command reports b
 
 #### A store beside its view
 
-```ts
+```tsx
 export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
 
-const NotesPanel = View.taking({ id: Schema.String, title: Schema.String }, ...)(NotesView)
+const NotesPanel = compose(withProps({ id: Schema.String, title: Schema.String }), ...)(
+  (props) => <section aria-label={props.title}>...</section>,
+)
 
 export const Notes = NotesStore.with(NotesPanel)
 ```
 
-`Notes` is one unit: mount it anywhere with `View.child(Notes, props)` and nothing is wired at the
+`Notes` is one unit: mount it anywhere with `<Notes id="..." title="..." />` and nothing is wired at the
 app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
 store's key and the place it is mounted (`sidebar/Notes @ ShellView / NotesView`), a second one
 beside it is numbered (`... NotesView#2`), and it registers with the devtools like every other
@@ -1481,7 +1481,7 @@ A query is a store, and declaring that a component needs one is a line in that c
 A parent reads a value from a store and passes it to a child as a prop. The child declares a
 query that uses the prop. That is all anybody writes:
 
-```ts
+```tsx
 class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   input: Schema.Int,
   success: Schema.Array(Order),
@@ -1490,30 +1490,26 @@ class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   staleAfter: "30 seconds",
 }) {}
 
-const Orders = View.taking(
-  { userId: Props.Reactive(Schema.Int) },
-  Effect.fnUntraced(function* ({ userId }) {
-    const orders = yield* OrdersQuery.ask(userId)
+const Orders = compose(
+  withProps({ userId: Props.Reactive(Schema.Int) }),
+  withQuery("orders", OrdersQuery, (props) => props.userId),
+)((props) => (
+  <p>
+    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+  </p>
+))
 
-    return { status: orders.status, count: Reactive.map(orders.value, (all) => all?.length ?? 0) }
-  }),
-)(OrdersView)
-
-const Parent = View.connect(
-  Effect.fnUntraced(function* () {
-    const people = yield* PeopleStore
-
-    return { orders: yield* View.child(Orders, { userId: people.select.selectedId }) }
-  }),
-)(ParentView)
+const Parent = compose(
+  withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
+)((props) => <Orders userId={props.selected} />)
 ```
 
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
 
 - **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
-  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and nothing in a
-  component's Effect does, so every query in the tree being mounted is declared in the same
+  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and no enhancer
+  does, so every query in the tree being mounted is declared in the same
   pass and they all start together. Nesting components does not make a waterfall.
 - **The query runs in its store, not in the component.** The store is provided at the root
   (`OrdersQuery.live`), so the request and its result outlive the component that asked, and two
@@ -1568,22 +1564,33 @@ Each of these is an entry in the log and a span in the trace.
 A page is an input, so each page is its own entry in the cache. `pages` keeps the list of pages a
 component has opened, as that component's UI state, and asks for each:
 
-```ts
-const Feed = View.connect(
-  Effect.fnUntraced(function* () {
-    const feed = yield* PostsQuery.pages({
-      first: { after: null },
-      next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
-    })
+```tsx
+const withFeed = Effect.fnUntraced(function* () {
+  const feed = yield* PostsQuery.pages({
+    first: { after: null },
+    next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
+  })
 
-    return {
-      posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
-      loading: feed.loading,
-      more: feed.more,
-      onMore: feed.loadMore,
-    }
-  }),
-)(FeedView)
+  return {
+    posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
+    loading: feed.loading,
+    more: feed.more,
+    onMore: feed.loadMore,
+  }
+})
+
+const Feed = compose(withFeed)((props) => (
+  <section aria-label="Posts">
+    <ul>
+      <For each={props.posts} by={(post) => post.id}>
+        {(post) => <li>{Reactive.map(post, (now) => now.title)}</li>}
+      </For>
+    </ul>
+    <button type="button" hidden={Reactive.map(props.more, (more) => !more)} onClick={props.onMore}>
+      More
+    </button>
+  </section>
+))
 ```
 
 `next` is given a loaded page and its input and says what the following input is, or none at
@@ -2241,7 +2248,7 @@ Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
 A view cannot run an Effect.
 
-Fix: Do the work in the component's Effect (View.connect) and pass the result in as a prop.
+Fix: Do the work in one of the component's enhancers and pass the result in as a prop.
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
@@ -3626,7 +3633,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, Store, Timeline, View } from "spar"
+import { Props, Query, Reactive, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
@@ -3940,7 +3947,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
   it.live("a list read a page at a time: the pages so far, whether there is more, and more", () =>
     Effect.gen(function* () {
-      const Feed = View.connect(
+      const Feed = compose(
         Effect.fnUntraced(function* () {
           const feed = yield* Orders.pages({
             first: 1,
@@ -3997,7 +4004,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
   it.live("a list whose next page is one it already has says there is no more", () =>
     Effect.gen(function* () {
-      const Feed = View.connect(
+      const Feed = compose(
         Effect.fnUntraced(function* () {
           const feed = yield* Orders.pages({ first: 1, next: () => Option.some(1) })
 
@@ -4038,7 +4045,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
   it.live("the report of a needless wait names the component and where its view was made", () =>
     Effect.gen(function* () {
       const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
-      const Chained = View.connect(
+      const Chained = compose(
         Effect.fnUntraced(function* () {
           const users = yield* Users.ask()
           const stock = yield* Stock.ask(
@@ -4059,7 +4066,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
       const [waited] = (yield* Ref.get(noted)).filter((seen) => seen.kind === "waited")
 
       expect(JSON.stringify(waited?.detail)).toMatch(
-        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Orders","at":"[^"]+:\d+:\d+"/,
+        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Chained","at":"[^"]+query\.test\.ts:\d+:\d+"/,
       )
     }).pipe(
       Effect.provide(Layer.merge(Users.live, Stock.live).pipe(Layer.provideMerge(Directory.layer))),
@@ -4068,8 +4075,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
-      const OrdersOf = View.taking(
-        { userId: Props.Reactive(Schema.Int) },
+      const OrdersOf = compose(
+        withProps({ userId: Props.Reactive(Schema.Int) }),
         Effect.fnUntraced(function* ({ userId }) {
           const orders = yield* Orders.ask(userId)
 
@@ -4080,7 +4087,7 @@ describe("the natural way: a value from one place feeds a query declared in anot
         }),
       )(OrdersView)
       const selected = yield* SubscriptionRef.make(1)
-      const Shelf = View.connect(
+      const Shelf = compose(
         Effect.fnUntraced(function* () {
           return {
             orders: yield* View.child(OrdersOf, {
@@ -4653,7 +4660,7 @@ describe("server data in a store", () => {
   it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
     Effect.gen(function* () {
       const Shown = Stock.beside(
-        View.connect(
+        compose(
           Effect.fnUntraced(function* () {
             const stock = yield* Stock.ask()
 
@@ -5350,7 +5357,7 @@ Tests of a store beside its view: no layer at the root, one state for each place
 ```ts
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Ref, Schema } from "effect"
-import { Store, UiState, View } from "spar"
+import { Store, UiState, View, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { PairView, TallyView } from "./units.tsx"
 
@@ -5366,8 +5373,8 @@ class TallyStore extends Store.Tag<TallyStore>()("test/Tally", {
 }) {}
 
 const Tally = TallyStore.with(
-  View.taking(
-    { label: Schema.String },
+  compose(
+    withProps({ label: Schema.String }),
     Effect.fnUntraced(function* ({ label }) {
       const store = yield* TallyStore
 
@@ -5377,7 +5384,7 @@ const Tally = TallyStore.with(
 )
 
 const Lone = TallyStore.with(
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const store = yield* TallyStore
 
@@ -5386,7 +5393,7 @@ const Lone = TallyStore.with(
   )(TallyView),
 )
 
-const Pair = View.connect(
+const Pair = compose(
   Effect.fnUntraced(function* () {
     return {
       first: yield* View.child(Tally, { label: "apples" }),

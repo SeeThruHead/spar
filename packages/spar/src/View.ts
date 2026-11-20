@@ -2,7 +2,6 @@ import { Context, Duration, Effect, Layer, Option, Schema, Scope, SubscriptionRe
 import { TypeId, isComponent } from "./internal/component.ts"
 import { report } from "./internal/crash.ts"
 import * as Dom from "./internal/dom.ts"
-import { drawingIn } from "./internal/drawing.ts"
 import { placedHere } from "./internal/placed.ts"
 import { fragment, keyed, portal as portalTo } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
@@ -10,7 +9,7 @@ import { Frame, OverlayLayer } from "./internal/frame.ts"
 import { fromSubscriptionRef, map } from "./internal/reactive.ts"
 import { Hydrating, OnServer } from "./internal/server.ts"
 import { RowKey, UiTree } from "./internal/uiTree.ts"
-import { drawn, placed, recovering } from "./internal/inspect.ts"
+import { drawn, recovering } from "./internal/inspect.ts"
 import { ViewScope, pathOf } from "./internal/viewScope.ts"
 import type { Fields } from "./Props.ts"
 import * as Diagnostics from "./Diagnostics.ts"
@@ -107,44 +106,11 @@ export const make = <const F extends Fields>(
     at: Diagnostics.locationIn(new Error("where this view was made").stack, 1),
   })
 
-const spanName = (view: Declared): string =>
-  view.displayName === "" ? "View (unnamed)" : view.displayName
-
-type Extra<Props, ViewProps> = [Props] extends [never]
-  ? never
-  : Exclude<keyof Props, keyof ViewProps>
-
-type OnlyWhatTheViewTakes<Props, ViewProps> = [Extra<Props, ViewProps>] extends [never]
-  ? unknown
-  : { readonly "props the view does not take": Extra<Props, ViewProps> }
-
-export const connect = <Props, E, Requirements>(
-  props: () => Effect.Effect<Props, E, Requirements>,
-) => connected<Props, unknown, E, Requirements>(props, [])
-
-export const taking = <const F extends Fields, Props, E, Requirements>(
-  _outer: F,
-  props: (outer: Schema.Struct<F>["Type"]) => Effect.Effect<Props, E, Requirements>,
-) => connected(props, [])
-
-const shownIn = <Props>(view: View<Props>, made: Props, services: ReadonlyArray<string>) =>
-  Effect.flatMap(Effect.context(), (context) =>
-    ViewScope.use((mounted) =>
-      Effect.map(
-        drawingIn(context, () => view(made)),
-        (element) => {
-          placed(() => pathOf(mounted), services)
-
-          return element
-        },
-      ),
-    ),
-  )
-
 const aFrame = 16
 
-const noticed = <A, E, R>(
-  view: Declared,
+export const noticed = <A, E, R>(
+  name: string,
+  at: string,
   made: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R | ViewScope> =>
   Effect.flatMap(
@@ -156,46 +122,17 @@ const noticed = <A, E, R>(
       return Effect.as(
         Effect.andThen(
           Effect.annotateCurrentSpan("spar.waited_ms", millis),
-          Timeline.note("waited", spanName(view), () => ({
+          Timeline.note("waited", name, () => ({
             millis,
             code: "SPAR_COMPONENT_WAITED",
             in: pathOf(mounted).join(" > "),
-            at: view.at,
+            at,
           })),
         ),
         value,
       )
     },
   )
-
-const connected =
-  <Props, Outer, E, Requirements>(
-    props: (outer: Outer) => Effect.Effect<Props, E, Requirements>,
-    services: ReadonlyArray<string>,
-  ) =>
-  <ViewProps = Props>(
-    view: View<ViewProps> & View<Props> & Declared & OnlyWhatTheViewTakes<Props, ViewProps>,
-  ): Component<Outer, E, Outside<Requirements>, ViewProps> =>
-    component<Outer, E, Outside<Requirements>, ViewProps>(view, (outer) =>
-      Effect.withSpan(
-        inViewScope(
-          Effect.flatMap(noticed(view, props(outer)), (made) => shownIn(view, made, services)),
-          spanName(view),
-          view.at,
-        ),
-        spanName(view),
-        { captureStackTrace: false, attributes: { "spar.kind": "view" } },
-      ),
-    )
-
-export const described = (services: ReadonlyArray<string>) => ({
-  connect: <Props, E, Requirements>(props: () => Effect.Effect<Props, E, Requirements>) =>
-    connected<Props, unknown, E, Requirements>(props, services),
-  taking: <const F extends Fields, Props, E, Requirements>(
-    _outer: F,
-    props: (outer: Schema.Struct<F>["Type"]) => Effect.Effect<Props, E, Requirements>,
-  ) => connected(props, services),
-})
 
 export const mapProps =
   <Outer, Props>(f: (outer: Outer) => Props) =>

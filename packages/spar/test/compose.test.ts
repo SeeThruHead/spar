@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, pipe, Queue, Ref, Schema, Stream, SubscriptionRef } from "effect"
-import { Reactive, UiState, View } from "spar"
+import { Reactive, UiState, View, compose } from "spar"
 import { jsx } from "spar/jsx-runtime"
 import { CountView, DraftView, EmptyView, SpanView } from "./forms.tsx"
 import { eventually, find, findText, gone, mount } from "spar/testing"
@@ -9,7 +9,7 @@ import { BoardView, ItemView } from "./views.tsx"
 import type { Item } from "./views.tsx"
 
 const Draft = (saved: Ref.Ref<ReadonlyArray<string>>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const draft = yield* UiState.make("draft", Schema.String, "")
       const urgent = yield* UiState.make("urgent", Schema.Boolean, false)
@@ -35,11 +35,16 @@ const spanProps = Effect.fnUntraced(function* () {
   return { span: span.name }
 }, Effect.orDie)
 
-const Traced = View.connect(spanProps)(SpanView)
+const Traced = compose(spanProps)(SpanView)
 
-const TracedUnnamed = View.connect(spanProps)(
-  View.make("", { span: Schema.String }, ({ span }) => jsx("p", { role: "note", children: span })),
-)
+const unnamed = () =>
+  compose(spanProps)(
+    View.make("", { span: Schema.String }, ({ span }) =>
+      jsx("p", { role: "note", children: span }),
+    ),
+  )
+
+const TracedUnnamed = unnamed()
 
 const Counted = (count: number) =>
   pipe(
@@ -52,7 +57,7 @@ const Listed = (
   list: Reactive.Reactive<ReadonlyArray<Item>>,
   items: Queue.Queue<Reactive.Reactive<Item>>,
 ) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const rows = yield* pipe(
         list,
@@ -105,19 +110,19 @@ describe("composition", () => {
     }),
   )
 
-  it.live("a component mounts inside a span named after its view", () =>
+  it.live("a component mounts inside a span named after its constant", () =>
     Effect.gen(function* () {
       yield* mount(Traced)
 
-      expect((yield* find("note")).textContent).toBe("SpanView")
+      expect((yield* find("note")).textContent).toBe("Traced")
     }),
   )
 
-  it.live("a component whose view has no name still mounts inside a span", () =>
+  it.live("a component with no constant and a view with no name still mounts inside a span", () =>
     Effect.gen(function* () {
       yield* mount(TracedUnnamed)
 
-      expect((yield* find("note")).textContent).toBe("View (unnamed)")
+      expect((yield* find("note")).textContent).toBe("Component")
     }),
   )
 

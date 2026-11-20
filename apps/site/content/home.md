@@ -1,23 +1,16 @@
-## A component is a view plus one Effect
+## A component is enhancers, then a view
 
-A view is a pure function of its props, and every prop has a Schema. A component is that view and
-one Effect that makes its props. What the Effect needs and how it can fail are in the component's
-type, all the way up the tree.
+Enhancers make a component's props; the view comes last and only draws. An enhancer is a plain
+function from the props so far to an Effect. What the enhancers need and how they can fail are in
+the component's type, all the way up the tree.
 
 ```tsx
-export const CounterView = View.make(
-  "CounterView",
-  { count: Props.Reactive(Schema.Finite), onAdd: Props.Action },
-  ({ count, onAdd }) => <button onClick={onAdd}>Count is {count}</button>,
-)
-
-export const Counter = View.connect(
-  Effect.fnUntraced(function* () {
-    const store = yield* CounterStore
-
-    return { count: store.select.count, onAdd: store.commands.added() }
-  }),
-)(CounterView)
+export const Counter = compose(
+  withStore(CounterStore, (store) => ({
+    count: store.select.count,
+    onAdd: store.commands.added(),
+  })),
+)((props) => <button onClick={props.onAdd}>Count is {props.count}</button>)
 ```
 
 **What it removes.** A missing provider and an unhandled failure. `App.mount` only accepts a
@@ -27,21 +20,26 @@ compile errors and neither can reach a user.
 ## Server data is declared, not fetched
 
 A component says which data it needs by asking a query. It never fetches. Queries asked for in the
-same Effect start together, and one request runs for each input however many components ask.
+same render start together, and one request runs for each input however many components ask.
 
-```ts
-const ReportPage = View.taking(
-  { params: Props.Reactive(Params) },
-  Effect.fnUntraced(function* ({ params }) {
-    const profile = yield* ProfileQuery.ask(Reactive.map(params, (now) => now.user))
-    const orders = yield* OrdersQuery.ask(Reactive.map(params, (now) => now.user))
-    const suggestions = yield* SuggestionsQuery.ask(
-      Reactive.map(profile.value, (found) => Option.fromNullishOr(found?.taste)),
-    )
+```tsx
+const userOf = (props: { readonly params: Reactive<Params> }) =>
+  Reactive.map(props.params, (now) => now.user)
 
-    return { name: nameOf(profile), orders: countOf(orders), ideas: listOf(suggestions) }
-  }),
-)(ReportView)
+const ReportPage = compose(
+  withProps({ params: Props.Reactive(Params) }),
+  withQuery("profile", ProfileQuery, userOf),
+  withQuery("orders", OrdersQuery, userOf),
+  withQuery("suggestions", SuggestionsQuery, (props) =>
+    Reactive.map(props.profile.value, (found) => Option.fromNullishOr(found?.taste)),
+  ),
+)((props) => (
+  <section>
+    <h1>{nameOf(props.profile)}</h1>
+    <p>{countOf(props.orders)} orders</p>
+    <p>{listOf(props.suggestions)}</p>
+  </section>
+))
 ```
 
 The third query waits for the first only because its input is made from the first one's value.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema, SubscriptionRef, pipe } from "effect"
-import { Props, Reactive, UiState, View, compose, uses, withHandlers } from "spar"
+import { Props, Reactive, UiState, View, compose, uses, withHandlers, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { fragment } from "../src/internal/element.ts"
 import {
@@ -25,7 +25,7 @@ const Sorry = View.make("Sorry", { error: Schema.Unknown }, () => fragment(["Sor
 
 const Listed = View.make("Listed", { rows: Props.Element }, ({ rows }) => rows)
 
-const Note = View.described(["Notes", "Router.Router"]).taking({ id: Schema.String }, ({ id }) =>
+const Note = compose(withProps({ id: Schema.String }), uses(["Notes", "Router.Router"]), ({ id }) =>
   Effect.map(UiState.make("text", Schema.String, "new"), (text) => ({
     id,
     text,
@@ -33,12 +33,12 @@ const Note = View.described(["Notes", "Router.Router"]).taking({ id: Schema.Stri
   })),
 )(NoteView)
 
-const Twice = View.described(["Clock"]).connect(() =>
+const Twice = compose(uses(["Clock"]), () =>
   Effect.map(UiState.make("same", Schema.String, "one"), (first) => ({ first })),
 )(TwiceView)
 
 const Board = (items: Reactive.Reactive<ReadonlyArray<string>>) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       return {
         left: yield* View.child(Twice, {}),
@@ -57,7 +57,7 @@ const Board = (items: Reactive.Reactive<ReadonlyArray<string>>) =>
     }),
   )(Pair)
 
-const Rows = View.connect(() =>
+const Rows = compose(() =>
   Effect.map(
     pipe(
       Reactive.succeed(["a"]),
@@ -165,11 +165,11 @@ describe("what the inspector knows about what is on the page", () => {
 
         expect([note.name, note.placed]).toEqual([
           "NoteView",
-          Option.some({ path: ["Pair", "NoteView[b]"], services: ["Notes", "Router.Router"] }),
+          Option.some({ path: ["Pair", "Note[b]"], services: ["Notes", "Router.Router"] }),
         ])
         expect([twice.name, twice.placed]).toEqual([
           "TwiceView",
-          Option.some({ path: ["Pair", "TwiceView"], services: ["Clock"] }),
+          Option.some({ path: ["Pair", "Twice"], services: ["Clock"] }),
         ])
         expect(Props.allShown(NoteView.props, note.props)).toEqual({
           id: "b",
@@ -209,7 +209,7 @@ describe("what the inspector knows about what is on the page", () => {
       Effect.fnUntraced(function* (inspector) {
         yield* Testing.mount(
           pipe(
-            View.connect(() => Effect.succeed({ text: "safe" }))(BadgeView),
+            compose(() => Effect.succeed({ text: "safe" }))(BadgeView),
             View.recover(Lost, Sorry),
             View.recover(Schema.Struct({ error: Schema.String }), Sorry),
           ),
@@ -254,7 +254,7 @@ describe("what the inspector knows about what is on the page", () => {
 
   it.live("with no inspector nothing is marked", () =>
     Effect.gen(function* () {
-      yield* Testing.mount(View.connect(() => Effect.succeed({ text: "plain" }))(BadgeView))
+      yield* Testing.mount(compose(() => Effect.succeed({ text: "plain" }))(BadgeView))
       expect((yield* Testing.findText("plain")).getAttribute(mark)).toBeNull()
       expect(document.querySelector(`[${mark}]`)).toBeNull()
     }),

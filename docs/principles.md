@@ -28,16 +28,16 @@ returns.
 Rules out: stale closures, dependency arrays, memoization, and every bug that comes from a
 component function running again.
 
-## 2. A component is a pure view plus one Effect that makes its props
+## 2. A component is enhancers that make its props, then a pure view
 
-`View.connect(() => Effect<Props, E, R>)(View)`, with the view last, or
-`View.taking(fields, (outerProps) => Effect<Props, E, R>)(View)` when the parent gives it props. The
-view is made with `View.make(name, fields, draw)`: a function from props to an element that cannot
-reach a service. Both kinds of props are declared with a Schema for each one, and the build rejects a
-view written as a plain function. The Effect is ordinary Effect code. It
-runs once when the component mounts, in the component's own scope, and everything it started is
-cancelled when the component unmounts. Every component keeps its pure view as `.view`, so a test or
-a story can render it with sample props. `connect` rejects props the view does not take.
+`compose(...enhancers)((props) => <jsx />)`. Each enhancer is a plain function from the props so
+far to an Effect of the props it adds; `withProps(fields)` declares the props a parent gives, with
+a Schema for each, and a first enhancer that asks for props any other way does not compile. The
+enhancers are ordinary Effect code. They run once when the component mounts, in the component's
+own scope, and everything they started is cancelled when the component unmounts. The view comes
+last, inline, and only draws: it cannot reach a service, and outside `compose` the build rejects a
+view written as a plain function (use `View.make(name, fields, draw)` there). Every component keeps
+its view as `.view`, so a test or a story can render it with sample props.
 
 Rules out: hook ordering rules, effects that run again, leaked subscriptions and timers, views that
 fetch, and services smuggled into a view.
@@ -142,7 +142,7 @@ Nothing that is data can be declared with a TypeScript type alone. Each of these
 the plain form does not compile or does not build:
 
 - a view's props (`View.make(name, fields, draw)`; a function that just returns JSX is rejected by
-  the build), and a component's outer props (`View.taking(fields, props)`);
+  the build outside `compose`), and a component's outer props (`withProps(fields)`);
 - UI state (`UiState.make(name, schema, initial)`);
 - a store's state, each command's payload and each selector's output;
 - a route's params, whenever its path has any, and the Schema must name every one of them;

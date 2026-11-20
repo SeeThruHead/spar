@@ -6,7 +6,7 @@ import { McpClient, McpProtocol } from "effect/ai"
 import { Command } from "effect/cli"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
-import { Props, Router, Store, Timeline, UiState, View } from "spar"
+import { Props, Router, Store, Timeline, UiState, View, compose, uses } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import { jsx } from "spar/jsx-runtime"
@@ -98,7 +98,8 @@ const NoteView = View.make(
   ({ text, count }) => jsx("p", { children: [text, count] }),
 )
 
-const Note = View.described(["Tally"]).connect(
+const Note = compose(
+  uses(["Tally"]),
   Effect.fnUntraced(function* () {
     const tally = yield* Tally
 

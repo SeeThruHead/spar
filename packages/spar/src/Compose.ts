@@ -15,7 +15,7 @@ import * as Events from "./Events.ts"
 import type { Fields } from "./Props.ts"
 import type * as Query from "./Query.ts"
 import * as UiState from "./UiState.ts"
-import { component, inViewScope } from "./View.ts"
+import { component, inViewScope, noticed } from "./View.ts"
 import type { Component, Declared, View } from "./View.ts"
 
 export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Effect<Add, E, R>) & {
@@ -25,9 +25,17 @@ export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Eff
 
 type Outside<R> = Exclude<R, Scope.Scope | ViewScope>
 
+type PropsComeFromASchema<O> = [unknown] extends [NoInfer<O>]
+  ? unknown
+  : { readonly fields: Fields }
+
+type First<O, A, E, R> = Enhancer<O, A, E, R> & PropsComeFromASchema<O>
+
+type GivenAllItTakes<Inner, ViewProps> = [Inner] extends [ViewProps] ? unknown : never
+
 type Composed<Outer, Inner, Add, E, R> = {
   <ViewProps>(
-    view: View<ViewProps> & Declared & ([Inner] extends [ViewProps] ? unknown : never),
+    view: View<ViewProps> & Declared & GivenAllItTakes<Inner, ViewProps>,
     name?: string,
   ): Component<Outer, E, Outside<R>, ViewProps>
   (view: (props: Inner) => Element, name?: string): Component<Outer, E, Outside<R>, Outer>
@@ -92,7 +100,7 @@ const made = (
   const mount = (outer: Props) =>
     Effect.withSpan(
       inViewScope(
-        Effect.flatMap(applied(steps, outer), (props) =>
+        Effect.flatMap(noticed(name, at, applied(steps, outer)), (props) =>
           shown(name, fields, servicesOf(steps), view, props),
         ),
         name,
@@ -110,31 +118,29 @@ const made = (
   )
 }
 
-const isView = (given: unknown): given is (props: Props) => Element => typeof given === "function"
+const isView = (given: unknown): given is (props: Props) => Element => Predicate.isFunction(given)
 
 const viewName = (view: (props: Props) => Element): string =>
-  Predicate.hasProperty(view, "displayName") && typeof view.displayName === "string"
-    ? view.displayName
-    : "Component"
+  isNamedView(view) && view.displayName !== "" ? view.displayName : "Component"
 
-export function compose<O, A, EA, RA>(a: Enhancer<O, A, EA, RA>): Composed<O, O & A, A, EA, RA>
+export function compose<O, A, EA, RA>(a: First<O, A, EA, RA>): Composed<O, O & A, A, EA, RA>
 export function compose<O, A, EA, RA, B, EB, RB>(
-  a: Enhancer<O, A, EA, RA>,
+  a: First<O, A, EA, RA>,
   b: Enhancer<O & A, B, EB, RB>,
 ): Composed<O, O & A & B, A & B, EA | EB, RA | RB>
 export function compose<O, A, EA, RA, B, EB, RB, C, EC, RC>(
-  a: Enhancer<O, A, EA, RA>,
+  a: First<O, A, EA, RA>,
   b: Enhancer<O & A, B, EB, RB>,
   c: Enhancer<O & A & B, C, EC, RC>,
 ): Composed<O, O & A & B & C, A & B & C, EA | EB | EC, RA | RB | RC>
 export function compose<O, A, EA, RA, B, EB, RB, C, EC, RC, D, ED, RD>(
-  a: Enhancer<O, A, EA, RA>,
+  a: First<O, A, EA, RA>,
   b: Enhancer<O & A, B, EB, RB>,
   c: Enhancer<O & A & B, C, EC, RC>,
   d: Enhancer<O & A & B & C, D, ED, RD>,
 ): Composed<O, O & A & B & C & D, A & B & C & D, EA | EB | EC | ED, RA | RB | RC | RD>
 export function compose<O, A, EA, RA, B, EB, RB, C, EC, RC, D, ED, RD, F, EF, RF>(
-  a: Enhancer<O, A, EA, RA>,
+  a: First<O, A, EA, RA>,
   b: Enhancer<O & A, B, EB, RB>,
   c: Enhancer<O & A & B, C, EC, RC>,
   d: Enhancer<O & A & B & C, D, ED, RD>,
@@ -147,7 +153,7 @@ export function compose<O, A, EA, RA, B, EB, RB, C, EC, RC, D, ED, RD, F, EF, RF
   RA | RB | RC | RD | RF
 >
 export function compose<O, A, EA, RA, B, EB, RB, C, EC, RC, D, ED, RD, F, EF, RF, G, EG, RG>(
-  a: Enhancer<O, A, EA, RA>,
+  a: First<O, A, EA, RA>,
   b: Enhancer<O & A, B, EB, RB>,
   c: Enhancer<O & A & B, C, EC, RC>,
   d: Enhancer<O & A & B & C, D, ED, RD>,
@@ -171,7 +177,7 @@ export function compose(...steps: ReadonlyArray<Step>): (given: unknown, name?: 
 
 export const withProps = <const F extends Fields>(
   fields: F,
-): Enhancer<Schema.Struct<F>["Type"], unknown> =>
+): Enhancer<Schema.Struct<F>["Type"], unknown> & { readonly fields: F } =>
   Object.assign(() => Effect.succeed({}), { fields })
 
 export const withStore =

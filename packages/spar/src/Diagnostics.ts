@@ -20,7 +20,7 @@ export const all = {
   SPAR_EFFECT_RUN_IN_VIEW: {
     kind: "build",
     what: "A view cannot run an Effect.",
-    fix: "Do the work in the component's Effect (View.connect) and pass the result in as a prop.",
+    fix: "Do the work in one of the component's enhancers and pass the result in as a prop.",
   },
   SPAR_STATE_OUTSIDE_STORE: {
     kind: "build",

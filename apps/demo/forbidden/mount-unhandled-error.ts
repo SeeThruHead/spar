@@ -1,9 +1,9 @@
 import { Effect } from "effect"
-import { App, View } from "spar"
+import { App, compose } from "spar"
 import { MailApi } from "../src/server/MailApi.ts"
 import { ThreadSkeletonView } from "../src/mail/ThreadView.tsx"
 
-const Thread = View.connect(
+const Thread = compose(
   Effect.fnUntraced(function* () {
     const api = yield* MailApi
     const thread = yield* api.loadThread("welcome")

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Ref, Schema } from "effect"
-import { Reactive, Timeline, View } from "spar"
+import { Reactive, Timeline, compose } from "spar"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/app"
 import { OrdersView } from "./units.tsx"
@@ -9,15 +9,15 @@ const recording = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
   Option.some((seen: Timeline.Noted) => Ref.update(noted, (all) => [...all, seen]))
 
 const page = (wait: Effect.Effect<void>) =>
-  View.connect(() =>
-    Effect.as(wait, { status: Reactive.succeed("shown"), count: Reactive.succeed(1) }),
-  )(OrdersView)
+  compose(() => Effect.as(wait, { status: Reactive.succeed("shown"), count: Reactive.succeed(1) }))(
+    OrdersView,
+  )
 
 const rules = (source: string): ReadonlyArray<string> =>
-  check("src/Page.ts", source).map((violation) => violation.rule)
+  check("src/Page.tsx", source).map((violation) => violation.rule)
 
 const waiting = (call: string): string =>
-  `const Page = View.connect(Effect.fnUntraced(function* () {\n  yield* ${call}\n  return {}\n}))(PageView)`
+  `const Page = compose(Effect.fnUntraced(function* () {\n  yield* ${call}\n  return {}\n}))((props) => <p>{props.text}</p>)`
 
 const millisOf = Schema.decodeUnknownSync(Schema.Struct({ millis: Schema.Finite }))
 
@@ -66,10 +66,10 @@ describe("a component that makes everything below it wait", () => {
     ).toEqual(Array.from({ length: 6 }, () => ["no-waiting-in-components"]))
     expect(
       rules(
-        `const Page = View.taking({ id: Schema.String }, function* ({ id }) {\n  yield* Effect.sleep("1 second")\n  return { id }\n})(PageView)`,
+        `const Page = compose(withProps({ id: Schema.String }), function* ({ id }) {\n  yield* Effect.sleep("1 second")\n  return { id }\n})(PageView)`,
       ),
     ).toEqual(["no-waiting-in-components"])
-    expect(check("src/Page.ts", waiting(`Effect.sleep("1 second")`))[0]?.message).toContain(
+    expect(check("src/Page.tsx", waiting(`Effect.sleep("1 second")`))[0]?.message).toContain(
       "TheQuery.ask",
     )
   })
@@ -78,7 +78,7 @@ describe("a component that makes everything below it wait", () => {
     expect(
       rules(
         [
-          `const Page = View.connect(Effect.fnUntraced(function* () {`,
+          `const Page = compose(Effect.fnUntraced(function* () {`,
           `  const store = yield* PageStore`,
           `  const orders = yield* OrdersQuery.ask(1)`,
           `  return { onSave: Effect.fnUntraced(function* () { yield* Effect.sleep("1 second") }) }`,

@@ -200,7 +200,7 @@ A query is a store, and declaring that a component needs one is a line in that c
 A parent reads a value from a store and passes it to a child as a prop. The child declares a
 query that uses the prop. That is all anybody writes:
 
-```ts
+```tsx
 class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   input: Schema.Int,
   success: Schema.Array(Order),
@@ -209,30 +209,26 @@ class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   staleAfter: "30 seconds",
 }) {}
 
-const Orders = View.taking(
-  { userId: Props.Reactive(Schema.Int) },
-  Effect.fnUntraced(function* ({ userId }) {
-    const orders = yield* OrdersQuery.ask(userId)
+const Orders = compose(
+  withProps({ userId: Props.Reactive(Schema.Int) }),
+  withQuery("orders", OrdersQuery, (props) => props.userId),
+)((props) => (
+  <p>
+    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+  </p>
+))
 
-    return { status: orders.status, count: Reactive.map(orders.value, (all) => all?.length ?? 0) }
-  }),
-)(OrdersView)
-
-const Parent = View.connect(
-  Effect.fnUntraced(function* () {
-    const people = yield* PeopleStore
-
-    return { orders: yield* View.child(Orders, { userId: people.select.selectedId }) }
-  }),
-)(ParentView)
+const Parent = compose(
+  withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
+)((props) => <Orders userId={props.selected} />)
 ```
 
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
 
 - **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
-  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and nothing in a
-  component's Effect does, so every query in the tree being mounted is declared in the same
+  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and no enhancer
+  does, so every query in the tree being mounted is declared in the same
   pass and they all start together. Nesting components does not make a waterfall.
 - **The query runs in its store, not in the component.** The store is provided at the root
   (`OrdersQuery.live`), so the request and its result outlive the component that asked, and two
@@ -287,22 +283,33 @@ Each of these is an entry in the log and a span in the trace.
 A page is an input, so each page is its own entry in the cache. `pages` keeps the list of pages a
 component has opened, as that component's UI state, and asks for each:
 
-```ts
-const Feed = View.connect(
-  Effect.fnUntraced(function* () {
-    const feed = yield* PostsQuery.pages({
-      first: { after: null },
-      next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
-    })
+```tsx
+const withFeed = Effect.fnUntraced(function* () {
+  const feed = yield* PostsQuery.pages({
+    first: { after: null },
+    next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
+  })
 
-    return {
-      posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
-      loading: feed.loading,
-      more: feed.more,
-      onMore: feed.loadMore,
-    }
-  }),
-)(FeedView)
+  return {
+    posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
+    loading: feed.loading,
+    more: feed.more,
+    onMore: feed.loadMore,
+  }
+})
+
+const Feed = compose(withFeed)((props) => (
+  <section aria-label="Posts">
+    <ul>
+      <For each={props.posts} by={(post) => post.id}>
+        {(post) => <li>{Reactive.map(post, (now) => now.title)}</li>}
+      </For>
+    </ul>
+    <button type="button" hidden={Reactive.map(props.more, (more) => !more)} onClick={props.onMore}>
+      More
+    </button>
+  </section>
+))
 ```
 
 `next` is given a loaded page and its input and says what the following input is, or none at

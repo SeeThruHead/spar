@@ -1,8 +1,8 @@
 import { Effect, Layer } from "effect"
-import { App, Overlay, View } from "spar"
+import { App, Overlay, compose } from "spar"
 import { ThreadSkeletonView } from "../src/mail/ThreadView.tsx"
 
-const Dialog = View.connect(
+const Dialog = compose(
   Effect.fnUntraced(function* () {
     yield* Overlay.modal({ onDismiss: [] })
 

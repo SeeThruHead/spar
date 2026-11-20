@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Schema, SubscriptionRef, pipe } from "effect"
 import { TestClock } from "effect/testing"
-import { Form, Reactive, UiState, View } from "spar"
+import { Form, Reactive, UiState, View, compose } from "spar"
 import * as Testing from "spar/testing"
 import { Dialog, Menu, Select, Tabs, Toast } from "../src/index.ts"
 import { KitView, TextView } from "./KitView.tsx"
@@ -15,7 +15,7 @@ const Profile = Schema.Struct({
   news: Schema.Boolean,
 })
 
-const Kit = View.connect(
+const Kit = compose(
   Effect.fnUntraced(function* () {
     const toasts = yield* Toast.Toasts
     const form = yield* Form.make(Profile, { name: "", plan: "team", news: false })

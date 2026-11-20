@@ -25,10 +25,7 @@ const codes = {
 const isComponent = Schema.is(
   Schema.Struct({
     type: Schema.Literal("CallExpression"),
-    callee: Schema.Struct({
-      object: Schema.Struct({ name: Schema.Literal("View") }),
-      property: Schema.Struct({ name: Schema.Literals(["connect", "taking"]) }),
-    }),
+    callee: Schema.Struct({ type: Schema.Literal("Identifier"), name: Schema.Literal("compose") }),
   }),
 )
 

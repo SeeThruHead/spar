@@ -52,33 +52,31 @@ export const Card = compose(
 
 ## View
 
-`View.connect` and `View.taking` are the older way to make a component: an Effect that returns an
-object of props, joined to a separately declared view. They still work while the apps in this repo
-move to `compose`; write new components with `compose`.
+What a component made with `compose` can be wrapped in. A view made with `View.make` can also be
+the last thing given to `compose`, in place of an inline view; the component then keeps that view
+as `.view` and the inspector shows its name.
 
-| Function                               | What it does                                                                                                               |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.                                      |
-| `View.connect(props)(View)`            | The older way to make a component: `props` is `() => Effect<Props, E, R>`, run once on mount.                              |
-| `View.taking(fields, props)(View)`     | The same for a component its parent gives props to: `fields` is their Schema, `props` is `(outer) => Effect<Props, E, R>`. |
-| `View.child(component, props)`         | Mounts a child from a parent's Effect and gives back its element.                                                          |
-| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                                                         |
-| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.                                     |
-| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props.                           |
-| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                                           |
-| `View.mapProps(f)`                     | Changes the props a component takes.                                                                                       |
-| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                           |
-| `View.portal`                          | Mounts the component in a layer above the app.                                                                             |
+| Function                               | What it does                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `View.make(name, fields, draw)`        | Makes a view: `fields` gives a Schema for each prop, `draw` turns the props into JSX.            |
+| `View.child(component, props)`         | Mounts a child from an enhancer and gives back its element, for a child that can still fail.     |
+| `View.recover(ErrorSchema, ErrorView)` | Handles one tagged error with a view and removes it from the type.                               |
+| `View.pending(PlaceholderView)`        | Shows a placeholder until the component's Effect finishes. Needs errors handled first.           |
+| `View.split(PlaceholderView, load)`    | A component whose code is imported when it is first shown; the placeholder takes the same props. |
+| `View.crash(FallbackView)`             | Shows a fallback if the component's Effect dies, and reports it.                                 |
+| `View.mapProps(f)`                     | Changes the props a component takes.                                                             |
+| `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                 |
+| `View.portal`                          | Mounts the component in a layer above the app.                                                   |
 
-```ts
+```tsx
 export const AgentPage = pipe(
-  View.taking({ id: Schema.String }, agentProps)(AgentPageView),
+  compose(withProps({ id: Schema.String }), withAgent)((props) => <h1>{props.name}</h1>),
   View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
 )
 ```
 
-(`apps/sidebar/src/AgentPage.ts`)
+(`apps/sidebar/src/AgentPage.tsx`)
 
 ## Props
 
@@ -193,15 +191,17 @@ another action of the same store, so async work started by one command reports b
 
 ### A store beside its view
 
-```ts
+```tsx
 export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
 
-const NotesPanel = View.taking({ id: Schema.String, title: Schema.String }, ...)(NotesView)
+const NotesPanel = compose(withProps({ id: Schema.String, title: Schema.String }), ...)(
+  (props) => <section aria-label={props.title}>...</section>,
+)
 
 export const Notes = NotesStore.with(NotesPanel)
 ```
 
-`Notes` is one unit: mount it anywhere with `View.child(Notes, props)` and nothing is wired at the
+`Notes` is one unit: mount it anywhere with `<Notes id="..." title="..." />` and nothing is wired at the
 app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
 store's key and the place it is mounted (`sidebar/Notes @ ShellView / NotesView`), a second one
 beside it is numbered (`... NotesView#2`), and it registers with the devtools like every other

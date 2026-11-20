@@ -44,7 +44,7 @@ Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
 A view cannot run an Effect.
 
-Fix: Do the work in the component's Effect (View.connect) and pass the result in as a prop.
+Fix: Do the work in one of the component's enhancers and pass the result in as a prop.
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 

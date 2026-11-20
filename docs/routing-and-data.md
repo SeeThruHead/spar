@@ -9,7 +9,7 @@ loaders, fragments or lists of dependencies.
 A parent reads a value from a store and passes it to a child. The child declares a query that
 uses the prop.
 
-```ts
+```tsx
 class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   input: Schema.Int,
   success: Schema.Array(Order),
@@ -18,33 +18,29 @@ class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   staleAfter: "30 seconds",
 }) {}
 
-const Orders = View.taking(
-  { userId: Props.Reactive(Schema.Int) },
-  Effect.fnUntraced(function* ({ userId }) {
-    const orders = yield* OrdersQuery.ask(userId)
+const Orders = compose(
+  withProps({ userId: Props.Reactive(Schema.Int) }),
+  withQuery("orders", OrdersQuery, (props) => props.userId),
+)((props) => (
+  <p>
+    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+  </p>
+))
 
-    return { status: orders.status, count: Reactive.map(orders.value, (all) => all?.length ?? 0) }
-  }),
-)(OrdersView)
-
-const Parent = View.connect(
-  Effect.fnUntraced(function* () {
-    const people = yield* PeopleStore
-
-    return { orders: yield* View.child(Orders, { userId: people.select.selectedId }) }
-  }),
-)(ParentView)
+const Parent = compose(
+  withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
+)((props) => <Orders userId={props.selected} />)
 ```
 
 That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and it works.
 
 What Spar does with it:
 
-1. `ask` returns at once with a handle: `status`, `value`, `error`, `loading`, each a reactive
-   value, and `refetch`. Nothing in a component's Effect waits for data.
-2. Because nothing waits, the parent's Effect goes straight on to mount its children, and theirs
-   mount theirs. Every `ask` in the tree is reached in one pass, and every query with an input
-   starts then, together.
+1. `ask` (which `withQuery` calls) returns at once with a handle: `status`, `value`, `error`,
+   `loading`, each a reactive value, and `refetch`. No enhancer waits for data.
+2. Because nothing waits, the parent goes straight on to draw its children, and they draw theirs.
+   Every query in the tree is reached in one pass, and every query with an input starts then,
+   together.
 3. The query runs in its store, which lives at the root. The component can unmount and the
    answer still arrives and is kept. Two components that ask for the same input share one
    request.
@@ -91,23 +87,25 @@ Segments nest with open-ended routes and an outlet in each layout. `Router.live`
 mounted while only its params change and gives it the params as a reactive value, which is what a
 query wants as its input:
 
-```ts
+```tsx
 const orgRoute = Router.route("/org/:org/*", Org)
 
-const OrgSegment = View.taking(
-  { params: Props.Reactive(Org) },
-  Effect.fnUntraced(function* ({ params }) {
-    const org = yield* OrgQuery.ask(Reactive.map(params, (now) => now.org))
+const withTeams = () =>
+  Effect.map(
+    Router.outlet({ routes: [Router.live(teamRoute, TeamSegment)], otherwise: Missing }),
+    (inner) => ({ inner }),
+  )
 
-    return {
-      label: Reactive.map(org.value, (found) => found?.label ?? ""),
-      inner: yield* Router.outlet({
-        routes: [Router.live(teamRoute, TeamSegment)],
-        otherwise: Missing,
-      }),
-    }
-  }),
-)(SegmentView)
+const OrgSegment = compose(
+  withProps({ params: Props.Reactive(Org) }),
+  withQuery("org", OrgQuery, (props) => Reactive.map(props.params, (now) => now.org)),
+  withTeams,
+)((props) => (
+  <section>
+    <h2>{Reactive.map(props.org.value, (found) => found?.label ?? "")}</h2>
+    {props.inner}
+  </section>
+))
 ```
 
 A route inside another is declared under it, so its path is written once. The parent must end
@@ -169,11 +167,12 @@ and stays `loading` until the schedule gives up.
 One thing: a component whose Effect waits. Everything below it mounts late, so their queries
 start late.
 
-- The build refuses a wait written straight into a component's Effect: `yield*` of
+- The build refuses a wait written straight into an enhancer inside `compose(...)`: `yield*` of
   `Effect.sleep`, `Effect.promise`, `Effect.tryPromise`, `Effect.callback`, `Deferred.await`,
-  `Fiber.join` inside `View.connect` or `View.taking` (rule `no-waiting-in-components`). A wait in
-  a handler, in a store's reaction or anywhere outside a component is fine.
-- The build cannot see a wait behind a call such as `yield* server.describe(name)`. For that,
+  `Fiber.join` (rule `no-waiting-in-components`). A wait in a handler, in a store's reaction or
+  anywhere outside a component is fine.
+- The build cannot see a wait behind a call such as `yield* server.describe(name)`, or in an
+  enhancer written outside the `compose(...)` call. For that,
   any component that takes a frame or more before its children can mount gets a `waited` entry in
   the log with its name and the milliseconds, and `spar.waited_ms` on its span.
 

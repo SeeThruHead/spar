@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Schema } from "effect"
-import { Reactive, UiState, View } from "spar"
+import { Reactive, UiState, View, compose } from "spar"
 import * as Testing from "spar/testing"
 import { Listbox, Popover, Tooltip } from "../src/index.ts"
 import { TextView } from "./KitView.tsx"
@@ -13,7 +13,7 @@ const sizes = [
   { value: "l", label: "Large" },
 ]
 
-const Kit = View.connect(
+const Kit = compose(
   Effect.fnUntraced(function* () {
     const chosen = yield* UiState.make("chosen", Schema.String, "m")
 

@@ -1,7 +1,7 @@
 import { Effect, Layer, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Rpc, RpcClient, RpcGroup, RpcSerialization } from "effect/rpc"
-import { App, View } from "spar"
+import { App, compose } from "spar"
 import { ThreadSkeletonView } from "../src/mail/ThreadView.tsx"
 
 class ThreadGone extends Schema.TaggedError<ThreadGone, { readonly brand: unique symbol }>()(
@@ -18,7 +18,7 @@ const backend = RpcClient.layerProtocolHttp({ url: "/rpc" }).pipe(
   Layer.provide(FetchHttpClient.layer),
 )
 
-const Thread = View.connect(
+const Thread = compose(
   Effect.fnUntraced(function* () {
     const mail = yield* RpcClient.make(Mail)
     const id = yield* Effect.catchTag(mail.Load({ id: "welcome" }), "RpcClientError", Effect.die)

@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Router, Store, UiState, View } from "spar"
+import { App, Router, Store, UiState, compose, uses } from "spar"
 import { install, uninstall } from "spar/devtools/client"
 import { FetchHttpClient } from "effect/http"
 import * as Cell from "../src/internal/cell.ts"
@@ -27,7 +27,8 @@ class Tally extends Store.Tag<Tally>()("test/Tally", {
 
 const next = Router.route("/next")
 
-const Desk = View.described(["Tally", "Router.Router"]).connect(
+const Desk = compose(
+  uses(["Tally", "Router.Router"]),
   Effect.fnUntraced(function* () {
     const tally = yield* Tally
     const router = yield* Router.Router
@@ -191,9 +192,9 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.fill("textbox", "Draft", "later")
         yield* shows("1", "later", "Now")
         expect(listed()).toEqual([
-          'ui DeskView . draft "hi"',
+          'ui Desk . draft "hi"',
           'command test/Tally/added {"by":1}',
-          'ui DeskView . draft "later"',
+          'ui Desk . draft "later"',
         ])
         expect(screen.getByLabelText("Trace of 2").textContent).toHaveLength(32)
         yield* Testing.click("button", "Trace 2")
@@ -258,7 +259,7 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.gone("button", "Pick a component on the page")
         yield* Testing.eventually(() => expect(facts("Props")).toContain('draft ""'))
         expect(screen.getByLabelText("Picked component").textContent).toBe("DeskView")
-        expect(screen.getByLabelText("Where it is").textContent).toBe("DeskView")
+        expect(screen.getByLabelText("Where it is").textContent).toBe("Desk")
         expect(screen.getByLabelText("Services").textContent).toBe("Tally, Router.Router")
         expect(facts("Props")).toEqual([
           "count 0 test/Tally . count",
@@ -279,8 +280,8 @@ describe("devtools an app did not ask for", () => {
               (item) => item.textContent,
             ),
           ).toEqual([
-            'prop draft "" became "hi" after 1: ui DeskView . draft',
-            'state draft "" became "hi" after 1: ui DeskView . draft',
+            'prop draft "" became "hi" after 1: ui Desk . draft',
+            'state draft "" became "hi" after 1: ui Desk . draft',
             "prop count 0 became 1 after 2: command test/Tally/added",
           ]),
         )

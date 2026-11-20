@@ -41,6 +41,6 @@ export const sparDevtools = (
     ): { readonly code: string; readonly map: null } | null => {
       if (!isSource(id) || !mentionsComponents(source)) return null
 
-      return { code: describeServices(id, source), map: null }
+      return { code: describeServices(id.replace(/\?.*$/, ""), source), map: null }
     },
   }) as const

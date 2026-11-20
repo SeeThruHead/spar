@@ -21,20 +21,6 @@ const isYielded = Schema.is(
   }),
 )
 
-const isComponentCall = Schema.is(
-  Schema.Struct({
-    type: Schema.Literal("CallExpression"),
-    callee: Schema.Struct({
-      type: Schema.Literal("MemberExpression"),
-      start: Schema.Finite,
-      end: Schema.Finite,
-      object: Schema.Struct({ name: Schema.Literal("View") }),
-      property: Schema.Struct({ name: Schema.Literals(["connect", "taking"]) }),
-    }),
-    arguments: Schema.Array(Schema.Unknown),
-  }),
-)
-
 const isDeclared = Schema.is(
   Schema.Struct({
     type: Schema.Literal("VariableDeclarator"),
@@ -92,8 +78,6 @@ const givenTo = (argument: unknown): ReadonlyArray<string> => {
   return serviceName(argument.arguments[argument.callee.name === "withStore" ? 0 : 1])
 }
 
-type Edit = { readonly at: number; readonly end: number; readonly text: string }
-
 const listed = (services: ReadonlyArray<string>): string =>
   services.map((name) => `"${name}"`).join(",")
 
@@ -103,35 +87,20 @@ export const describeServices = (file: string, source: string): string => {
   const declared = new Map(
     nodes.flatMap((node) => (isDeclared(node) ? [[node.id.name, node.init] as const] : [])),
   )
-  const connected: ReadonlyArray<Edit> = nodes.flatMap((node) => {
-    if (!isComponentCall(node)) return []
-
-    const services = Array.dedupe(node.arguments.flatMap((given) => yieldedIn(given, declared)))
-
-    return [
-      {
-        at: node.callee.start,
-        end: node.callee.end,
-        text: `View.described([${listed(services)}]).${node.callee.property.name}`,
-      },
-    ]
-  })
-  const composed: ReadonlyArray<Edit> = nodes.flatMap((node) => {
+  const starts = nodes.flatMap((node) => {
     if (!isComposeCall(node)) return []
 
     const services = Array.dedupe(
       node.arguments.flatMap((given) => [...givenTo(given), ...yieldedIn(given, declared)]),
     )
-    const first = node.arguments[0].start
 
-    return [{ at: first, end: first, text: `__sparUses([${listed(services)}]), ` }]
+    return [{ at: node.arguments[0].start, text: `__sparUses([${listed(services)}]), ` }]
   })
-  const edited = [...connected, ...composed]
+  const edited = starts
     .toSorted((left, right) => right.at - left.at)
-    .reduce((text, edit) => `${text.slice(0, edit.at)}${edit.text}${text.slice(edit.end)}`, source)
+    .reduce((text, edit) => `${text.slice(0, edit.at)}${edit.text}${text.slice(edit.at)}`, source)
 
-  return composed.length === 0 ? edited : `import { uses as __sparUses } from "spar"; ${edited}`
+  return starts.length === 0 ? edited : `import { uses as __sparUses } from "spar"; ${edited}`
 }
 
-export const mentionsComponents = (source: string): boolean =>
-  source.includes("View.connect(") || source.includes("View.taking(") || source.includes("compose(")
+export const mentionsComponents = (source: string): boolean => source.includes("compose(")
