@@ -101,6 +101,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "CounterStore",
   },
   {
+    file: "enhancer-untyped-inline.tsx",
+    rule: "Writing an enhancer inline as an untyped function before other enhancers, so their props become unknown",
+    by: "build",
+    expect: "enhancers-typed-or-wrapped",
+  },
+  {
     file: "child-needs-a-service.tsx",
     rule: "Drawing a child component that needs a service the app's layer does not provide",
     by: "build",

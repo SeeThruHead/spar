@@ -45,6 +45,47 @@ describe("the build check on a composed component", () => {
   })
 })
 
+const rules = (source: string) => check("Draft.tsx", source).map((violation) => violation.rule)
+
+describe("an enhancer written inline before other enhancers", () => {
+  it("is refused when its parameter has no type, as a function or inside Effect.fn", () => {
+    expect(
+      rules("const D = compose(withProps({}), (props) => Effect.succeed({}), withHandlers(f))(V)"),
+    ).toEqual(["enhancers-typed-or-wrapped"])
+    expect(
+      rules(
+        "const D = compose(withProps({}), function (props) { return Effect.succeed({}) }, g)(V)",
+      ),
+    ).toEqual(["enhancers-typed-or-wrapped"])
+    expect(
+      rules(
+        "const D = compose(withProps({}), Effect.fnUntraced(function* (props) { return {} }), g)(V)",
+      ),
+    ).toEqual(["enhancers-typed-or-wrapped"])
+  })
+
+  it("is let through when typed, wrapped, last, or taking nothing", () => {
+    expect(
+      rules("const D = compose(withProps({}), (props: P) => Effect.succeed({}), g)(V)"),
+    ).toEqual([])
+    expect(
+      rules(
+        "const D = compose(withProps({}), withEffectProps((props) => Effect.succeed({})), g)(V)",
+      ),
+    ).toEqual([])
+    expect(rules("const D = compose(withProps({}), g, (props) => Effect.succeed({}))(V)")).toEqual(
+      [],
+    )
+    expect(rules("const D = compose(() => Effect.succeed({}), g)(V)")).toEqual([])
+    expect(
+      rules(
+        "const D = compose(withProps({}), Effect.fn(function* (props: P) { return {} }), g)(V)",
+      ),
+    ).toEqual([])
+    expect(rules("const D = compose(withProps({}), Effect.map(x, f), g)(V)")).toEqual([])
+  })
+})
+
 describe("naming a composed component after the constant it is given to", () => {
   it("passes the name to the component, and to each one in the file", () => {
     expect(

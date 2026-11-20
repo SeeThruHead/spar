@@ -56,6 +56,14 @@ Fix: Hold state in a Store (Store.Tag, placed with .layer or beside a view with 
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
+### SPAR_ENHANCER_UNTYPED
+
+An enhancer written inline as a function with an untyped parameter, followed by more enhancers. TypeScript works such a function out last, so every enhancer after it sees its props as unknown.
+
+Fix: Wrap it: withEffectProps((props) => effect) for props made by an Effect, withHandlers((props) => values) for plain values. Or give its parameter a type, or move it to a named function with a typed parameter.
+
+Reported by: The build (the Vite or Bun plugin), with the file, line and column.
+
 ### SPAR_CHILD_NEEDS_A_SERVICE
 
 A component drawn inside another needs a service that nothing above it provides: not the layer given to App.mount, and not a store beside a component it is drawn in. TypeScript cannot see this through JSX, so the build checks it.

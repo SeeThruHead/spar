@@ -5,6 +5,7 @@ export {
   compose,
   uses,
   withEffect,
+  withEffectProps,
   withHandlers,
   withKey,
   withProps,

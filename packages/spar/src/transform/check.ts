@@ -1,6 +1,7 @@
 import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
 import * as Diagnostics from "../Diagnostics.ts"
+import { untypedEnhancers } from "./enhancers.ts"
 import { unprovided } from "./requirements.ts"
 import type { Source } from "./requirements.ts"
 
@@ -10,6 +11,7 @@ export type Violation = {
     | "no-effect-run-in-views"
     | "views-need-a-schema"
     | "child-needs-a-service"
+    | "enhancers-typed-or-wrapped"
   readonly code: Diagnostics.Code
   readonly message: string
   readonly file: string
@@ -63,6 +65,7 @@ const codes = {
   "views-need-a-schema": "SPAR_VIEW_WITHOUT_SCHEMA",
   "no-effect-run-in-views": "SPAR_EFFECT_RUN_IN_VIEW",
   "child-needs-a-service": "SPAR_CHILD_NEEDS_A_SERVICE",
+  "enhancers-typed-or-wrapped": "SPAR_ENHANCER_UNTYPED",
 } as const satisfies Record<Violation["rule"], Diagnostics.Code>
 
 type Where = "outside" | "view" | "hole" | "listed"
@@ -118,16 +121,24 @@ const locate = (
   return { line: before.split("\n").length, column: offset - before.lastIndexOf("\n") }
 }
 
-export const check = (file: string, source: string): ReadonlyArray<Violation> => [
-  ...visit(parseSync(file, source).program, "outside").map(([rule, offset]) => ({
-    rule,
-    code: codes[rule],
-    message: `${Diagnostics.all[codes[rule]].what} ${Diagnostics.all[codes[rule]].fix}`,
-    file,
-    ...locate(source, offset),
-  })),
-  ...unprovided([{ file, source }]),
-]
+export const check = (file: string, source: string): ReadonlyArray<Violation> => {
+  const program: unknown = parseSync(file, source).program
+  const found: ReadonlyArray<readonly [Violation["rule"], number]> = [
+    ...visit(program, "outside"),
+    ...untypedEnhancers(program).map((offset) => ["enhancers-typed-or-wrapped", offset] as const),
+  ]
+
+  return [
+    ...found.map(([rule, offset]) => ({
+      rule,
+      code: codes[rule],
+      message: `${Diagnostics.all[codes[rule]].what} ${Diagnostics.all[codes[rule]].fix}`,
+      file,
+      ...locate(source, offset),
+    })),
+    ...unprovided([{ file, source }]),
+  ]
+}
 
 export const checkAll = (sources: ReadonlyArray<Source>): ReadonlyArray<Violation> =>
   unprovided(sources)

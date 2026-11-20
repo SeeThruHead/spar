@@ -22,6 +22,7 @@ import {
   resetAfterDelay,
   withHover,
 } from "./composed.tsx"
+import { Dialog, Ten } from "./inference.tsx"
 
 const text = (label: string) => screen.getByLabelText(label).textContent
 
@@ -213,6 +214,18 @@ describe("a component composed from enhancers, its view last and inline", () => 
       }),
     ).toMatchObject({ tag: "section" })
   })
+
+  it.live(
+    "adds the props an Effect makes with withEffectProps, typed for the enhancers after it",
+    () =>
+      Effect.gen(function* () {
+        yield* Testing.mount(Dialog)
+        yield* Testing.findText("DRAFT")
+        yield* Testing.findText("seen")
+        yield* Testing.mount(Ten)
+        yield* Testing.findText("ten")
+      }).pipe(Effect.provide(withTree)),
+  )
 
   it("written in JSX outside any component, says so with its code", () => {
     expect(() => Dropdown({ label: "Alone", items: [], onPick: () => Effect.void })).toThrow(
