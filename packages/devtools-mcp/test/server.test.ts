@@ -407,8 +407,9 @@ describe("the devtools server for agents", () => {
       yield* first.commands.added({ by: 1 })
       yield* second.commands.added({ by: 20 })
 
-      const listed = yield* until(mcp.call("list_pages", {}), (got) =>
-        Bun.inspect(got.said).includes("current: true"),
+      const listed = yield* until(
+        mcp.call("list_pages", {}),
+        (got) => Bun.inspect(got.said).includes("current: true") && pagesOf(got.said).length === 2,
       )
       const pages = pagesOf(listed.said)
 

@@ -1,6 +1,6 @@
 ---
 id: spa-cyga
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-20T06:30:07Z
