@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Query, Reactive, Router, View } from "spar"
+import { Query, Reactive, Router, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { DoorView, HallView, OrdersView } from "./units.tsx"
 
@@ -49,7 +49,7 @@ const home = Router.route("/")
 
 const ordersOf = Router.route("/orders/:id", Schema.Struct({ id: Schema.FiniteFromString }))
 
-const Door = View.connect(
+const Door = compose(
   Effect.fnUntraced(function* () {
     const router = yield* Router.Router
 
@@ -57,8 +57,8 @@ const Door = View.connect(
   }),
 )(DoorView)
 
-const OrdersPage = View.taking(
-  { id: Schema.Finite },
+const OrdersPage = compose(
+  withProps({ id: Schema.Finite }),
   Effect.fnUntraced(function* ({ id }) {
     const orders = yield* Orders.ask(id)
 
@@ -69,7 +69,7 @@ const OrdersPage = View.taking(
   }),
 )(OrdersView)
 
-const Hall = View.connect(
+const Hall = compose(
   Effect.fnUntraced(function* () {
     return {
       page: yield* Router.outlet({

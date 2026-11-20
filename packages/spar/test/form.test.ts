@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Deferred, Effect, Layer, Option, Ref, Schema, SubscriptionRef } from "effect"
-import { Form, Reactive, Timeline, UiState, View } from "spar"
+import { Form, Reactive, Timeline, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
 import { SignupView } from "./signup.tsx"
 
@@ -28,7 +28,7 @@ const SignupForm = (
   server: Deferred.Deferred<void, Form.Rejected>,
   clearing: boolean,
 ) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const form = yield* Form.make(Signup, { email: "", age: "", terms: false })
       const welcome = yield* SubscriptionRef.make("")
@@ -76,7 +76,7 @@ const fillValid = Effect.gen(function* () {
   yield* Testing.click("checkbox", "I accept the terms")
 })
 
-const TwoForms = View.connect(
+const TwoForms = compose(
   Effect.fnUntraced(function* () {
     const first = yield* Form.make(Signup, { email: "", age: "", terms: false })
     const second = yield* Form.make(Signup, { email: "", age: "", terms: false })

@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Context, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Query, Reactive, Router, Server, Store, UiState, View } from "spar"
+import { App, Query, Reactive, Router, Server, Store, UiState, compose } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { RowsView } from "./graphics.tsx"
@@ -28,7 +28,7 @@ class Shelf extends Store.Tag<Shelf>()("test/Shelf", {
 }) {}
 
 const Shop = (note: string) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const shelf = yield* Shelf
 
@@ -98,7 +98,7 @@ class Price extends Query.Tag<Price>()("test/Price", {
   staleAfter: "1 minute",
 }) {}
 
-const Priced = View.connect(
+const Priced = compose(
   Effect.fnUntraced(function* () {
     const catalog = yield* Catalog.ask()
     const price = yield* Price.ask(
@@ -109,7 +109,7 @@ const Priced = View.connect(
   }),
 )(OrdersView)
 
-const Routed = View.connect(
+const Routed = compose(
   Effect.fnUntraced(function* () {
     return {
       rows: yield* Router.outlet({

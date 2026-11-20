@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Cause, Effect, Exit, Layer, Queue, SubscriptionRef, pipe } from "effect"
-import { App, Reactive, View } from "spar"
+import { App, Reactive, View, compose, withProps } from "spar"
 import { BadgeView, GlossaryView, IconView, PairView, RowsView } from "./graphics.tsx"
 import { eventually, find, findText, mount } from "spar/testing"
 import { ItemView } from "./views.tsx"
@@ -18,7 +18,7 @@ const Listed = (
   row: Mountable<{ readonly item: Reactive.Reactive<Item> }>,
   frame: View.View<{ readonly rows: import("spar").Element }> & View.Declared,
 ) =>
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const rows = yield* pipe(
         list,
@@ -127,7 +127,7 @@ describe("the renderer", () => {
   it.live("a change that lands while a list is still mounting its first rows is not lost", () =>
     Effect.gen(function* () {
       const list = Cell.make(items(["Slow"]))
-      const Slow = View.taking(ItemView.props, (props) =>
+      const Slow = compose(withProps(ItemView.props), (props) =>
         Effect.as(Effect.sleep("20 millis"), props),
       )(ItemView)
 

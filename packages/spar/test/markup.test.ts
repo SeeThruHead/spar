@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, SubscriptionRef } from "effect"
-import { App, Markup, Reactive, Server, View } from "spar"
+import { App, Markup, Reactive, Server, compose } from "spar"
 import * as Testing from "spar/testing"
 import { ArticleView } from "./markup.tsx"
 
@@ -16,9 +16,9 @@ describe("trusted markup", () => {
   it.live("is put in the element as HTML, and again when it changes", () =>
     Effect.gen(function* () {
       const body = yield* SubscriptionRef.make(first)
-      const Article = View.connect(() =>
-        Effect.succeed({ body: Reactive.fromSubscriptionRef(body) }),
-      )(ArticleView)
+      const Article = compose(() => Effect.succeed({ body: Reactive.fromSubscriptionRef(body) }))(
+        ArticleView,
+      )
 
       yield* Testing.mount(Article)
       expect(article()?.innerHTML).toBe("<h2>Why</h2><p>Because <em>types</em>.</p>")
@@ -30,9 +30,7 @@ describe("trusted markup", () => {
 
   it.live("is drawn on the server, and hydrating keeps the nodes the server sent", () =>
     Effect.gen(function* () {
-      const Article = View.connect(() => Effect.succeed({ body: Reactive.succeed(first) }))(
-        ArticleView,
-      )
+      const Article = compose(() => Effect.succeed({ body: Reactive.succeed(first) }))(ArticleView)
       const html = yield* Server.renderToString(Article, { layer: Layer.empty })
       const target = document.createElement("div")
 

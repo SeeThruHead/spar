@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Reactive, Router, Store, Timeline, UiState, View } from "spar"
+import { Reactive, Router, Store, Timeline, UiState, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
@@ -25,7 +25,7 @@ class Tally extends Store.Tag<Tally>()("test/Tally", {
 
 const next = Router.route("/next")
 
-const Desk = View.connect(
+const Desk = compose(
   Effect.fnUntraced(function* () {
     const tally = yield* Tally
     const router = yield* Router.Router
@@ -51,7 +51,7 @@ class Beside extends Store.Tag<Beside>()("test/Beside", {
 }) {}
 
 const BesideDesk = Beside.with(
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const beside = yield* Beside
       const router = yield* Router.Router
@@ -126,7 +126,7 @@ describe("one log of everything that happened", () => {
       expect(
         moments.map((moment) => [moment.seq, moment.kind, moment.name, moment.detail]),
       ).toEqual([
-        [1, "ui", "DeskView . draft", "hi"],
+        [1, "ui", "Desk . draft", "hi"],
         [2, "command", "test/Tally/added", { by: 1 }],
         [3, "route", "/next", "link"],
         [4, "data", "threads", 3],
@@ -150,20 +150,20 @@ describe("one log of everything that happened", () => {
       yield* Testing.fill("textbox", "Draft", "hi")
       yield* shows("0", "hi")
 
-      expect(registry.setUi(["DeskView"], "draft", "set from outside")).toBe(true)
-      expect(registry.setUi(["DeskView"], "draft", 7)).toBe(false)
+      expect(registry.setUi(["Desk"], "draft", "set from outside")).toBe(true)
+      expect(registry.setUi(["Desk"], "draft", 7)).toBe(false)
       yield* shows("0", "set from outside")
       expect(
         Devtools.components([
           ...registry.uiState(),
           { path: ["Other"], name: "elsewhere", value: 1 },
-          { path: ["DeskView", "Child"], name: "deeper", value: 2 },
+          { path: ["Desk", "Child"], name: "deeper", value: 2 },
           { path: [], name: "nowhere", value: 3 },
         ]),
       ).toEqual([
         {
           name: "DeskView",
-          place: "DeskView",
+          place: "Desk",
           services: [],
           recovers: [],
           props: { count: 0, draft: "set from outside", onAdd: "action", onGo: "action" },

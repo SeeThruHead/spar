@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Ref, Schema } from "effect"
-import { Store, UiState, View } from "spar"
+import { Store, UiState, View, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { PairView, TallyView } from "./units.tsx"
 
@@ -16,8 +16,8 @@ class TallyStore extends Store.Tag<TallyStore>()("test/Tally", {
 }) {}
 
 const Tally = TallyStore.with(
-  View.taking(
-    { label: Schema.String },
+  compose(
+    withProps({ label: Schema.String }),
     Effect.fnUntraced(function* ({ label }) {
       const store = yield* TallyStore
 
@@ -27,7 +27,7 @@ const Tally = TallyStore.with(
 )
 
 const Lone = TallyStore.with(
-  View.connect(
+  compose(
     Effect.fnUntraced(function* () {
       const store = yield* TallyStore
 
@@ -36,7 +36,7 @@ const Lone = TallyStore.with(
   )(TallyView),
 )
 
-const Pair = View.connect(
+const Pair = compose(
   Effect.fnUntraced(function* () {
     return {
       first: yield* View.child(Tally, { label: "apples" }),

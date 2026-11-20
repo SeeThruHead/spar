@@ -3,7 +3,7 @@ import { vi } from "vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, pipe, Predicate, Schedule, Schema, Stream, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
-import { Events, Reactive, UiState, View } from "spar"
+import { Events, Reactive, UiState, compose } from "spar"
 import { MenuItemsView, MenuView, SearchView, StatusView } from "./menus.tsx"
 import { eventually, find, gone, mount } from "spar/testing"
 
@@ -20,7 +20,7 @@ const narrowTo = (width: number) =>
     Reflect.apply(controls.setViewport, controls, [{ width, height: 800 }])
   })
 
-const Menu = View.connect(
+const Menu = compose(
   Effect.fnUntraced(function* () {
     const open = yield* UiState.make("open", Schema.Boolean, false)
 
@@ -33,7 +33,7 @@ const Menu = View.connect(
   }),
 )(MenuView)
 
-const Search = View.connect(
+const Search = compose(
   Effect.fnUntraced(function* () {
     const searches = yield* SubscriptionRef.make(0)
 
@@ -44,7 +44,7 @@ const Search = View.connect(
   }),
 )(SearchView)
 
-const Status = View.connect(
+const Status = compose(
   Effect.fnUntraced(function* () {
     const online = yield* Events.online
     const visible = yield* Events.visible
