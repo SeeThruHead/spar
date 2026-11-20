@@ -7,6 +7,7 @@ import {
   Layer,
   Option,
   Predicate,
+  Queue,
   Record,
   Ref,
   Schema,
@@ -97,6 +98,13 @@ type PayloadOf<A> = A extends {
   ? Payload
   : never
 
+export type Accepted<State, Payload> = { readonly payload: Payload; readonly state: State }
+
+interface ToAccepted<State> extends Struct.Lambda {
+  (action: Action<State, unknown>): Stream.Stream<Accepted<State, unknown>>
+  readonly "~lambda.out": Stream.Stream<Accepted<State, PayloadOf<this["~lambda.in"]>>>
+}
+
 interface ToReactive<State> extends Struct.Lambda {
   (selector: Selector<State, unknown>): Reactive<unknown>
   readonly "~lambda.out": this["~lambda.in"] extends Selector<never, infer A> ? Reactive<A> : never
@@ -163,7 +171,13 @@ export type Shape<State, A extends Actions<State>, S extends Selectors<State>> =
   readonly commands: {
     readonly [Name in keyof A & string]: (payload: PayloadOf<A[Name]>) => Effect.Effect<void>
   }
+  readonly accepted: { readonly [Name in keyof A]: Struct.Apply<ToAccepted<State>, A[Name]> }
+  readonly phase: Reactive<string | null>
 }
+
+export type Own<State, A extends Actions<State>, S extends Selectors<State>, R> = (
+  store: Shape<State, A, S>,
+) => Effect.Effect<void, never, R>
 
 export class Abandoned extends Schema.TaggedError<Abandoned, { readonly brand: unique symbol }>()(
   "Abandoned",
@@ -296,17 +310,34 @@ const counted = (
 
 const channelOf = (key: string, name: string): string => `${key}/${name}`
 
-const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<State>, R, E, RO>(
+type Taken<State> = {
+  readonly handled: Action<State, unknown>
+  readonly entry: Entry
+  readonly next: State
+}
+
+const makeLayer = <
+  Self,
+  State,
+  A extends Actions<State>,
+  S extends Selectors<State>,
+  R,
+  E,
+  RO,
+  RS = never,
+>(
   service: Context.Key<Self, Shape<State, A, S>>,
   key: string,
   definition: Definition<State, A, S>,
   reactions: ReadonlyArray<Reaction<State, R>>,
   open: Open<State, E, RO>,
+  own: ReadonlyArray<Own<State, A, S, RS>> = [],
 ): Layer.Layer<
   Self,
   E,
   | Exclude<Exclude<R, Scope.Scope>, SecureRandom.SecureRandom>
   | Exclude<Exclude<RO, Scope.Scope>, SecureRandom.SecureRandom>
+  | Exclude<RS, Scope.Scope>
 > =>
   Layer.effect(
     service,
@@ -317,6 +348,8 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const scope = yield* Effect.scope
       const turn = yield* Semaphore.make(1)
       const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = actions
+      const ownSender = {}
+      const lastTaken = Cell.make<Option.Option<Taken<State>>>(Option.none())
       const reactionsTo = (handled: Action<State, unknown>) =>
         reactions.filter((reaction) => reaction.action === handled)
 
@@ -478,7 +511,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           definition.phases,
           before.state,
           name,
-          reactions.some((reaction) => reaction === sender),
+          sender === ownSender || reactions.some((reaction) => reaction === sender),
         )
         if (unfit !== null) return yield* turnAway(name, payload, unfit, intent)
         if (stillLeading(handled)) {
@@ -526,6 +559,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           trail: lastOf([...before.trail, { seq, state: next }], inspector.keepStates),
           refused: Option.none(),
         })
+        lastTaken.write(Option.some({ handled, entry, next }))
         yield* journal.tell
         yield* Timeline.note("command", channelOf(key, name), () => payload)
 
@@ -814,7 +848,32 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           ),
       })
 
-      return {
+      const takenBy = (handled: Action<State, unknown>): Stream.Stream<Taken<State>> =>
+        Stream.callback<Taken<State>>((queue) =>
+          Effect.acquireRelease(
+            Effect.sync(() =>
+              lastTaken.subscribe((taken) =>
+                Option.map(
+                  Option.filter(taken, (seen) => seen.handled === handled),
+                  (seen) => Queue.offerUnsafe(queue, seen),
+                ),
+              ),
+            ),
+            (stop) => Effect.sync(stop),
+          ),
+        )
+      const acceptedBy = Struct.map(
+        actions,
+        Struct.lambda<ToAccepted<State>>((handled) =>
+          Stream.mapEffect(takenBy(handled), (taken) =>
+            Effect.map(Effect.orDie(handled.decode(taken.entry.payload)), (payload) => ({
+              payload,
+              state: taken.next,
+            })),
+          ),
+        ),
+      )
+      const store: Shape<State, A, S> = {
         state,
         log,
         viewing,
@@ -822,7 +881,20 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         travelTo,
         select,
         commands,
+        accepted: acceptedBy,
+        phase: map(state, phaseOf),
       }
+
+      yield* Effect.forEach(
+        own,
+        (run) =>
+          Effect.forkIn(Effect.provideService(run(store), Sender, ownSender), scope, {
+            startImmediately: true,
+          }),
+        { discard: true },
+      )
+
+      return store
     }),
   ).pipe(Layer.provide(SecureRandom.layerWebCrypto))
 
@@ -880,6 +952,15 @@ export const Tag =
       static readonly layer = <const Needs extends ReadonlyArray<unknown> = []>(
         reactions?: Reactions<State, Needs>,
       ) => makeLayer(service, key, definition, listed(reactions), seeded(key, definition))
+      static readonly layerOwn = <RS = never>(own: Own<State, A, S, RS>) =>
+        makeLayer<Self, State, A, S, never, never, never, RS>(
+          service,
+          key,
+          definition,
+          [],
+          seeded(key, definition),
+          [own],
+        )
       static readonly layerFrom = <E, RL, const Needs extends ReadonlyArray<unknown> = []>(
         load: Effect.Effect<State, E, RL>,
         reactions?: Reactions<State, Needs>,
