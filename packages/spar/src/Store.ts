@@ -16,6 +16,7 @@ import {
   Struct,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
+import type { KeyValueStore } from "effect/persistence"
 import * as Cell from "./internal/cell.ts"
 import { withRow } from "./internal/rows.ts"
 import { noticed } from "./internal/notice.ts"
@@ -33,7 +34,6 @@ import {
   unfitFor,
   inMemory,
   lastSeqOf,
-  onDevice,
   replay,
   replayFrom,
   stepsFrom,
@@ -825,6 +825,22 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       }
     }),
   ).pipe(Layer.provide(SecureRandom.layerWebCrypto))
+
+const onDevice =
+  <State, A extends Actions<State>, S extends Selectors<State>>(
+    key: string,
+    definition: Definition<State, A, S>,
+    durable: Durable,
+  ): Open<
+    State,
+    Unreadable,
+    KeyValueStore.KeyValueStore | SecureRandom.SecureRandom | Scope.Scope
+  > =>
+  (leftovers) =>
+    Effect.flatMap(
+      Effect.promise(() => import("./internal/device.ts")),
+      (device) => device.onDevice(key, definition, durable)(leftovers),
+    )
 
 const seeded =
   <State, A extends Actions<State>, S extends Selectors<State>>(
