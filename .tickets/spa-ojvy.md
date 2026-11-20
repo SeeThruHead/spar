@@ -19,3 +19,7 @@ Measured with apps/bench/scripts/bundle-parts.ts: Effect running one effect 8.5 
 **2026-11-20T09:29:15Z**
 
 Startup (13.6 ms vs Solid 4.9 on the CI box): a CPU profile of page load shows no hot Spar function; the largest self time is the bundle's module evaluation (1.8 ms) and the rest is spread thin, so the gap is parse/compile/evaluate of the 210 kB minified bundle. Shrinking the bundle is the startup fix too.
+
+**2026-11-20T09:48:41Z**
+
+Checked 'Select a row' (CI table: Spar 10.2 ms, React 3.5, to the next frame): to the DOM change Spar takes 0.10 ms and React 0.30 (20 clicks, median, profiled), and the earlier STHDEV table had Spar 4.5 vs React 5.1. The to-the-frame number is dominated by frame alignment; no Spar change needed.
