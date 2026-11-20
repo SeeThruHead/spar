@@ -7,7 +7,8 @@ import type { Element } from "./internal/element.ts"
 import * as Cell from "./internal/cell.ts"
 import { Dehydrated, Text, stateId } from "./internal/dehydrated.ts"
 import { Frame, noPage } from "./internal/frame.ts"
-import { Marked, toHtml } from "./internal/html.ts"
+import { Marked } from "./internal/html.ts"
+import { Renderer, drawn as asText } from "./Renderer.ts"
 import { partsOf, replacements, unmarked } from "./internal/parts.ts"
 import type { Part, Replacement } from "./internal/parts.ts"
 import { OnServer } from "./internal/server.ts"
@@ -22,7 +23,7 @@ export { Dehydrated }
 export type Rendered = { readonly html: string; readonly state: Dehydrated }
 
 type Options<R, LayerError> = {
-  readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>>, LayerError>
+  readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>> | Renderer, LayerError>
 }
 
 const encodedOf = (store: Inspected) =>
@@ -76,12 +77,12 @@ const drawnWithin: (
   element: Element,
   stores: Held<ReadonlyArray<Inspected>>,
   left: number,
-) => Effect.Effect<string, never, Scope.Scope> = Effect.fnUntraced(
+) => Effect.Effect<string, never, Renderer | Scope.Scope> = Effect.fnUntraced(
   function* (element, stores, left) {
     const registered = stores.read()
     const before = yield* statesOf(stores)
     const draw = yield* Scope.make()
-    const html = yield* Scope.provide(toHtml(element), draw)
+    const html = yield* Scope.provide(asText(element), draw)
     const waited = yield* settled(stores, 0, false)
     const after = yield* statesOf(stores)
     const again = left > 0 && (waited || !same(before, after))
@@ -161,7 +162,7 @@ const redrawn = Effect.fnUntraced(function* (
   return partsOf(html)
 })
 
-const markedHtml = (element: Element) => Effect.provideService(toHtml(element), Marked, true)
+const markedHtml = (element: Element) => Effect.provideService(asText(element), Marked, true)
 
 type Drawing = { readonly element: Element; readonly root: string }
 
@@ -190,7 +191,11 @@ const piecesFor = (
   stores: Held<ReadonlyArray<Inspected>>,
   changed: ReadonlyArray<readonly [string, Schema.Json]>,
   sent: Part,
-): Effect.Effect<{ readonly chunks: ReadonlyArray<string>; readonly parts: Part }> =>
+): Effect.Effect<
+  { readonly chunks: ReadonlyArray<string>; readonly parts: Part },
+  never,
+  Renderer
+> =>
   changed.length === 0
     ? Effect.succeed({ chunks: [], parts: sent })
     : Effect.flatMap(redrawn(drawing.element, stores), (now) =>
@@ -211,7 +216,7 @@ const followed = <E>(
   stores: Held<ReadonlyArray<Inspected>>,
   queue: Queue.Queue<string, E | Cause.Done>,
   following: Following,
-): Effect.Effect<void> =>
+): Effect.Effect<void, never, Renderer> =>
   following.quiet === 2
     ? Effect.void
     : Effect.gen(function* () {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
-import { Reactive, Server } from "spar"
+import { Effect } from "effect"
+import { Reactive, Renderer, Server } from "spar"
 import { fragment, intrinsic, portal } from "../src/internal/element.ts"
 import { noPage } from "../src/internal/frame.ts"
 import { toHtml } from "../src/internal/html.ts"
@@ -10,7 +10,7 @@ describe("rendering on a server", () => {
   it.live("a page becomes HTML with its values, lists and loaded parts in place", () =>
     Effect.gen(function* () {
       const html = yield* Server.renderToString(Page(Reactive.succeed(fruits)), {
-        layer: Layer.empty,
+        layer: Renderer.html,
       })
 
       expect(html).toBe(
@@ -34,7 +34,9 @@ describe("rendering on a server", () => {
 
   it.live("an empty list still leaves its markers, and nothing of a dialog is sent", () =>
     Effect.gen(function* () {
-      const html = yield* Server.renderToString(Page(Reactive.succeed([])), { layer: Layer.empty })
+      const html = yield* Server.renderToString(Page(Reactive.succeed([])), {
+        layer: Renderer.html,
+      })
 
       expect(html).toContain("<ul><!--[--><!--]--></ul>")
       expect(html).not.toContain("dialog")

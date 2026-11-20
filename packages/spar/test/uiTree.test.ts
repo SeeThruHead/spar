@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Effect, Fiber, Layer, Schema, Stream, SubscriptionRef, pipe } from "effect"
-import { Reactive, Server, UiState, View, compose, withProps } from "spar"
+import { Effect, Fiber, Schema, Stream, SubscriptionRef, pipe } from "effect"
+import { Reactive, Renderer, Server, UiState, View, compose, withProps } from "spar"
 import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { BoardView, NoteView, PanelView, TwiceView } from "./tree.tsx"
@@ -215,7 +215,7 @@ describe("one tree of all UI state", () => {
       Effect.gen(function* () {
         const html = yield* Server.renderToString(
           Board(Reactive.succeed([{ id: "a" }]), Reactive.succeed(false)),
-          { layer: Layer.empty },
+          { layer: Renderer.html },
         )
 
         expect(html).toContain("<h1>Board</h1>")

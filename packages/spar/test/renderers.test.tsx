@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
-import { App, Renderer, State, Store, compose, withStore } from "spar"
+import { App, Renderer, Server, State, Store, compose, withStore } from "spar"
 import * as Memory from "spar/renderer/memory"
 import * as Terminal from "spar/renderer/terminal"
 
@@ -83,6 +83,30 @@ describe("one component, any renderer chosen by a layer", () => {
         expect(yield* until(lastFrame, (now) => now.includes("Count 2"))).toBe(
           "Counter\nCount 2\n[ Add one ]",
         )
+      }),
+  )
+
+  it.live(
+    "a server draws text with Renderer.html, and each side says so when given the other",
+    () =>
+      Effect.gen(function* () {
+        const store = Tally.layer.pipe(Layer.provideMerge(State.layer))
+        const page = Memory.page()
+        const html = yield* Server.renderToString(Counter, {
+          layer: Layer.merge(store, Renderer.html),
+        })
+        const mounted = yield* Effect.exit(
+          App.mount(Counter, { layer: Layer.merge(store, Renderer.html) }),
+        )
+        const served = yield* Effect.exit(
+          Server.renderToString(Counter, {
+            layer: Layer.merge(store, Renderer.into(page.target, page.overlays)),
+          }),
+        )
+
+        expect(html).toContain('<output aria-label="Count">0</output>')
+        expect(String(mounted)).toContain("not Renderer.html")
+        expect(String(served)).toContain("give it Renderer.html")
       }),
   )
 

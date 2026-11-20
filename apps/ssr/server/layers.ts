@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
 import type { Duration } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { Router } from "spar"
+import { Renderer, Router } from "spar"
 import { Shelf } from "../src/api.ts"
 import { Catalogue, queries } from "../src/Catalogue.ts"
 import { Stockroom } from "../src/Shop.ts"
@@ -19,6 +19,7 @@ export const layer = (url: string, supplierTakes: Duration.Input = 0) =>
     ShopStore.layerFrom(items()),
     Layer.succeed(Stockroom, { count: crates() }),
     Layer.provide(queries, direct(supplierTakes)),
+    Renderer.html,
   ).pipe(
     Layer.provideMerge(Router.Router.layerMemory(url)),
     Layer.provide(SecureRandom.layerWebCrypto),

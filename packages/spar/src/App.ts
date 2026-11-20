@@ -110,7 +110,7 @@ const taken = Effect.fnUntraced(function* (taking: Taking) {
   )
 })
 
-const inPageOnly = (renderer: Renderer.Renderer["Service"], effect: Effect.Effect<void>) =>
+const inPageOnly = (renderer: Renderer.Live, effect: Effect.Effect<void>) =>
   renderer.inPage ? effect : Effect.void
 
 const started = <R, LayerError>(
@@ -125,7 +125,7 @@ const started = <R, LayerError>(
 
   const app = Effect.all({
     scope: Effect.scope,
-    renderer: Effect.service(Renderer.Renderer),
+    renderer: Renderer.live,
     context: Effect.context<Exclude<R, Frame>>(),
   }).pipe(
     Effect.tap(({ renderer }) =>

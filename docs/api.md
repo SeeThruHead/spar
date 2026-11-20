@@ -400,8 +400,8 @@ sequenceDiagram
   Note over B: attach listeners
 ```
 
-`Server.render(Component, { layer })` runs the same component on a server and gives its HTML
-and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
+`Server.render(Component, { layer })` runs the same component on a server, drawn by the
+`Renderer.html` its layer gives, and gives its HTML and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
 trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the finished HTML of each component it changed, put in place between that component's marks (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
@@ -614,6 +614,7 @@ The component and its view do not change between them, and an update writes the 
 | `Renderer.dom(target)`                             | The page, into `target`, with overlays above it                                       |
 | `Renderer.into(target, overlays)`                  | Any document's element; `spar/renderer/memory`'s `page()` makes one outside a browser |
 | `Terminal.layer(print)` (`spar/renderer/terminal`) | A document of its own, printed as text through `print` after each change              |
+| `Renderer.html`                                    | Text, for a server: each value read once, with the markers the browser takes over by  |
 
 ```ts
 App.mount(Counter, {
@@ -622,11 +623,14 @@ App.mount(Counter, {
     Terminal.layer((frame) => Console.log(frame)),
   ),
 })
+
+Server.renderToString(Counter, { layer: Layer.merge(CounterStore.layer, Renderer.html) })
 ```
 
-(`apps/demo/scripts/terminal.ts`, which draws the demo's counter in a terminal, unchanged.) A page
-sent from a server is still drawn by `Server.render`, which reads each value once and writes the
-markers the browser needs to take it over.
+(`apps/demo/scripts/terminal.ts` draws the demo's counter in a terminal, unchanged; the server
+layers in `apps/ssr/server/layers.ts` give `Renderer.html`.) The first three draw into a document
+and keep it up to date, so `App.mount` takes them; `Renderer.html` writes a page once, so the
+`Server` functions take it. Given the other kind, each says which renderer it needs.
 
 ## spar/testing
 

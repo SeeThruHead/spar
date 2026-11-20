@@ -75,6 +75,6 @@ export const layer = <R>(print: (frame: string) => Effect.Effect<void, never, R>
         () => Effect.sync(() => observer.disconnect()),
       )
 
-      return Renderer.of({ target, overlays, inPage: false })
+      return Renderer.of({ _tag: "Live", target, overlays, inPage: false })
     }),
   )

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Deferred, Effect, Exit, Layer, Scope, SubscriptionRef } from "effect"
-import { App, Reactive, Server } from "spar"
+import { App, Reactive, Renderer, Server } from "spar"
 import * as Testing from "spar/testing"
 import type { Fruit } from "./pages.tsx"
 import { Page, fruits } from "./shop.ts"
@@ -56,7 +56,7 @@ describe("taking over a page a server sent", () => {
     Effect.gen(function* () {
       const list = yield* SubscriptionRef.make(fruits)
       const component = Page(Reactive.fromSubscriptionRef(list))
-      const html = yield* Server.renderToString(component, { layer: Layer.empty })
+      const html = yield* Server.renderToString(component, { layer: Renderer.html })
       const fresh = yield* freshlyMounted(component)
       const { target, kept } = yield* shownWith(html, component, App.hydrate)
 
@@ -90,7 +90,7 @@ describe("taking over a page a server sent", () => {
       const list = yield* SubscriptionRef.make<ReadonlyArray<Fruit>>(fruits)
       const component = Page(Reactive.fromSubscriptionRef(list))
       const fresh = yield* freshlyMounted(component)
-      const html = yield* Server.renderToString(component, { layer: Layer.empty })
+      const html = yield* Server.renderToString(component, { layer: Renderer.html })
       const spoiled = [
         html.replace("<h1>", "<h2>").replace("</h1>", "</h2>"),
         html.replace("<!--[-->", "").replace("<li>Apple</li>", "<li>Apple</li><li>Extra</li>"),
