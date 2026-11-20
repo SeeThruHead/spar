@@ -154,6 +154,9 @@ const reachedBy = (store: Store.Inspected) =>
 export const layer: Layer.Layer<Registry> = Layer.effectContext(
   Effect.gen(function* () {
     const first = yield* Trees.Tree
+
+    first.keepAtLeast(1000)
+
     const trees = Cell.make(first)
     const stores = Cell.make<ReadonlyArray<Store.Inspected>>([])
     const past = Cell.make<Past>({
@@ -317,7 +320,10 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       travelTo,
       uiState: () => trees.read().uiSnapshot(),
       setUi: (path, name, value) => trees.read().put(path, name, value),
-      follow: (tree) => trees.write(tree),
+      follow: (tree) => {
+        tree.keepAtLeast(1000)
+        trees.write(tree)
+      },
     }).pipe(
       Context.add(Store.Inspector, {
         keepStates: 1000,

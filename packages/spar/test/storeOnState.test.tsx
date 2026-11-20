@@ -5,6 +5,15 @@ import { Store, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import * as State from "../src/State.ts"
+import { Tree, UiTree } from "../src/internal/uiTree.ts"
+
+const keepingLayer = Layer.sync(UiTree, () => {
+  const tree = new Tree()
+
+  tree.keepAtLeast(1000)
+
+  return tree
+})
 
 const Counting = Schema.Struct({ count: Schema.Int, resetting: Schema.Boolean })
 
@@ -64,7 +73,7 @@ const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boo
 
 const counting = Resets.layer.pipe(
   Layer.provideMerge(CounterModel.layer),
-  Layer.provideMerge(State.layer),
+  Layer.provideMerge(keepingLayer),
 )
 
 describe("a store on one state", () => {
@@ -136,7 +145,7 @@ describe("a store on one state", () => {
       Effect.provide(
         CounterModel.layer.pipe(
           Layer.provideMerge(Devtools.layer),
-          Layer.provideMerge(State.layer),
+          Layer.provideMerge(keepingLayer),
         ),
       ),
     ),
@@ -148,7 +157,7 @@ describe("a store on one state", () => {
         Effect.provide(
           Effect.flatMap(CounterModel, (counter) => counter.select.count.get),
           CounterModel.layerFrom(Effect.succeed({ count: 9, resetting: false })).pipe(
-            Layer.provideMerge(State.layer),
+            Layer.provideMerge(keepingLayer),
           ),
         ),
       )
@@ -158,7 +167,7 @@ describe("a store on one state", () => {
       const storage = yield* Layer.build(KeyValueStore.layerMemory)
       const saved = CounterModel.layerSaved.pipe(
         Layer.provide(Layer.succeedContext(storage)),
-        Layer.provideMerge(State.layer),
+        Layer.provideMerge(keepingLayer),
       )
 
       yield* Effect.scoped(
@@ -191,6 +200,6 @@ describe("a store on one state", () => {
       yield* Testing.mount(CounterModel.with(Count))
       yield* Testing.click("button", "Count 0")
       yield* Testing.findText("Count 1")
-    }).pipe(Effect.provide(State.layer)),
+    }).pipe(Effect.provide(keepingLayer)),
   )
 })

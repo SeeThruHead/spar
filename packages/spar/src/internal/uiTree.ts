@@ -31,8 +31,6 @@ type Past<A> = {
   readonly before: Past<A> | undefined
 }
 
-const pastLimit = 1000
-
 const newestOf = <A>(past: Past<A> | undefined, count: number): ReadonlyArray<Past<A>> =>
   past === undefined || count === 0 ? [] : [past, ...newestOf(past.before, count - 1)]
 
@@ -74,11 +72,12 @@ export class Kept<A> implements Cell.Cell<A> {
   }
 
   remembered(seq: number, value: A): void {
+    const limit = this.tree.keeping.read()
     const before = this.past.read()
     const next = { seq, value, depth: (before?.depth ?? 0) + 1, before }
-    if (next.depth <= pastLimit * 2) return this.past.write(next)
+    if (next.depth <= limit * 2) return this.past.write(next)
 
-    const kept = newestOf(next, pastLimit)
+    const kept = newestOf(next, limit)
 
     Option.map(Option.fromNullishOr(kept.at(-1)?.before), (dropped) =>
       this.first.write(dropped.value),
@@ -188,6 +187,11 @@ export class Tree {
   readonly log = Cell.make<ReadonlyArray<Written>>([])
   readonly viewing = Cell.make<number | null>(null)
   readonly seq = Cell.make(0)
+  readonly keeping = Cell.make(0)
+
+  keepAtLeast(count: number): void {
+    this.keeping.write(Math.max(this.keeping.read(), count))
+  }
 
   written<A>(kept: Kept<A>, name: string, value: A, about: About): void {
     if (this.viewing.read() !== null) this.travelTo(null)
@@ -196,6 +200,8 @@ export class Tree {
 
     this.seq.write(seq)
     kept.write(value)
+    if (this.keeping.read() === 0) return
+
     kept.remembered(seq, value)
     this.log.write(
       [...this.log.read(), { seq, path: kept.path, slot: kept.name, name, ...about }].slice(

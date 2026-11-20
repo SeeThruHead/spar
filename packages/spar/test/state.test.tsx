@@ -15,6 +15,15 @@ import { KeyValueStore } from "effect/persistence"
 import { Reactive, Tabs, UiState, compose, withUiState } from "spar"
 import * as Testing from "spar/testing"
 import * as State from "../src/State.ts"
+import { Tree, UiTree } from "../src/internal/uiTree.ts"
+
+const keepingLayer = Layer.sync(UiTree, () => {
+  const tree = new Tree()
+
+  tree.keepAtLeast(1000)
+
+  return tree
+})
 
 const Counting = Schema.Struct({ count: Schema.Int, resetting: Schema.Boolean })
 
@@ -88,7 +97,7 @@ describe("one state for everything", () => {
         ["Counter", "resetClicked"],
         ["Counter", "resetCompleted"],
       ])
-    }).pipe(Effect.provide(Counter.layer.pipe(Layer.provideMerge(State.layer)))),
+    }).pipe(Effect.provide(Counter.layer.pipe(Layer.provideMerge(keepingLayer)))),
   )
 
   it.live("a component's own state is a slot at its path in the same log, gone when it is", () =>
@@ -112,7 +121,7 @@ describe("one state for everything", () => {
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* state.snapshot).toEqual([])
-    }).pipe(Effect.provide(State.layer)),
+    }).pipe(Effect.provide(keepingLayer)),
   )
 
   it.effect("a second slot asked for under a key in use gets its own, numbered key", () =>
@@ -128,7 +137,7 @@ describe("one state for everything", () => {
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* state.snapshot).toEqual([])
-    }).pipe(Effect.provide(State.layer)),
+    }).pipe(Effect.provide(keepingLayer)),
   )
 
   it.live("saving is a layer around whatever should be saved: the count survives a restart", () =>
@@ -137,7 +146,7 @@ describe("one state for everything", () => {
       const started = Counter.layer.pipe(
         Layer.provide(State.saved),
         Layer.provide(Layer.succeedContext(storage)),
-        Layer.provideMerge(State.layer),
+        Layer.provideMerge(keepingLayer),
       )
       const countedTwice = Effect.gen(function* () {
         const counter = yield* Counter
@@ -177,7 +186,7 @@ describe("one state for everything", () => {
       const tab = Counter.layer.pipe(
         Layer.provide(State.saved),
         Layer.provide(Layer.succeedContext(storage)),
-        Layer.provide(State.layer),
+        Layer.provide(keepingLayer),
         Layer.provide(Layer.succeed(Tabs.Tabs, shared)),
       )
       const here = yield* Layer.build(tab)
@@ -209,7 +218,7 @@ describe("one state for everything", () => {
       expect([written?.slot, written?.name, written?.seq]).toEqual(["app/Theme", "chosen", 1])
       expect(written?.traceId.length).toBe(32)
       expect(yield* theme.value.get).toBe("dark")
-    }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(State.layer)))),
+    }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(keepingLayer)))),
   )
 
   it.effect(
@@ -248,7 +257,7 @@ describe("one state for everything", () => {
           "dark",
           5,
         ])
-      }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(State.layer)))),
+      }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(keepingLayer)))),
   )
 
   it.effect(
@@ -273,6 +282,6 @@ describe("one state for everything", () => {
         expect(yield* count.value.get).toBe(1001)
         yield* state.travelTo(null)
         expect(yield* count.value.get).toBe(2500)
-      }).pipe(Effect.scoped, Effect.provide(State.layer)),
+      }).pipe(Effect.scoped, Effect.provide(keepingLayer)),
   )
 })

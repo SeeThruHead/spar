@@ -7,6 +7,7 @@ import { sourced } from "./inspect.ts"
 import { fromCell, map, zip } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 import { Seed } from "./server.ts"
+import { UiTree } from "./uiTree.ts"
 import * as State from "../State.ts"
 import * as Timeline from "../Timeline.ts"
 import type { Mountable } from "../View.ts"
@@ -201,6 +202,9 @@ export const made = Effect.fnUntraced(function* <
     }),
   )
   const inspector = yield* Inspector
+  const tree = yield* UiTree
+
+  tree.keepAtLeast(inspector.keepStates)
   const encodeState = Schema.encodeEffect(Schema.toCodecJson(definition.state))
   const handlerOf = (name: string) =>
     Effect.mapError(
