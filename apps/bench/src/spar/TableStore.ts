@@ -1,13 +1,17 @@
 import { Schema } from "effect"
 import { Store } from "spar"
-import {
-  exclaimEveryTenth,
-  exclaimMiddle,
-  makeRows,
-  swapSecondAndSecondLast,
-} from "../shared/rows.ts"
+import { exclaimEveryTenth, makeRows, swapSecondAndSecondLast } from "../shared/rows.ts"
+import type { Row as Shared } from "../shared/rows.ts"
 
 export const Row = Schema.Struct({ id: Schema.Int, label: Schema.String })
+
+const exclaimedMiddle = (rows: ReadonlyArray<Shared>): ReadonlyArray<Shared> => {
+  const middle = Math.floor(rows.length / 2)
+
+  return rows
+    .slice(middle, middle + 1)
+    .reduce((all, row) => Store.withRow(all, middle, { ...row, label: `${row.label} !!!` }), rows)
+}
 
 const Rows = Schema.Array(Row)
 
@@ -41,7 +45,7 @@ export class TableStore extends Store.Tag<TableStore>()("bench/TableStore", {
     })),
     oneUpdated: Store.action(Schema.Void, (state: State) => ({
       ...state,
-      rows: exclaimMiddle(state.rows),
+      rows: exclaimedMiddle(state.rows),
     })),
     swapped: Store.action(Schema.Void, (state: State) => ({
       ...state,

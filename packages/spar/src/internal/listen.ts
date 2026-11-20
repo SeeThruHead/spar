@@ -37,7 +37,7 @@ const causing = (): Option.Option<Tracer.AnySpan> =>
 const causedBy = (effect: Effect.Effect<void>, cause: Option.Option<Tracer.AnySpan>) =>
   Option.match(cause, {
     onNone: () => effect,
-    onSome: (span) => Effect.withParentSpan(effect, span),
+    onSome: (span) => Effect.withParentSpan(effect, span, { captureStackTrace: false }),
   })
 
 const rootOf = (span: Tracer.AnySpan): Tracer.AnySpan =>

@@ -17,6 +17,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import * as Cell from "./internal/cell.ts"
+import { withRow } from "./internal/rows.ts"
 import { noticed } from "./internal/notice.ts"
 import { provideTo } from "./internal/context.ts"
 import { report } from "./internal/crash.ts"
@@ -222,6 +223,8 @@ export const Refusal = Schema.Struct({
 })
 
 export type Refusal = typeof Refusal.Type
+
+export { withRow }
 
 export const selector = <A, State>(
   schema: Schema.Codec<A, unknown>,

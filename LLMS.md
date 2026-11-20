@@ -155,6 +155,8 @@ with async work. The short version:
   `Store.after`, or a Query. With `Store.after` an older answer can land last.
 - When a second press must not start the work again (Pay, Save, Send), use `Store.afterLeading`:
   the store refuses the repeat while the first run lasts, and says why.
+- To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
+  the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
   next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
@@ -975,6 +977,7 @@ on screen until they mount. Give an app its own tree with
 | `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                                         |
 | `Store.afterLatest(action, effect)`                                   | The same, keeping only the newest run: a new one stops the one before it. For a search, or anything where only the last answer matters. |
 | `Store.afterLeading(action, effect)`                                  | The same, keeping only the first run: while it runs, the store refuses that command again, with the reason. For Pay, Save, Send.        |
+| `Store.withRow(rows, index, row)`                                     | In a reducer, the rows with one replaced. A keyed list showing those rows then rewrites that row only, without walking the others.      |
 | `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                                          |
 | `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                                              |
 

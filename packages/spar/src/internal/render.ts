@@ -26,6 +26,7 @@ import { noticed } from "./notice.ts"
 import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
+import { changedOne } from "./rows.ts"
 import * as Diagnostics from "../Diagnostics.ts"
 import * as Markup from "../Markup.ts"
 
@@ -397,6 +398,11 @@ const refreshedInPlace = <A>(
   key: (item: A) => string,
 ): boolean => {
   if (previous.length !== next.length) return false
+
+  const only = changedOne(shown, next)
+  if (only !== undefined) {
+    return next.slice(only, only + 1).every((item) => wroteAt(previous[only], item, key))
+  }
 
   return next.every((item, index) => item === shown[index] || wroteAt(previous[index], item, key))
 }
