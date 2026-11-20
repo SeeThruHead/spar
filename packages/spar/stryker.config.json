@@ -21,7 +21,7 @@
     "low": 90,
     "break": 90
   },
-  "concurrency": 2,
+  "concurrency": 4,
   "timeoutMS": 20000,
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": "always",
