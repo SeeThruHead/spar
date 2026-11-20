@@ -22,7 +22,7 @@ import {
   resetAfterDelay,
   withHover,
 } from "./composed.tsx"
-import { Dialog, Ten } from "./inference.tsx"
+import { Dialog, Numbered, Ten } from "./inference.tsx"
 
 const text = (label: string) => screen.getByLabelText(label).textContent
 
@@ -224,6 +224,8 @@ describe("a component composed from enhancers, its view last and inline", () => 
         yield* Testing.findText("seen")
         yield* Testing.mount(Ten)
         yield* Testing.findText("ten")
+        yield* Testing.mount(Numbered)
+        yield* Testing.findText("2 second")
       }).pipe(Effect.provide(withTree)),
   )
 

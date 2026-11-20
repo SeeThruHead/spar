@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import {
+  For,
   Reactive,
   compose,
   withEffect,
@@ -26,6 +27,25 @@ export const Dialog = compose(
     <h2>{props.heading}</h2>
     <p>{props.first}</p>
   </section>
+))
+
+export const Numbered = compose(
+  withHandlers(() => ({
+    rows: [
+      { id: 1, name: "first" },
+      { id: 2, name: "second" },
+    ],
+  })),
+)((props) => (
+  <ul>
+    <For each={props.rows} by={(row) => row.id}>
+      {(row, key) => (
+        <li>
+          {key} {Reactive.map(row, (now) => now.name)}
+        </li>
+      )}
+    </For>
+  </ul>
 ))
 
 export const Ten = compose(

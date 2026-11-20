@@ -21,7 +21,7 @@ props are inferred from them. Enhancers and the view run once, on mount.
 | `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                                                                                               |
 | `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                                                                                      |
 | `withSpan(name, enhancer)`                                | Runs an enhancer inside a span with that name.                                                                                                                               |
-| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one.                                                                                                                          |
+| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one; `by` gives each row's key, a string or a number.                                                                         |
 | `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                                                                                  |
 | `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin.                               |
 

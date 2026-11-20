@@ -418,7 +418,7 @@ export const withSpan =
 
 export const For = <A>(props: {
   readonly each: Reactive<ReadonlyArray<A>> | ReadonlyArray<A>
-  readonly by: (item: A) => string
+  readonly by: (item: A) => string | number
   readonly children: (item: Reactive<A>, key: string) => Element
 }): Element => {
   const context = drawnHere()
@@ -426,7 +426,7 @@ export const For = <A>(props: {
   return keyed({
     kind: "drawn",
     items: isReactive(props.each) ? props.each : succeed(props.each),
-    key: props.by,
+    key: (item: A) => String(props.by(item)),
     draw: (key, item) =>
       drawingNow(Context.add(context, RowKey, key), () => props.children(item, key)),
   })
