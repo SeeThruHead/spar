@@ -194,7 +194,11 @@ const locate = (url: string): Location => {
 }
 
 const preload = (url: string): Effect.Effect<void> =>
-  Effect.flatMap(Effect.service(Preload), (rehearse) => rehearse(url))
+  Effect.withSpan(
+    Effect.flatMap(Effect.service(Preload), (rehearse) => rehearse(Router.layerMemory(url))),
+    "Router.preload",
+    { captureStackTrace: false, attributes: { "spar.url": url } },
+  )
 
 export type Arrival = "link" | "history"
 

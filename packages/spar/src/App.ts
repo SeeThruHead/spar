@@ -16,8 +16,8 @@ import { starter } from "./internal/listen.ts"
 import * as Pieces from "./internal/pieces.ts"
 import { fromCell } from "./internal/reactive.ts"
 import { renderInto } from "./internal/render.ts"
-import { Router } from "./Router.ts"
 import { Inspector } from "./Store.ts"
+import type { Router } from "./Router.ts"
 import type { Component } from "./View.ts"
 
 export { CrashReporter } from "./internal/crash.ts"
@@ -49,8 +49,8 @@ const continued = (state: Dehydrated) =>
 
 const rehearsal =
   <R>(component: Component<NoProps, never, R>, context: Context.Context<Exclude<R, Frame>>) =>
-  (url: string): Effect.Effect<void> =>
-    Effect.flatMap(Layer.build(Router.layerMemory(url)), (router) =>
+  (memory: Layer.Layer<Router>): Effect.Effect<void> =>
+    Effect.flatMap(Layer.build(memory), (router) =>
       Effect.flatMap(component.mount({}), toHtml).pipe(
         Effect.provide(router),
         Effect.provideService(Frame, noPage),
@@ -58,12 +58,7 @@ const rehearsal =
         Effect.provideService(UiTree, new Tree()),
         Effect.provideService(Inspector, Inspector.defaultValue()),
       ),
-    ).pipe(Effect.provide(context), Effect.scoped, Effect.asVoid, (rehearsed) =>
-      Effect.withSpan(rehearsed, "Router.preload", {
-        captureStackTrace: false,
-        attributes: { "spar.url": url },
-      }),
-    )
+    ).pipe(Effect.provide(context), Effect.scoped, Effect.asVoid)
 
 type Taking = {
   readonly adopters: Cell.Cell<ReadonlyMap<string, Pieces.Adopt>>
