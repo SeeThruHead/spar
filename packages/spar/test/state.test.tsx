@@ -250,4 +250,29 @@ describe("one state for everything", () => {
         ])
       }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(State.layer)))),
   )
+
+  it.effect(
+    "a slot keeps a bounded past: moments in the log show right, older ones its oldest",
+    () =>
+      Effect.gen(function* () {
+        const state = yield* State.current
+        const count = yield* state.slot(["count"], Schema.Int, 0)
+
+        yield* Effect.forEach(
+          Array.from({ length: 2500 }, (_, index) => index + 1),
+          (next) => count.set("counted", next),
+        )
+
+        const seqs = (yield* state.log.get).map((entry) => entry.seq)
+
+        expect([seqs.length, seqs[0]]).toEqual([1000, 1501])
+
+        yield* state.travelTo(1501)
+        expect(yield* count.value.get).toBe(1501)
+        yield* state.travelTo(1)
+        expect(yield* count.value.get).toBe(1001)
+        yield* state.travelTo(null)
+        expect(yield* count.value.get).toBe(2500)
+      }).pipe(Effect.scoped, Effect.provide(State.layer)),
+  )
 })

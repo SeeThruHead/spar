@@ -24,7 +24,23 @@ const entryKey = (path: Path, name: string): string => `${placeKey(path)}\u0001$
 const numbered = (path: Path, nth: number): Path =>
   nth === 1 ? path : [...path.slice(0, -1), `${path.at(-1)}#${nth}`]
 
-type Past<A> = { readonly seq: number; readonly value: A; readonly before: Past<A> | undefined }
+type Past<A> = {
+  readonly seq: number
+  readonly value: A
+  readonly depth: number
+  readonly before: Past<A> | undefined
+}
+
+const pastLimit = 1000
+
+const newestOf = <A>(past: Past<A> | undefined, count: number): ReadonlyArray<Past<A>> =>
+  past === undefined || count === 0 ? [] : [past, ...newestOf(past.before, count - 1)]
+
+const rebuilt = <A>(nodes: ReadonlyArray<Past<A>>): Past<A> | undefined =>
+  nodes.reduceRight<Past<A> | undefined>(
+    (before, node) => ({ ...node, depth: (before?.depth ?? 0) + 1, before }),
+    undefined,
+  )
 
 const reached = <A>(past: Past<A> | undefined, seq: number): Past<A> | undefined => {
   if (past === undefined) return undefined
@@ -58,7 +74,16 @@ export class Kept<A> implements Cell.Cell<A> {
   }
 
   remembered(seq: number, value: A): void {
-    this.past.write({ seq, value, before: this.past.read() })
+    const before = this.past.read()
+    const next = { seq, value, depth: (before?.depth ?? 0) + 1, before }
+    if (next.depth <= pastLimit * 2) return this.past.write(next)
+
+    const kept = newestOf(next, pastLimit)
+
+    Option.map(Option.fromNullishOr(kept.at(-1)?.before), (dropped) =>
+      this.first.write(dropped.value),
+    )
+    this.past.write(rebuilt(kept))
   }
 
   showAt(seq: number): void {
