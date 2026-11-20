@@ -115,7 +115,7 @@ in an enhancer and pass `props.shown` instead.
 | Build a form                              | `Form.make(Schema, initial)`, `form.field(name)`, `form.submit` or `form.submitThen`                                                    | UI state for each input plus hand validation                                                                   |
 | React to a key press                      | `withKey("Escape", (props) => UiState.set(props.open, false))`                                                                          | `addEventListener`                                                                                             |
 | Run something while mounted               | `withEffect((props) => effect)`; `Events.onWindow` / `onDocument` inside it                                                             | A module-level listener                                                                                        |
-| Focus or measure an element               | `Handle.make`, passed as a `Props.Handle`                                                                                               | `document.querySelector`                                                                                       |
+| Focus or measure an element               | `const input = yield* Handle.make` (an Effect, not a function), passed as a `Props.Handle`                                              | `document.querySelector`                                                                                       |
 | Open a dialog, menu, popover or tooltip   | The ones in `@spar/ui`, or `View.portal` with `Overlay`                                                                                 | A positioned div                                                                                               |
 | Note something that happened, for the log | `Timeline.note(kind, name, detail)`                                                                                                     | `console.log`                                                                                                  |
 | Test a store                              | Provide its layer and call commands in `it.effect`                                                                                      | Mounting a page to test a reducer                                                                              |
@@ -136,8 +136,12 @@ compile):
   (`(state: State): State => ...`), or TypeScript widens the literal and the action is rejected.
 - UI state made in a service, written from a command, a stream or a service listener, or seeded
   from a store. UI state belongs to one component and changes only in its handlers.
-- A connected component written as a JSX tag, a service passed into a view, a modal outside a
-  portal, `View.pending` placed before `View.recover`, a route mounted with the wrong page.
+- A component that can still fail, written as a JSX tag (`TS2604` / `TS2786`: "cannot be used as a
+  JSX component"). Recover its error inside it with `View.recover`, or mount it with
+  `View.child(component, props)` from an enhancer. If its error type shows as `unknown`, look for
+  the first error in that component instead: something there was not typed.
+- A service passed into a view, a modal outside a portal, `View.pending` placed before
+  `View.recover`, a route mounted with the wrong page.
 
 Build errors (the Vite plugin stops the build and names the file, line and rule):
 
