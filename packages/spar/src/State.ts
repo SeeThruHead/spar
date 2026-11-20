@@ -79,22 +79,19 @@ const writtenAndSaved = <A, I>(
     onNone: () => Effect.suspend(() => writeTo(kept, name, next(kept.current()), payload)),
     onSome: (store) =>
       Effect.andThen(
-        tabs.exclusively(
-          storedKey(path),
-          Effect.suspend(() => {
-            const value = next(kept.current())
+        Effect.suspend(() => {
+          const value = next(kept.current())
 
-            return Effect.andThen(
-              writeTo(kept, name, value, payload),
-              Effect.flatMap(
-                Effect.orDie(
-                  Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(value),
-                ),
-                (text) => Effect.orDie(store.set(storedKey(path), text)),
+          return Effect.andThen(
+            writeTo(kept, name, value, payload),
+            Effect.flatMap(
+              Effect.orDie(
+                Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(value),
               ),
-            )
-          }),
-        ),
+              (text) => Effect.orDie(store.set(storedKey(path), text)),
+            ),
+          )
+        }),
         tabs.announce(storedKey(path)),
       ),
   })
@@ -109,12 +106,9 @@ const followOtherTabs = <A, I>(
   Effect.forEach(Option.toArray(saving), () =>
     Effect.forkScoped(
       Stream.runForEach(tabs.announced(storedKey(path)), () =>
-        tabs.exclusively(
-          storedKey(path),
-          Effect.flatMap(
-            Effect.suspend(() => startingValue(saving, path, schema, kept.current())),
-            (now) => writeTo(kept, "another tab", now),
-          ),
+        Effect.flatMap(
+          Effect.suspend(() => startingValue(saving, path, schema, kept.current())),
+          (now) => writeTo(kept, "another tab", now),
         ),
       ),
       { startImmediately: true },

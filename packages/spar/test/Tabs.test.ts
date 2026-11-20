@@ -130,6 +130,12 @@ describe("tabs in a browser", () => {
       expect(yield* Ref.get(times)).toBe(1)
       expect(closed.mock.calls).toHaveLength(0)
 
+      yield* Effect.sync(() => window.dispatchEvent(new StorageEvent("storage", { key: "other" })))
+      yield* Effect.sync(() => window.dispatchEvent(new StorageEvent("storage", { key: "ledger" })))
+      yield* Effect.sleep("10 millis")
+
+      expect(yield* Ref.get(times)).toBe(2)
+
       const state = vi.spyOn(document, "visibilityState", "get")
 
       state.mockReturnValue("hidden")
@@ -139,7 +145,7 @@ describe("tabs in a browser", () => {
       yield* Effect.sleep("10 millis")
       state.mockRestore()
 
-      expect(yield* Ref.get(times)).toBe(2)
+      expect(yield* Ref.get(times)).toBe(3)
 
       yield* Fiber.interrupt(told)
 
