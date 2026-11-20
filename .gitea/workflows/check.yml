@@ -83,7 +83,7 @@ jobs:
         env:
           SPAR_BROWSER: webkit
   mutation:
-    runs-on: boat
+    runs-on: boat-pool
     needs: check
     timeout-minutes: 60
     steps:
