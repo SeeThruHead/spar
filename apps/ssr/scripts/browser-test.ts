@@ -1,8 +1,10 @@
 import { engine, launch } from "@spar/browsers"
-import { Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import type { Browser, Page } from "playwright"
 import { Server } from "spar"
 import { Recorded } from "spar/devtools/spans"
+import { layer } from "../server/layers.ts"
+import { Pair } from "./pair.tsx"
 import { start } from "./site.ts"
 
 const server = start(0)
@@ -297,6 +299,35 @@ const bundleAfterTheStream = async (browser: Browser): Promise<void> => {
   await Promise.race([checked, broke]).finally(() => page.close())
 }
 
+const twoAtOnce = async (browser: Browser): Promise<void> => {
+  const parts = await Effect.runPromise(
+    Stream.runCollect(
+      Server.renderInPieces(Pair, {
+        layer: layer("/", "100 millis"),
+        open: '<div id="root">',
+        close: "</div>",
+        script: "",
+        end: "",
+      }),
+    ),
+  )
+  const filled = parts.filter((part) => part.includes("createRange"))
+  if (filled.length < 2) throw new Error("The two parts that changed together were not sent as two")
+  if (parts.some((part) => part.includes("replaceChildren")))
+    throw new Error("The two parts that changed together were sent as the whole page")
+
+  const page = await browser.newPage()
+
+  await page.setContent(parts.join(""))
+  await said(page, "First", "Valley dairy")
+  await said(page, "Second", "Valley dairy")
+
+  const shown = await page.evaluate(() => document.querySelectorAll("#root p").length)
+  if (shown !== 2) throw new Error(`The page holds ${shown} parts after the pieces, not 2`)
+
+  await page.close()
+}
+
 const run = async (): Promise<void> => {
   const browser = await launch()
   const page = await browser.newPage({ viewport: { width: 820, height: 900 } })
@@ -309,7 +340,8 @@ const run = async (): Promise<void> => {
       .then(() => routed(page))
       .then(() => takenInPieces(page))
       .then(() => withoutTheBundle(browser))
-      .then(() => bundleAfterTheStream(browser)),
+      .then(() => bundleAfterTheStream(browser))
+      .then(() => twoAtOnce(browser)),
     broke,
   ]).finally(() => browser.close())
 }
