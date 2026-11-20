@@ -401,6 +401,20 @@ const refreshedInPlace = <A>(
   return next.every((item, index) => item === shown[index] || wroteAt(previous[index], item, key))
 }
 
+const onlyRemoved = <A>(
+  previous: ReadonlyArray<Entry<A>>,
+  kept: ReadonlyArray<Entry<A>>,
+  nextKeys: ReadonlyArray<string>,
+): boolean => {
+  if (previous.length === 0 || kept.length !== nextKeys.length) return false
+
+  return kept.every((entry, index) => entry.key === nextKeys[index])
+}
+
+const rewritten = <A>(entry: Entry<A>, item: A | undefined): void => {
+  if (item !== undefined && !Object.is(entry.cell.read(), item)) entry.cell.write(item)
+}
+
 const refreshed = <A>(existing: Placed<A>, item: A): Placed<A> => {
   existing.entry.cell.write(item)
 
@@ -499,13 +513,21 @@ const fillRows = Effect.fnUntraced(function* <A>(
       }
 
       const kept = previous.filter((entry) => keys.has(entry.key))
-      const positions = new Map(kept.map((entry, position) => [entry.key, { entry, position }]))
 
       yield* Effect.forEach(
         previous.filter((entry) => !keys.has(entry.key)),
         removeEntry,
         { discard: true },
       )
+
+      if (onlyRemoved(previous, kept, nextKeys)) {
+        kept.forEach((entry, index) => rewritten(entry, next[index]))
+        yield* Ref.set(entries, kept)
+
+        return shown.write(next)
+      }
+
+      const positions = new Map(kept.map((entry, position) => [entry.key, { entry, position }]))
 
       const placed = yield* placeEach(Arr.zip(nextKeys, next), positions, kept.length)
       const current = placed.map((each) => each.entry)
