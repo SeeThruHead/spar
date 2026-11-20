@@ -56,6 +56,23 @@ the same state. It is not silent either:
 - the store's `refused` is the last refusal since the store last accepted a command, as a
   reactive value a view can show.
 
+## Five mistakes Spar reports while the app runs
+
+None of these can be refused by the compiler, because each is ordinary code that is wrong only in
+how its timing works out. Spar notices them while the app runs, writes a warning in the agent
+format (code, what, where, fix) and puts a `noticed` or `waited` entry in the log, which the
+devtools and the agents' server show. Run the app, do the thing, and read the log.
+
+| Code                   | What was done                                                                                    | Do this instead                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `SPAR_NEEDLESS_WAIT`   | A query that takes no input was given an input made from another query's value, so it waits      | `yield* TheQuery.ask()` with no argument. Chain two queries only when the second needs the first's value   |
+| `SPAR_DUPLICATE_CALL`  | The same GET was made again through `Backend` while the first was still on its way               | One `Query.Tag`; every component that needs it asks for it. Never fetch in each row                        |
+| `SPAR_OLDER_ANSWER`    | A `Store.after` run started by an earlier command answered after a later one's, on the same part | `Store.afterLatest`, or load it with a Query, which refuses an answer to an earlier request                |
+| `SPAR_SENT_AGAIN`      | The same command with the same payload, while what the first one started was still running       | A guard on the action that refuses it while in progress, or `form.submit`, which ignores a second submit   |
+| `SPAR_TYPING_REPLACED` | A field the user typed in was given a value by something that began before their last keystroke  | Keep the draft as its own state and the server's copy beside it. Never write an answer back into the draft |
+
+Each has its own entry, with the full text, in the list of diagnostics.
+
 ## When events interleave
 
 The problem, as Treflex's author put it about Elm-style frameworks: every message can arrive at
@@ -182,7 +199,7 @@ Each of these is an entry in the log and a span in the trace.
 | Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                                                                  |
 | A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                                                                   |
 | `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                                                                       |
-| Keeps old data while loading               | Yes: `value` stays while `status` is `loading`                                                                                                                                                    |
+| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                    |
 | `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                 |
 | Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`                                               |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                |

@@ -51,7 +51,7 @@ export const TextField = View.make(
       <p id={`${id}-hint`} class="spar-hint">
         {hint}
       </p>
-      <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
+      <p id={`${id}-problem`} class="spar-problem" role="alert">
         {field.error}
       </p>
     </div>
@@ -78,7 +78,7 @@ export const SelectView = View.make(
       <select id={id} aria-describedby={`${id}-problem`} {...Form.text(field)}>
         {options}
       </select>
-      <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
+      <p id={`${id}-problem`} class="spar-problem" role="alert">
         {field.error}
       </p>
     </div>
@@ -99,7 +99,7 @@ export const Checkbox = View.make(
         />
         {label}
       </label>
-      <p id={`${id}-problem`} class="spar-problem" aria-live="polite">
+      <p id={`${id}-problem`} class="spar-problem" role="alert">
         {field.error}
       </p>
     </div>

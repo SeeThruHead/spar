@@ -142,6 +142,19 @@ with async work. The short version:
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an action
   that needs it reads the query store itself.
 - There is no way to make a command wait for another to finish, on purpose.
+- When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
+  `Store.after`, or a Query. With `Store.after` an older answer can land last.
+- A query's `value` is null while a new input loads. To keep the last rows on screen while the
+  next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
+- A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
+  input made from another query's value: it would wait for that query for nothing.
+- A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
+- Spar reports five timing mistakes while the app runs (`SPAR_NEEDLESS_WAIT`,
+  `SPAR_DUPLICATE_CALL`, `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
+  change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
+- A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
+  yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.
+- A form field's problem is shown by `TextField`, `Select` and `Checkbox` with the role `alert`.
 
 ## The backend
 
@@ -795,17 +808,18 @@ on screen until they mount. Give an app its own tree with
 
 ### Store
 
-| Function                                                              | What it does                                                                                                           |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                    |
-| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                  |
-| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                       |
-| `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                           |
-| `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.         |
-| `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes. |
-| `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                        |
-| `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                         |
-| `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                             |
+| Function                                                              | What it does                                                                                                                            |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                                     |
+| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                                   |
+| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                        |
+| `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                                            |
+| `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                          |
+| `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
+| `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                                         |
+| `Store.afterLatest(action, effect)`                                   | The same, keeping only the newest run: a new one stops the one before it. For a search, or anything where only the last answer matters. |
+| `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                                          |
+| `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                                              |
 
 A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`, `viewing` and
 `travelTo(seq | null)`.
@@ -1173,7 +1187,8 @@ one that reported last.
 
 `Button`, `SubmitButton`, `TextField`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Menu`,
 `Dialog(frame, View.child(Content, props))` (mounted with `{ onClose }`) and `Toast` (`Toast.Toasts` service, `Toast.Viewport`). Import
-`@spar/ui/styles.css` once. One page per component in `apps/stories`.
+`@spar/ui/styles.css` once. One page per component in `apps/stories`. A field's problem, the
+text under `TextField`, `Select` and `Checkbox`, has the role `alert`.
 
 - `Popover` (`label`, `text`, `content`): a button that opens a panel beside it. The panel takes
   focus, closes on Escape or a press elsewhere, and gives focus back.
@@ -1244,6 +1259,23 @@ the same state. It is not silent either:
 - its span in the trace carries `spar.refused` with the reason;
 - the store's `refused` is the last refusal since the store last accepted a command, as a
   reactive value a view can show.
+
+### Five mistakes Spar reports while the app runs
+
+None of these can be refused by the compiler, because each is ordinary code that is wrong only in
+how its timing works out. Spar notices them while the app runs, writes a warning in the agent
+format (code, what, where, fix) and puts a `noticed` or `waited` entry in the log, which the
+devtools and the agents' server show. Run the app, do the thing, and read the log.
+
+| Code                   | What was done                                                                                    | Do this instead                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `SPAR_NEEDLESS_WAIT`   | A query that takes no input was given an input made from another query's value, so it waits      | `yield* TheQuery.ask()` with no argument. Chain two queries only when the second needs the first's value   |
+| `SPAR_DUPLICATE_CALL`  | The same GET was made again through `Backend` while the first was still on its way               | One `Query.Tag`; every component that needs it asks for it. Never fetch in each row                        |
+| `SPAR_OLDER_ANSWER`    | A `Store.after` run started by an earlier command answered after a later one's, on the same part | `Store.afterLatest`, or load it with a Query, which refuses an answer to an earlier request                |
+| `SPAR_SENT_AGAIN`      | The same command with the same payload, while what the first one started was still running       | A guard on the action that refuses it while in progress, or `form.submit`, which ignores a second submit   |
+| `SPAR_TYPING_REPLACED` | A field the user typed in was given a value by something that began before their last keystroke  | Keep the draft as its own state and the server's copy beside it. Never write an answer back into the draft |
+
+Each has its own entry, with the full text, in the list of diagnostics.
 
 ### When events interleave
 
@@ -1371,7 +1403,7 @@ Each of these is an entry in the log and a span in the trace.
 | Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                                                                  |
 | A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                                                                   |
 | `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                                                                       |
-| Keeps old data while loading               | Yes: `value` stays while `status` is `loading`                                                                                                                                                    |
+| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                    |
 | `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                 |
 | Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`                                               |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                |
@@ -1596,8 +1628,7 @@ and needs the counter store.
 ### Mount it
 
 ```ts
-import { Effect, Layer } from "effect"
-import { SecureRandom } from "effect/crypto"
+import { Effect } from "effect"
 import { App } from "spar"
 
 const program = Effect.gen(function* () {
@@ -1605,22 +1636,22 @@ const program = Effect.gen(function* () {
 
   return yield* App.mount(Counter, {
     target,
-    layer: Layer.provide(CounterStore.layer(), SecureRandom.layerWebCrypto),
+    layer: CounterStore.layer(),
   })
 })
 
 Effect.runFork(program)
 ```
 
-Leave the layer out and it does not compile. `App.mount` only accepts a component with no errors
+A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
+it does not compile. `App.mount` only accepts a component with no errors
 left and a layer that provides everything the tree needs.
 
 ### Test it
 
 ```ts
 import { expect, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
-import { SecureRandom } from "effect/crypto"
+import { Effect } from "effect"
 import * as Testing from "spar/testing"
 
 it.live("the counter counts", () =>
@@ -1631,7 +1662,7 @@ it.live("the counter counts", () =>
     const count = yield* Testing.find("status", "Count")
 
     yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(Layer.provide(CounterStore.layer(), SecureRandom.layerWebCrypto))),
+  }).pipe(Effect.provide(CounterStore.layer())),
 )
 ```
 
@@ -2114,6 +2145,46 @@ Fix: Read the defect that follows. If the part is wrapped in View.crash the rest
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+#### SPAR_NEEDLESS_WAIT
+
+A query that takes no input waits for another query's value before it starts.
+
+Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_SENT_AGAIN
+
+The same command, with the same payload, was sent again while the work the first one started was still running.
+
+Fix: If the second send is a mistake, such as a second press of Pay, give the action a guard that refuses it while the first is in progress (Store.action's third argument), or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_OLDER_ANSWER
+
+What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.
+
+Fix: If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_DUPLICATE_CALL
+
+The same request was made again while an identical one was still on its way.
+
+Fix: Load it once with a Query and let each component that needs it ask for it (yield* TheQuery.ask(input)): one request runs for each input and everyone shares the answer. Do not fetch in a component and pass the data down, and do not fetch the same thing once in each row.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_TYPING_REPLACED
+
+A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.
+
+Fix: Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 #### SPAR_DUPLICATE_KEY
 
 A keyed list has rows that share a key.
@@ -2185,6 +2256,14 @@ It is in use again
 Fix: Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.
 
 Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
+
+#### SPAR_REDUCER_STATE_UNTYPED
+
+A store action's reducer has no type on its state parameter, so the store's state is unknown. The compiler then also says a command comes from an index signature (TS4111) or is possibly undefined (TS2722).
+
+Fix: Give the reducer its state type: Store.action(Payload, (state: State, payload) => ...). Every reducer in the store needs it.
+
+Reported by: The TypeScript compiler, in the text of a type error.
 
 #### SPAR_ROUTE_UNDER_CLOSED
 
@@ -3847,6 +3926,37 @@ describe("the natural way: a value from one place feeds a query declared in anot
     ),
   )
 
+  it.live("the report of a needless wait names the component and where its view was made", () =>
+    Effect.gen(function* () {
+      const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+      const Chained = View.connect(
+        Effect.fnUntraced(function* () {
+          const users = yield* Users.ask()
+          const stock = yield* Stock.ask(
+            Reactive.map(users.value, (loaded) =>
+              loaded === null ? Option.none<void>() : Option.some<void>(undefined),
+            ),
+          )
+
+          return { status: stock.status, count: Reactive.map(stock.value, (held) => held ?? 0) }
+        }),
+      )(OrdersView)
+
+      yield* Testing.mount(Chained).pipe(Effect.provide(recording(noted)))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders status"]')?.textContent).toBe("waiting"),
+      )
+
+      const [waited] = (yield* Ref.get(noted)).filter((seen) => seen.kind === "waited")
+
+      expect(JSON.stringify(waited?.detail)).toMatch(
+        /"code":"SPAR_NEEDLESS_WAIT","after":"made from test\/Users \. value","in":"Orders","at":"[^"]+:\d+:\d+"/,
+      )
+    }).pipe(
+      Effect.provide(Layer.merge(Users.live, Stock.live).pipe(Layer.provideMerge(Directory.layer))),
+    ),
+  )
+
   it.live("in components: the parent passes a prop, the child declares its query with it", () =>
     Effect.gen(function* () {
       const OrdersOf = View.taking(
@@ -4119,6 +4229,39 @@ describe("server data in a store", () => {
     }),
   )
 
+  it.effect("the wait before a drop does not hold on to the trace it was released in", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+
+      yield* Effect.provide(
+        Effect.withSpan(
+          Effect.scoped(
+            Effect.gen(function* () {
+              yield* Effect.provide(Orders.ask(4), built)
+              yield* Effect.yieldNow
+              yield* answer("orders 4", ["tea"])
+            }),
+          ),
+          "the page that was left",
+        ),
+        spans,
+      )
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("5 minutes")
+
+      const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+      const [page] = named("the page that was left")
+      const [released] = named("test/Orders/released")
+
+      expect(released?.traceId).toBe(page?.traceId)
+      expect(named("test/Orders/dropped")).toEqual([])
+      expect(Object.keys((yield* orders.state.get).entries)).toEqual([])
+    }),
+  )
+
   it.effect("data that is asked for again before it is dropped is kept", () =>
     Effect.gen(function* () {
       const { built, noted, answer } = yield* opened
@@ -4187,6 +4330,46 @@ describe("server data in a store", () => {
       yield* answer("orders 9", ["x"])
       yield* once(4)
       expect(Object.keys((yield* few.state.get).entries)).toEqual(["9"])
+    }),
+  )
+
+  it.effect("a query that takes no input but waits for another query's value is reported", () =>
+    Effect.gen(function* () {
+      const { built, noted } = yield* opened
+      const gate = yield* SubscriptionRef.make(Option.some<void>(undefined))
+
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const users = yield* Users.ask()
+
+          yield* Stock.ask(
+            Reactive.map(users.value, (loaded) =>
+              loaded === null ? Option.none<void>() : Option.some<void>(undefined),
+            ),
+          )
+          yield* Stock.ask(Reactive.fromSubscriptionRef(gate))
+          yield* Orders.ask(
+            Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id)),
+          )
+        }),
+        built,
+      )
+
+      expect(
+        (yield* Ref.get(noted))
+          .filter((seen) => seen.kind === "waited")
+          .map((seen) => [seen.name, seen.detail]),
+      ).toEqual([
+        [
+          "test/Stock",
+          {
+            code: "SPAR_NEEDLESS_WAIT",
+            after: "made from test/Users . value",
+            in: "",
+            at: "",
+          },
+        ],
+      ])
     }),
   )
 

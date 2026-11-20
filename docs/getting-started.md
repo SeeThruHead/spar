@@ -131,8 +131,7 @@ and needs the counter store.
 ## Mount it
 
 ```ts
-import { Effect, Layer } from "effect"
-import { SecureRandom } from "effect/crypto"
+import { Effect } from "effect"
 import { App } from "spar"
 
 const program = Effect.gen(function* () {
@@ -140,22 +139,22 @@ const program = Effect.gen(function* () {
 
   return yield* App.mount(Counter, {
     target,
-    layer: Layer.provide(CounterStore.layer(), SecureRandom.layerWebCrypto),
+    layer: CounterStore.layer(),
   })
 })
 
 Effect.runFork(program)
 ```
 
-Leave the layer out and it does not compile. `App.mount` only accepts a component with no errors
+A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
+it does not compile. `App.mount` only accepts a component with no errors
 left and a layer that provides everything the tree needs.
 
 ## Test it
 
 ```ts
 import { expect, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
-import { SecureRandom } from "effect/crypto"
+import { Effect } from "effect"
 import * as Testing from "spar/testing"
 
 it.live("the counter counts", () =>
@@ -166,7 +165,7 @@ it.live("the counter counts", () =>
     const count = yield* Testing.find("status", "Count")
 
     yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(Layer.provide(CounterStore.layer(), SecureRandom.layerWebCrypto))),
+  }).pipe(Effect.provide(CounterStore.layer())),
 )
 ```
 

@@ -142,6 +142,19 @@ with async work. The short version:
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an action
   that needs it reads the query store itself.
 - There is no way to make a command wait for another to finish, on purpose.
+- When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
+  `Store.after`, or a Query. With `Store.after` an older answer can land last.
+- A query's `value` is null while a new input loads. To keep the last rows on screen while the
+  next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
+- A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Do not give it an
+  input made from another query's value: it would wait for that query for nothing.
+- A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
+- Spar reports five timing mistakes while the app runs (`SPAR_NEEDLESS_WAIT`,
+  `SPAR_DUPLICATE_CALL`, `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
+  change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
+- A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
+  yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.
+- A form field's problem is shown by `TextField`, `Select` and `Checkbox` with the role `alert`.
 
 ## The backend
 
