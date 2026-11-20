@@ -141,6 +141,16 @@ export const HomeView = View.make(
           </a>
         </p>
       </header>
+      <figure class="promo">
+        <video
+          controls
+          preload="none"
+          poster="/spar-promo.jpg"
+          src="/spar-promo.mp4"
+          aria-label="Spar in under two minutes"
+        />
+        <figcaption>Spar in under two minutes (1:42, with sound).</figcaption>
+      </figure>
       <article class="prose" markup={before} onClick={onLink} />
       {loads}
       <article class="prose" markup={between} onClick={onLink} />

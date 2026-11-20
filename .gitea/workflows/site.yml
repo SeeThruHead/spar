@@ -1,0 +1,26 @@
+name: site
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ship:
+    runs-on: boat
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the site's image and push it
+        env:
+          IMAGE: ${{ vars.IMAGE }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: ./scripts/ci/publish
+      - name: Deploy through homelab
+        env:
+          STACK: spar-site
+          IMAGE: ${{ vars.IMAGE }}
+          GITEA_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          REVISION: ${{ github.sha }}
+        run: ./scripts/ci/reconcile

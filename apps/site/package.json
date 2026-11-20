@@ -6,6 +6,7 @@
     "typecheck": "effect-tsgo tsrs -p tsconfig.json",
     "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src server scripts",
     "build": "bun scripts/build.ts",
+    "browser:install": "playwright install --with-deps chromium",
     "dev": "bun run build && bun scripts/serve.ts",
     "look": "bun run build && bun scripts/look.ts",
     "format": "oxfmt",

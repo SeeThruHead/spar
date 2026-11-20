@@ -99,6 +99,15 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await shot(page, size, "home-refused")
 
   const homeWide = await wide(page)
+  const promo = page.locator("figure.promo video")
+  const poster = await fetch(`${origin}${(await promo.getAttribute("poster")) ?? "/none"}`)
+  const posterShown = poster.ok && poster.headers.get("content-type") === "image/jpeg"
+  const ranged = await fetch(`${origin}/spar-promo.mp4`, { headers: { range: "bytes=0-99" } })
+  const video = [
+    ...((await promo.count()) === 1 ? [] : [`${size.name}: the home page has no promo video`]),
+    ...(posterShown ? [] : [`${size.name}: the promo video's poster did not load`]),
+    ...(ranged.status === 206 ? [] : [`the video answered a range request with ${ranged.status}`]),
+  ]
 
   const sent = await fetch(`${origin}/docs/getting-started`).then((answer) => answer.text())
   const sentTitle = /<title>([^<]*)<\/title>/.exec(sent)?.[1] ?? ""
@@ -138,6 +147,7 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   })()
 
   return [
+    ...video,
     ...homeWide,
     ...docsWide,
     ...drawn,

@@ -11,6 +11,8 @@ const root = new URL("../dist/", import.meta.url).pathname
 
 const guide = new URL("../../../LLMS.md", import.meta.url).pathname
 
+const shelf = new URL("../public/", import.meta.url).pathname
+
 const escaped = (text: string): string =>
   text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
@@ -91,6 +93,8 @@ export const start = async (port: number, hostname: string) => {
       if (scripts.has(path))
         return file(`${root}${path.slice(1)}`, "text/javascript; charset=utf-8")
       if (path === "/site.css") return file(`${root}site.css`, "text/css; charset=utf-8")
+      if (path === "/spar-promo.mp4") return file(`${shelf}spar-promo.mp4`, "video/mp4")
+      if (path === "/spar-promo.jpg") return file(`${shelf}spar-promo.jpg`, "image/jpeg")
       if (path === "/llms.txt") return file(guide, "text/plain; charset=utf-8")
       if (path === "/devtools/toggle") return toggled(request)
       if (path === "/rpc" || path === "/rpc/") return rpc.handler(request)
