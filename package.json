@@ -10,7 +10,7 @@
     "prepare": "bun run setup",
     "setup": "lefthook install",
     "moon": "moon",
-    "check": "moon run :check",
+    "check": "moon run :check && bun run llms:check && bun run diagnostics:check",
     "diagnostics": "bun scripts/diagnostics.ts",
     "diagnostics:check": "bun scripts/diagnostics.ts --check",
     "llms": "bun scripts/llms.ts",

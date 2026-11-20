@@ -1,6 +1,6 @@
 ---
 id: spa-3pgu
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-20T06:38:47Z

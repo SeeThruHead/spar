@@ -30,6 +30,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Typecheck, lint, format, tests and the forbidden-code proofs
         run: bun run moon run :check
+      - name: LLMS.md and the diagnostics page match their sources
+        run: bun run llms:check && bun run diagnostics:check
   browser:
     runs-on: boat
     needs: check
