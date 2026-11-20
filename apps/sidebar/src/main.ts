@@ -9,7 +9,7 @@ import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "./BoardStore.ts"
 import { deepQueries } from "./Deep.ts"
 import { Server } from "./server/Server.ts"
-import { Shell } from "./Shell.ts"
+import { Shell } from "./Shell.tsx"
 
 const telemetry = Otlp.layerJson({
   baseUrl: `${location.origin}/otlp`,

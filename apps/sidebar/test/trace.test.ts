@@ -11,7 +11,7 @@ import { Toast } from "@spar/ui"
 import { BoardStoreLive } from "../src/BoardStore.ts"
 import { deepQueries } from "../src/Deep.ts"
 import { Server } from "../src/server/Server.ts"
-import { Shell } from "../src/Shell.ts"
+import { Shell } from "../src/Shell.tsx"
 
 const addressOf = (input: URL | RequestInfo): string => {
   if (typeof input === "string") return input

@@ -21,30 +21,6 @@ export const SegmentView = View.make(
   ),
 )
 
-export const ReportView = View.make(
-  "ReportView",
-  {
-    label: Props.Reactive(Schema.String),
-    status: Props.Reactive(Schema.String),
-    author: Props.Reactive(Schema.String),
-    authorStatus: Props.Reactive(Schema.String),
-  },
-  (props) => (
-    <section class="segment" aria-label="Report">
-      <h1>
-        <output aria-label="Report name">{props.label}</output>
-      </h1>
-      <p>
-        <output aria-label="Report status">{props.status}</output>
-      </p>
-      <p>
-        Written by <output aria-label="Author name">{props.author}</output>{" "}
-        <output aria-label="Author status">{props.authorStatus}</output>
-      </p>
-    </section>
-  ),
-)
-
 export const DeepMissingView = View.make("DeepMissingView", { path: Schema.String }, ({ path }) => (
   <p>Nothing more at {path}.</p>
 ))

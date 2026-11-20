@@ -176,45 +176,6 @@ export const NameFormView = View.make(
   ),
 )
 
-export const ShellView = View.make(
-  "ShellView",
-  {
-    main: Props.Handle,
-    sidebar: Props.Element,
-    deep: Router.Link,
-    page: Props.Element,
-    scratch: Props.Element,
-    counter: Props.Element,
-    people: Props.Element,
-    toasts: Props.Element,
-  },
-  ({ main, sidebar, deep, page, scratch, counter, people, toasts }) => (
-    <div class="shell">
-      <header class="topbar">
-        <strong class="brand">Spar showcase</strong>
-        <a
-          href={deep.href}
-          onClick={deep.onClick}
-          onPointerenter={deep.onIntent}
-          onFocus={deep.onIntent}
-        >
-          Open a page five segments deep
-        </a>
-      </header>
-      {sidebar}
-      <main ref={main} tabIndex={-1}>
-        <div class="page">{page}</div>
-        <div class="features">
-          {scratch}
-          {counter}
-          {people}
-        </div>
-      </main>
-      {toasts}
-    </div>
-  ),
-)
-
 export const EmptyPageView = View.make("EmptyPageView", {}, () => (
   <section>
     <h1>Agents</h1>
