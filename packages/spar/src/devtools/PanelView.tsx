@@ -345,6 +345,9 @@ export const InspectorView = View.make(
 
 const look = [
   "[data-spar-devtools] * { box-sizing: border-box }",
+  "[data-spar-devtools-sheet] { box-sizing: border-box; width: 100%; max-height: min(70vh, 640px); overflow: auto; padding: 4px 16px 16px; border-radius: 10px; border: 1px solid #c5cbd6; background: #ffffff; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22) }",
+  "[data-spar-devtools-sheet][hidden] { display: none }",
+  "@media (min-width: 1100px) { [data-spar-devtools-sheet] { position: fixed; inset: 0 0 0 auto; width: 520px; max-height: none; padding-bottom: 64px; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -8px 0 24px rgba(15, 23, 42, 0.08) } html:has([data-spar-devtools-sheet]:not([hidden])) body { margin-inline-end: 520px } }",
   "[data-spar-devtools] h2 { font-size: 14px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid #e3e7ee }",
   "[data-spar-devtools] section:first-of-type h2 { border-top: 0; padding-top: 0 }",
   "[data-spar-devtools] h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #4b5666; margin: 14px 0 4px }",
@@ -385,18 +388,8 @@ const toggle = {
   background: "#1d4ed8",
   color: "#ffffff",
   cursor: "pointer",
-}
-
-const sheet = {
-  boxSizing: "border-box",
-  width: "100%",
-  maxHeight: "min(70vh, 640px)",
-  overflow: "auto",
-  padding: "4px 16px 16px",
-  borderRadius: "10px",
-  border: "1px solid #c5cbd6",
-  background: "#ffffff",
-  boxShadow: "0 12px 32px rgba(15, 23, 42, 0.22)",
+  position: "relative",
+  zIndex: "1",
 }
 
 export const ToolsView = View.make(
@@ -414,7 +407,7 @@ export const ToolsView = View.make(
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
         Devtools
       </button>
-      <div hidden={Reactive.map(open, (shown) => !shown)} style={sheet}>
+      <div hidden={Reactive.map(open, (shown) => !shown)} data-spar-devtools-sheet="">
         {inspector}
         {timeline}
         {trace}

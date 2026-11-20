@@ -190,22 +190,25 @@ export const ShellView = View.make(
   },
   ({ main, sidebar, deep, page, scratch, counter, people, toasts }) => (
     <div class="shell">
+      <header class="topbar">
+        <strong class="brand">Spar showcase</strong>
+        <a
+          href={deep.href}
+          onClick={deep.onClick}
+          onPointerenter={deep.onIntent}
+          onFocus={deep.onIntent}
+        >
+          Open a page five segments deep
+        </a>
+      </header>
       {sidebar}
       <main ref={main} tabIndex={-1}>
-        <p>
-          <a
-            href={deep.href}
-            onClick={deep.onClick}
-            onPointerenter={deep.onIntent}
-            onFocus={deep.onIntent}
-          >
-            Open a page five segments deep
-          </a>
-        </p>
-        {page}
-        {scratch}
-        {counter}
-        {people}
+        <div class="page">{page}</div>
+        <div class="features">
+          {scratch}
+          {counter}
+          {people}
+        </div>
       </main>
       {toasts}
     </div>

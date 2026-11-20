@@ -1,3 +1,7 @@
+- banner:
+  - strong: Spar showcase
+  - link "Open a page five segments deep":
+    - /url: /org/acme/team/core/member/ada/reports/q3
 - navigation "Agents":
   - paragraph:
     - status "Waiting on you": "1"
@@ -27,7 +31,7 @@
           - /url: /agents/agent-6
         - button "Actions for Tidy the release notes": Actions
       - listitem:
-        - link "Trip planning idle travel":
+        - link "Trip planning idle":
           - /url: /agents/agent-4
         - button "Actions for Trip planning": Actions
   - region "Hangar":
@@ -56,9 +60,6 @@
         - button "Actions for Backup check": Actions
 - main:
   - paragraph:
-    - link "Open a page five segments deep":
-      - /url: /org/acme/team/core/member/ada/reports/q3
-  - paragraph:
     - link "All agents":
       - /url: /
   - heading "Trip planning" [level=1]
@@ -67,7 +68,7 @@
   - term: Project
   - definition: No project
   - term: Tags
-  - definition: travel
+  - definition: None
   - paragraph: The server has no record of Trip planning yet.
   - region "Notes on this agent":
     - heading "Notes on this agent" [level=2]
