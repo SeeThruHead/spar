@@ -11,6 +11,8 @@
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-runtime.ts",
     "./diagnostics": "./src/Diagnostics.ts",
+    "./renderer/memory": "./src/renderer/memory.ts",
+    "./renderer/terminal": "./src/renderer/terminal.ts",
     "./transform/check": "./src/transform/check.ts",
     "./transform/app": "./src/transform/app.ts",
     "./transform/bun": "./src/transform/bun.ts",
@@ -33,6 +35,7 @@
   },
   "dependencies": {
     "effect": "4.1.4",
+    "happy-dom": "20.0.11",
     "oxc-parser": "0.99.0"
   },
   "devDependencies": {
@@ -45,7 +48,6 @@
     "@testing-library/dom": "10.4.1",
     "@types/bun": "1.4.3",
     "@vitest/coverage-istanbul": "5.0.5",
-    "happy-dom": "20.0.11",
     "oxfmt": "0.73.0",
     "oxlint": "1.91.0",
     "typescript": "7.0.2",
