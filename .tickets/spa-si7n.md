@@ -1,6 +1,6 @@
 ---
 id: spa-si7n
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-19T23:47:34Z

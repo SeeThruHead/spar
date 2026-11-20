@@ -65,7 +65,7 @@ export type Send<State> = <Payload>(
 
 export type Reaction<State, R = never> = {
   readonly action: Action<State, unknown>
-  readonly detached?: boolean
+  readonly detached?: (entry: Entry) => Effect.Effect<string>
   readonly queued?: boolean
   readonly latest?: boolean
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
@@ -245,7 +245,7 @@ const overwrites = (last: Answered | undefined, mine: Answered): boolean => {
 }
 
 const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => {
-  if (reaction.detached === true) return false
+  if (reaction.detached !== undefined) return false
 
   return reaction.queued !== true
 }
@@ -508,8 +508,8 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
               }),
             )
           })
-      const runs = Cell.make<ReadonlyMap<object, Fiber.Fiber<void>>>(new Map())
-      const stoppedEarlier = (reaction: Reaction<State, R>) =>
+      const runs = Cell.make<ReadonlyMap<unknown, Fiber.Fiber<void>>>(new Map())
+      const stoppedEarlier = (reaction: unknown) =>
         Effect.suspend(() =>
           Effect.forEach(
             Option.toArray(Option.fromUndefinedOr(runs.read().get(reaction))),
@@ -519,19 +519,28 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
             },
           ),
         )
-      const kept = (reaction: Reaction<State, R>, fiber: Fiber.Fiber<void>) =>
+      const kept = (reaction: unknown, fiber: Fiber.Fiber<void>) =>
         Effect.sync(() => runs.write(new Map([...runs.read(), [reaction, fiber]])))
+
+      const apart = (running: Effect.Effect<void, never, R>, lane: string) =>
+        Effect.andThen(
+          stoppedEarlier(lane),
+          Effect.flatMap(
+            Effect.updateContext(
+              Effect.forkIn(running, scope),
+              (_caller: Context.Context<never>) => context,
+            ),
+            (fiber) => kept(lane, fiber),
+          ),
+        )
 
       const started = (
         reaction: Reaction<State, R>,
         done: { readonly entry: Entry; readonly next: State },
       ) => {
         const running = reaction.run(done.entry, done.next, sendFrom(reaction, done.entry))
-        if (reaction.detached === true) {
-          return Effect.updateContext(
-            Effect.forkIn(running, scope),
-            (_caller: Context.Context<never>) => context,
-          )
+        if (reaction.detached !== undefined) {
+          return Effect.flatMap(reaction.detached(done.entry), (lane) => apart(running, lane))
         }
         if (reaction.queued === true) return Effect.forkIn(running, scope)
 
@@ -789,7 +798,11 @@ export const afterLatest = <State, Payload, R>(
 export const afterDetached = <State, Payload, R>(
   trigger: Action<State, Payload>,
   effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
-): Reaction<State, R> => ({ ...after(trigger, effect), detached: true })
+  lane: (payload: Payload) => string,
+): Reaction<State, R> => ({
+  ...after(trigger, effect),
+  detached: (entry) => Effect.map(Effect.orDie(trigger.decode(entry.payload)), lane),
+})
 
 export const outbox = <State, Payload, E, R>(
   trigger: Action<State, Payload>,

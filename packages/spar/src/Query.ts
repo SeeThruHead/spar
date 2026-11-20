@@ -298,8 +298,14 @@ export const Tag =
         { discard: true },
       ),
     )
-    const drops = Store.afterDetached(base.actions.released, ({ key: name, at }, _now, send) =>
-      Effect.andThen(Effect.sleep(dropAfter), send(base.actions.dropped, { key: name, since: at })),
+    const drops = Store.afterDetached(
+      base.actions.released,
+      ({ key: name, at }, _now, send) =>
+        Effect.andThen(
+          Effect.sleep(dropAfter),
+          send(base.actions.dropped, { key: name, since: at }),
+        ),
+      (released) => released.key,
     )
     const trims = Store.after(base.actions.released, (_released, now: State<A, E>, send) =>
       Effect.forEach(
