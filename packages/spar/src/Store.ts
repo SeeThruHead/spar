@@ -69,6 +69,7 @@ export type Reaction<State, R = never> = {
   readonly detached?: (entry: Entry) => Effect.Effect<string>
   readonly queued?: boolean
   readonly latest?: boolean
+  readonly unwatched?: boolean
   readonly persist: (channel: string, entry: Entry) => Effect.Effect<void, never, R>
   readonly run: (entry: Entry, state: State, send: Send<State>) => Effect.Effect<void, never, R>
   readonly start: (channel: string) => Effect.Effect<void, never, R | Scope.Scope>
@@ -243,6 +244,22 @@ const overwrites = (last: Answered | undefined, mine: Answered): boolean => {
   if (last === undefined || last.seq <= mine.seq) return false
 
   return mine.parts.some((part) => last.parts.includes(part))
+}
+
+const Sender = Context.Reference<object | null>("spar/internal/Sender", {
+  defaultValue: () => null,
+})
+
+const isOlderAnswer = <State, R>(
+  reaction: Reaction<State, R>,
+  chained: ReadonlySet<number>,
+  last: Answered | undefined,
+  mine: Answered,
+): boolean => {
+  if (reaction.unwatched === true) return false
+  if (last !== undefined && chained.has(last.seq)) return false
+
+  return overwrites(last, mine)
 }
 
 const runsHere = <State, R>(reaction: Reaction<State, R>): boolean => {
@@ -482,10 +499,17 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         )
 
       const busy = Cell.make<ReadonlyMap<string, number>>(new Map())
-      const sentAgain = (entry: Entry, reacting: ReadonlyArray<Reaction<State, R>>) => {
+      const chained = Cell.make<ReadonlySet<number>>(new Set())
+      const sentAgain = (
+        entry: Entry,
+        reacting: ReadonlyArray<Reaction<State, R>>,
+        sender: object | null,
+      ) => {
         const attached = reacting.filter(runsHere)
         if (attached.length === 0) return Effect.void
         if (counted(busy, sameAs(entry), attached.length) === attached.length) return Effect.void
+        if (attached.every((reaction) => reaction.unwatched === true)) return Effect.void
+        if (attached.some((reaction) => reaction === sender)) return Effect.void
 
         return noticed(
           "SPAR_SENT_AGAIN",
@@ -502,14 +526,14 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
             const before = shown(cell.read())
 
             return Effect.andThen(
-              send(target, payload),
+              Effect.provideService(send(target, payload), Sender, reaction),
               Effect.suspend(() => {
                 const mine = { seq: entry.seq, parts: partsChanged(before, shown(cell.read())) }
                 const last = answers.read().get(reaction)
 
                 answers.write(new Map([...answers.read(), [reaction, newerOf(last, mine)]]))
 
-                return overwrites(last, mine)
+                return isOlderAnswer(reaction, chained.read(), last, mine)
                   ? noticed(
                       "SPAR_OLDER_ANSWER",
                       `${key}/${entry.action}`,
@@ -548,8 +572,12 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
       const started = (
         reaction: Reaction<State, R>,
         done: { readonly entry: Entry; readonly next: State },
+        sender: object | null,
       ) => {
         const running = reaction.run(done.entry, done.next, sendFrom(reaction, done.entry))
+        const bySelf = sender === reaction
+        if (bySelf) chained.write(new Set([...chained.read(), done.entry.seq]))
+
         if (reaction.detached !== undefined) {
           return Effect.flatMap(reaction.detached(done.entry), (lane) => apart(running, lane))
         }
@@ -563,6 +591,7 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
           scope,
         )
         if (reaction.latest !== true) return tracked
+        if (bySelf) return Effect.flatMap(tracked, (fiber) => kept(reaction, fiber))
 
         return Effect.andThen(
           stoppedEarlier(reaction),
@@ -574,11 +603,13 @@ const makeLayer = <Self, State, A extends Actions<State>, S extends Selectors<St
         handled: Action<State, unknown>,
         done: { readonly entry: Entry; readonly next: State },
       ) =>
-        Effect.andThen(
-          sentAgain(done.entry, reactionsTo(handled)),
-          Effect.forEach(reactionsTo(handled), (reaction) => started(reaction, done), {
-            discard: true,
-          }),
+        Effect.flatMap(Effect.service(Sender), (sender) =>
+          Effect.andThen(
+            sentAgain(done.entry, reactionsTo(handled), sender),
+            Effect.forEach(reactionsTo(handled), (reaction) => started(reaction, done, sender), {
+              discard: true,
+            }),
+          ),
         )
 
       const adopt = (orphan: Orphan) =>
@@ -805,6 +836,11 @@ export const afterLatest = <State, Payload, R>(
   trigger: Action<State, Payload>,
   effect: (payload: Payload, state: State, send: Send<State>) => Effect.Effect<void, never, R>,
 ): Reaction<State, R> => ({ ...after(trigger, effect), latest: true })
+
+export const unwatched = <State, R>(reaction: Reaction<State, R>): Reaction<State, R> => ({
+  ...reaction,
+  unwatched: true,
+})
 
 export const afterDetached = <State, Payload, R>(
   trigger: Action<State, Payload>,

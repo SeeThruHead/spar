@@ -291,11 +291,14 @@ export const Tag =
         ),
       },
     })
-    const loads = Store.after(base.actions.requested, (asked, now: State<A, E>, send) =>
-      Effect.forEach(
-        Option.toArray(Option.fromNullishOr(now.entries[asked.key])),
-        ({ request }) => Effect.annotateSpans(answered(asked, request, send), "spar.kind", "data"),
-        { discard: true },
+    const loads = Store.unwatched(
+      Store.after(base.actions.requested, (asked, now: State<A, E>, send) =>
+        Effect.forEach(
+          Option.toArray(Option.fromNullishOr(now.entries[asked.key])),
+          ({ request }) =>
+            Effect.annotateSpans(answered(asked, request, send), "spar.kind", "data"),
+          { discard: true },
+        ),
       ),
     )
     const drops = Store.afterDetached(
@@ -307,11 +310,13 @@ export const Tag =
         ),
       (released) => released.key,
     )
-    const trims = Store.after(base.actions.released, (_released, now: State<A, E>, send) =>
-      Effect.forEach(
-        oldestUnused(now).slice(0, Math.max(Object.keys(now.entries).length - keepAtMost, 0)),
-        ([name, since]) => send(base.actions.dropped, { key: name, since }),
-        { discard: true },
+    const trims = Store.unwatched(
+      Store.after(base.actions.released, (_released, now: State<A, E>, send) =>
+        Effect.forEach(
+          oldestUnused(now).slice(0, Math.max(Object.keys(now.entries).length - keepAtMost, 0)),
+          ([name, since]) => send(base.actions.dropped, { key: name, since }),
+          { discard: true },
+        ),
       ),
     )
     const answered = (
@@ -637,12 +642,16 @@ export const Tag =
       static readonly invalidate = invalidate
       static readonly pages = pages
       static readonly invalidatedBy = <Other, Payload>(action: Action<Other, Payload>) =>
-        Store.after(action, () => invalidate)
+        Store.unwatched(Store.after(action, () => invalidate))
       static readonly patchedBy = <Other, Payload>(
         action: Action<Other, Payload>,
         input: (payload: Payload) => I,
         patch: (value: A, payload: Payload) => A,
       ) =>
-        Store.after(action, (payload) => patched(input(payload), (value) => patch(value, payload)))
+        Store.unwatched(
+          Store.after(action, (payload) =>
+            patched(input(payload), (value) => patch(value, payload)),
+          ),
+        )
     }
   }
