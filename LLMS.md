@@ -1551,8 +1551,12 @@ export const resetAfterDelay = Store.during("resetting", (_state: State, send) =
   enters the state, including when the store opens already in it, and is interrupted when the
   store leaves. There is never a second timer, and nothing is left running after the state ends.
 
-The action names are checked by the compiler. The state names are plain strings: a misspelt one
-means nothing is accepted there.
+The action names and the state names are both checked by the compiler. The states are the keys
+of `accepts`, and `of` may only return one of them, so a state that `of` can reach but `accepts`
+leaves out does not compile (`Type '"idle" | "sending" | "sent"' is not assignable to type
+'"idle" | "sending"'`), and every state says what it takes, even if that is nothing
+(`sent: []`). This needs the state's type known, so give `initialState` its type
+(`const initialState: State = ...`), as the reducers have theirs.
 
 (`packages/spar/test/phases.test.ts`)
 
@@ -2807,8 +2811,6 @@ Built since, and smaller than they sound, but not done:
 - **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
   the components that changed, put in place by a one-line script (not the app's bundle); with
   scripts off the page stays as first drawn.
-- **Spar does not check that every action has considered every state** of a state machine store.
-  A guard you did not write is a command that is accepted.
 - **What a JSX child needs is checked by the build, not by the types.** TypeScript gives every JSX
   expression one type, so the Vite build reads the code instead (`SPAR_CHILD_NEEDS_A_SERVICE`). It
   follows components across files and reads the layer given to `App.mount`, but not through

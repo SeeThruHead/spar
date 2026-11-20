@@ -867,9 +867,10 @@ export const Tag =
     State,
     const A extends Actions<State>,
     const S extends Selectors<State>,
+    Phase extends string = string,
   >(
     key: Key,
-    definition: Definition<State, A, S>,
+    definition: Definition<State, A, S, Phase>,
   ) => {
     const service = Context.Service<Self, Shape<State, A, S>>()(key)
 

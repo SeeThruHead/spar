@@ -125,8 +125,12 @@ export const resetAfterDelay = Store.during("resetting", (_state: State, send) =
   enters the state, including when the store opens already in it, and is interrupted when the
   store leaves. There is never a second timer, and nothing is left running after the state ends.
 
-The action names are checked by the compiler. The state names are plain strings: a misspelt one
-means nothing is accepted there.
+The action names and the state names are both checked by the compiler. The states are the keys
+of `accepts`, and `of` may only return one of them, so a state that `of` can reach but `accepts`
+leaves out does not compile (`Type '"idle" | "sending" | "sent"' is not assignable to type
+'"idle" | "sending"'`), and every state says what it takes, even if that is nothing
+(`sent: []`). This needs the state's type known, so give `initialState` its type
+(`const initialState: State = ...`), as the reducers have theirs.
 
 (`packages/spar/test/phases.test.ts`)
 

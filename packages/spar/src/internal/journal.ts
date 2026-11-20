@@ -57,19 +57,24 @@ export type Rules<State> = {
   readonly transitions?: Readonly<Record<string, (step: Transition<NoInfer<State>>) => boolean>>
 }
 
-export type Definition<State, A extends Actions<State>, S extends Selectors<State>> = {
+export type Definition<
+  State,
+  A extends Actions<State>,
+  S extends Selectors<State>,
+  Phase extends string = string,
+> = {
   readonly state: Schema.Codec<State, unknown>
   readonly initialState: State
   readonly actions: A
   readonly selectors: S
   readonly invariants?: Readonly<Record<string, (state: NoInfer<State>) => boolean>>
   readonly transitions?: Readonly<Record<string, (step: Transition<NoInfer<State>>) => boolean>>
-  readonly phases?: Phases<NoInfer<State>, keyof NoInfer<A> & string>
+  readonly phases?: Phases<NoInfer<State>, keyof NoInfer<A> & string, Phase>
 }
 
-export type Phases<State, Name extends string> = {
-  readonly of: (state: State) => string
-  readonly accepts: Readonly<Record<string, ReadonlyArray<Name>>>
+export type Phases<State, Name extends string, Phase extends string = string> = {
+  readonly of: (state: State) => NoInfer<Phase>
+  readonly accepts: { readonly [Named in Phase]: ReadonlyArray<Name> }
   readonly internal?: ReadonlyArray<Name>
 }
 
@@ -86,7 +91,7 @@ export const unfitFor = <State>(
 
   const phase = phases.of(state)
 
-  return phases.accepts[phase]?.includes(action) === true
+  return new Map(Object.entries(phases.accepts)).get(phase)?.includes(action) === true
     ? null
     : `it is not accepted while ${phase}`
 }
