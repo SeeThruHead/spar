@@ -37,7 +37,7 @@ type Result = {
 const root = new URL("..", import.meta.url).pathname
 const repo = new URL("../../..", import.meta.url).pathname
 
-const frameworks = ["spar", "solid", "solid2", "react", "foldkit"] as const
+const frameworks = ["spar", "spar-composed", "solid", "solid2", "react", "foldkit"] as const
 
 const thousand = [{ click: "#run", rows: 1000 }]
 
@@ -391,6 +391,7 @@ type Metric = {
 
 const colours: Readonly<Record<string, string>> = {
   spar: "#1d5fd6",
+  "spar-composed": "#5c8fe6",
   solid: "#3f6b3a",
   solid2: "#0f766e",
   react: "#8a4a00",

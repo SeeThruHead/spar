@@ -1,10 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Ref } from "effect"
 import { App, Reactive, Server, UiState } from "spar"
 import * as Testing from "spar/testing"
 import {
   Account,
+  Calls,
+  Counted,
   CounterStore,
   Dropdown,
   Gallery,
@@ -131,6 +133,26 @@ describe("a component composed from enhancers, its view last and inline", () => 
       yield* Effect.sync(() => fireEvent.click(target.querySelector("button") ?? target))
       yield* Testing.find("menu", "Sort by")
     }),
+  )
+
+  it.live("runs its enhancers and its view once: an update writes the one node that changed", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make(0)
+
+      yield* Effect.provideService(Testing.mount(Counted), Calls, calls)
+
+      const output = yield* Testing.find("status", "Counted")
+      const button = screen.getByRole("button", { name: "More" })
+
+      yield* Effect.forEach(Array.from({ length: 100 }), () => Effect.sync(() => button.click()), {
+        discard: true,
+      })
+      yield* shows("Counted", "100")
+
+      expect(yield* Ref.get(calls)).toBe(1)
+      expect(screen.getByRole("status", { name: "Counted" })).toBe(output)
+      expect(screen.getByRole("button", { name: "More" })).toBe(button)
+    }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
   )
 
   it.live("runs an effect for as long as it is mounted, inside a span that names it", () =>

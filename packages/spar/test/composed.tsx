@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Option, Schema } from "effect"
+import { Context, Duration, Effect, Option, Ref, Schema } from "effect"
 import {
   For,
   Props,
@@ -235,6 +235,30 @@ export const Gallery = compose(withHandlers(() => ({})))(() => (
     <Avatar name="ada" />
     <Tags />
   </main>
+))
+
+export class Calls extends Context.Service<Calls, Ref.Ref<number>>()("composed/Calls") {}
+
+const withCounted = () =>
+  Effect.flatMap(Effect.service(Calls), (calls) =>
+    Effect.as(
+      Ref.update(calls, (n) => n + 1),
+      {},
+    ),
+  )
+
+export const Counted = compose(
+  withCounted,
+  withStore(CounterStore, (store) => ({
+    count: store.select.count,
+    onIncrement: store.commands.incremented(),
+  })),
+  withHover,
+)((props) => (
+  <p>
+    <output aria-label="Counted">{props.count}</output>
+    <button onClick={props.onIncrement}>More</button>
+  </p>
 ))
 
 export const [Unnamed] = [compose(withHandlers(() => ({})))(() => <p>unnamed</p>)]

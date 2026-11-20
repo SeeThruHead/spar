@@ -9,7 +9,7 @@ const root = new URL("..", import.meta.url).pathname
 
 const framework = Bun.argv[3] ?? "spar"
 
-const built = framework === "spar" ? "dist-readable" : "dist"
+const built = framework.startsWith("spar") ? "dist-readable" : "dist"
 
 const times = 10
 
