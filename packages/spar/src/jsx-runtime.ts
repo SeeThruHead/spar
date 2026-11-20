@@ -1,5 +1,6 @@
 import { Predicate } from "effect"
 import type { Handler } from "./internal/action.ts"
+import { drawingView } from "./internal/drawing.ts"
 import { fragment, intrinsic } from "./internal/element.ts"
 import type { Element as SparElement } from "./internal/element.ts"
 import type { Handle } from "./internal/handle.ts"
@@ -168,7 +169,7 @@ export declare namespace JSX {
 export const jsx = <Props extends Readonly<Record<string, unknown>>>(
   tag: string | View<Props>,
   props: Props,
-): SparElement => (Predicate.isString(tag) ? intrinsic(tag, props) : tag(props))
+): SparElement => (Predicate.isString(tag) ? intrinsic(tag, props, drawingView()) : tag(props))
 
 export const jsxs = jsx
 

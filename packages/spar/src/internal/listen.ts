@@ -73,7 +73,7 @@ export const starter = Effect.fnUntraced(function* () {
   return yield* starterIn(outliving)
 })
 
-export const traced = (type: string, action: Action, target: unknown): Action => {
+export const traced = (type: string, action: Action, target: unknown, drawnBy?: string): Action => {
   if (Array.isArray(action) && action.length === 0) return action
 
   return Effect.withSpan(run(action), `on ${type}`, {
@@ -82,10 +82,13 @@ export const traced = (type: string, action: Action, target: unknown): Action =>
     attributes: {
       "spar.kind": "action",
       "spar.event": Dom.nextEvent(),
-      ...Option.match(viewAt(target), {
-        onNone: () => ({}),
-        onSome: (view) => ({ "spar.view": view }),
-      }),
+      ...Option.match(
+        Option.orElse(viewAt(target), () => Option.fromUndefinedOr(drawnBy)),
+        {
+          onNone: () => ({}),
+          onSome: (view) => ({ "spar.view": view }),
+        },
+      ),
     },
   })
 }

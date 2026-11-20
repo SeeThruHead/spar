@@ -62,6 +62,7 @@ type Place = Target & {
   readonly claim: Dom.Cursor | undefined
   readonly start: (action: Action) => void
   readonly crashed: (defect: unknown) => void
+  readonly view?: string | undefined
 }
 
 const isEventName = (name: string): boolean => /^on[A-Z]/.test(name)
@@ -130,12 +131,12 @@ const attach = (node: Dom.Host, handle: Handle): Later =>
   )
 
 const listener =
-  (start: (action: Action) => void, type: string, handler: unknown) =>
+  (place: Place, type: string, handler: unknown) =>
   (event: Event): void =>
-    start(traced(type, toAction(handler, event), event.currentTarget))
+    place.start(traced(type, toAction(handler, event), event.currentTarget, place.view))
 
 const listen = (node: Dom.Host, type: string, handler: unknown, place: Place): void =>
-  Cell.own(place.owner, Dom.listen(node, type, listener(place.start, type, handler)))
+  Cell.own(place.owner, Dom.listen(node, type, listener(place, type, handler)))
 
 const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
   if (tag === "foreignObject") return "html"
@@ -199,7 +200,7 @@ const applyOwnPropsInTurn = (node: Dom.Host, props: Intrinsic["props"], place: P
 
 const fill = (node: Dom.Host, element: Intrinsic, inside: Place): void => {
   applyProp(node, "children", element.props["children"], inside)
-  applyOwnPropsInTurn(node, element.props, inside)
+  applyOwnPropsInTurn(node, element.props, { ...inside, view: element.view })
 }
 
 const fillMarkup = (node: Dom.Host, element: Intrinsic, place: Place, there: boolean): void => {

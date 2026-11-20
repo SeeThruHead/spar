@@ -25,6 +25,7 @@ export type Intrinsic = {
   readonly [TypeId]: "Intrinsic"
   readonly tag: string
   readonly props: Readonly<Record<string, unknown>>
+  readonly view?: string
 }
 
 export type Keyed = {
@@ -38,10 +39,15 @@ export type Element =
   | { readonly [TypeId]: "Fragment"; readonly children: ReadonlyArray<unknown> }
   | { readonly [TypeId]: "Portal"; readonly layer: HTMLElement; readonly child: Element }
 
-export const intrinsic = (tag: string, props: Readonly<Record<string, unknown>>): Element => ({
+export const intrinsic = (
+  tag: string,
+  props: Readonly<Record<string, unknown>>,
+  view?: string,
+): Element => ({
   [TypeId]: "Intrinsic",
   tag,
   props,
+  ...(view === undefined ? {} : { view }),
 })
 
 export const fragment = (children: ReadonlyArray<unknown>): Element => ({

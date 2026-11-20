@@ -1,6 +1,7 @@
 import { Context, Effect, Option } from "effect"
 import * as Diagnostics from "./said.ts"
 import * as Cell from "./cell.ts"
+import { ViewScope } from "./viewScope.ts"
 
 const current = Cell.make<Option.Option<Context.Context<never>>>(Option.none())
 
@@ -28,6 +29,16 @@ export const drawingNow = <A>(context: Context.Context<never>, draw: () => A): A
 
   return drawn
 }
+
+const viewName = (label: string): string => label.replace(/(#\d+|\[.*\])$/, "")
+
+export const drawingView = (): string | undefined =>
+  Option.getOrUndefined(
+    Option.map(
+      Option.flatMap(current.read(), (context) => Context.getOption(context, ViewScope)),
+      (mounted) => viewName(mounted.label),
+    ),
+  )
 
 export const drawnHere = (): Context.Context<never> =>
   Option.getOrThrowWith(

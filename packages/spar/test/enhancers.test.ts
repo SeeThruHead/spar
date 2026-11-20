@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
-import { Effect, Layer, Ref } from "effect"
+import { Context, Effect, Layer, Ref } from "effect"
 import { App, Reactive, Server, UiState, View } from "spar"
+import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import {
   Account,
@@ -52,6 +53,21 @@ describe("a component composed from enhancers, its view last and inline", () => 
       yield* Effect.sync(() => fireEvent.keyDown(window, { key: "a" }))
       yield* Effect.sync(() => fireEvent.keyDown(window, { key: "+" }))
       yield* shows("Count", "1")
+    }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
+  )
+
+  it.live("names the view that drew the button in the span of its click, with no devtools on", () =>
+    Effect.gen(function* () {
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+
+      yield* Effect.provide(Testing.mount(ResetCounter), spans)
+      yield* Testing.click("button", "Add 1")
+      yield* shows("Count", "1")
+
+      const click = buffer.recent().find((span) => span.name === "on click")
+
+      expect(click?.attributes["spar.view"]).toBe("ResetCounter")
     }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
   )
 
