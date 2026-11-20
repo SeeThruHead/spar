@@ -38,6 +38,10 @@ Three rules that break the build most often:
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
    already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
+   When what to run depends on a value, return the action from an Effect instead of yielding it:
+   an action (a callback prop's result, a list) cannot be yielded, and Spar runs what you return.
+   `onEnter: Effect.gen(function* () { const now = yield* props.palette.get; return props.onRun(now.active) })`.
+   Returning nothing runs nothing.
 
 ## The shape of an app
 
@@ -939,15 +943,15 @@ export const AgentPage = pipe(
 A view's props are declared as a record of Schemas. Plain data uses `Schema` as it is; what is
 not data has a Schema of its own kind:
 
-| Schema                                                           | A prop that is                                       |
-| ---------------------------------------------------------------- | ---------------------------------------------------- |
-| `Props.Reactive(schema)`                                         | a reactive value of that type                        |
-| `Props.State(schema)`                                            | UI state the view may also set                       |
-| `Props.Action`                                                   | something to run from a handler                      |
-| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named |
-| `Props.Callback(schema)`                                         | a function from a value to an action                 |
-| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element          |
-| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits          |
+| Schema                                                           | A prop that is                                                                                              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Props.Reactive(schema)`                                         | a reactive value of that type                                                                               |
+| `Props.State(schema)`                                            | UI state the view may also set                                                                              |
+| `Props.Action`                                                   | something to run from a handler: an Effect (which may return the action to run next), a UI write, or a list |
+| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named                                                        |
+| `Props.Callback(schema)`                                         | a function from a value to an action                                                                        |
+| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element                                                                 |
+| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits                                                                 |
 
 `Props.kind(guard, show)` makes one for a type of your own. `Props.allShown(fields, props)` gives a
 view's props as plain values, which is what the inspector and the MCP tools read.

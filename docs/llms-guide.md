@@ -38,6 +38,10 @@ Three rules that break the build most often:
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
    already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
+   When what to run depends on a value, return the action from an Effect instead of yielding it:
+   an action (a callback prop's result, a list) cannot be yielded, and Spar runs what you return.
+   `onEnter: Effect.gen(function* () { const now = yield* props.palette.get; return props.onRun(now.active) })`.
+   Returning nothing runs nothing.
 
 ## The shape of an app
 

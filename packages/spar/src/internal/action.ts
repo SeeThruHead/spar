@@ -9,7 +9,7 @@ export type UiWrite = {
   readonly [Symbol.iterator]: () => ReturnType<Effect.Effect<void>[typeof Symbol.iterator]>
 }
 
-export type Action = Effect.Effect<void> | UiWrite | ReadonlyArray<Action>
+export type Action = Effect.Effect<void | Action> | UiWrite | ReadonlyArray<Action>
 
 type Before = "preventDefault" | "stopPropagation" | "followLink" | "followLinkInside"
 
@@ -40,9 +40,17 @@ const isTrustedAction = (handler: unknown): handler is Action => Predicate.isNot
 const isTrustedListener = (handler: unknown): handler is (event: Event) => Action =>
   Predicate.isFunction(handler)
 
+const isAction = (value: unknown): value is Action => {
+  if (Array.isArray(value)) return true
+  if (Effect.isEffect(value)) return true
+
+  return Predicate.hasProperty(value, WriteTypeId)
+}
+
 export const run = (action: Action): Effect.Effect<void> => {
   if (isWrite(action)) return action[WriteTypeId]
-  if (Effect.isEffect(action)) return action
+  if (Effect.isEffect(action))
+    return Effect.flatMap(action, (next) => (isAction(next) ? run(next) : Effect.void))
 
   return Effect.forEach(action, run, { discard: true })
 }
