@@ -46,7 +46,10 @@ export type Entry<A, E> = {
   readonly unusedSince: number | null
 }
 
-export type State<A, E> = { readonly entries: Readonly<Record<string, Entry<A, E>>> }
+export type State<A, E> = {
+  readonly entries: Readonly<Record<string, Entry<A, E>>>
+  readonly ahead?: ReadonlyArray<string>
+}
 
 export type Input<I> = [I] extends [void] ? void : I | Reactive<I> | Reactive<Option.Option<I>>
 
@@ -74,6 +77,19 @@ const stands = <A, E>(
   staleAfter: number,
   onServer: boolean,
 ): boolean => onServer || isFresh(entry, now, staleAfter)
+
+const withAhead = (keys: ReadonlyArray<string>): { readonly ahead?: ReadonlyArray<string> } =>
+  keys.length === 0 ? {} : { ahead: [...new Set(keys)] }
+
+const aheadOf = (state: { readonly ahead?: ReadonlyArray<string> }): ReadonlyArray<string> =>
+  state.ahead ?? []
+
+const loadedAhead = <A, E>(state: State<A, E>, key: string, onServer: boolean): boolean => {
+  if (onServer) return false
+  if (!aheadOf(state).includes(key)) return false
+
+  return state.entries[key]?.status === "loaded"
+}
 
 const oldestUnused = <A, E>(state: State<A, E>): ReadonlyArray<readonly [string, number]> =>
   Record.toEntries(state.entries)
@@ -124,6 +140,7 @@ const settled = <A, E>(
   key: string,
   change: (before: Entry<A, E>) => Entry<A, E>,
 ): State<A, E> => ({
+  ...state,
   entries: Record.map(state.entries, (entry, name) => (name === key ? change(entry) : entry)),
 })
 
@@ -194,6 +211,7 @@ export const Tag =
     })
     const state: Schema.Codec<State<A, E>, unknown> = Schema.Struct({
       entries: Schema.Record(Schema.String, entry),
+      ahead: Schema.optionalKey(Schema.Array(Schema.String)),
     })
     const initialState: State<A, E> = { entries: {} }
     const base = Store.Tag<Self>()(key, {
@@ -209,6 +227,7 @@ export const Tag =
             spanId: Schema.String,
           }),
           (before: State<A, E>, asked): State<A, E> => ({
+            ...before,
             entries: {
               ...before.entries,
               [asked.key]: {
@@ -274,6 +293,7 @@ export const Tag =
         dropped: Store.action(
           Schema.Struct({ key: Schema.String, since: Schema.Finite }),
           (before: State<A, E>, { key: name }): State<A, E> => ({
+            ...before,
             entries: Record.remove(before.entries, name),
           }),
           (before, { key: name, since }) =>
@@ -282,8 +302,24 @@ export const Tag =
               : Diagnostics.brief("SPAR_IN_USE_AGAIN"),
         ),
         streamed: Store.action(state, (before: State<A, E>, sent): State<A, E> => ({
+          ...before,
           entries: { ...before.entries, ...sent.entries },
+          ...withAhead([...aheadOf(before), ...aheadOf(sent)]),
         })),
+        loadedAhead: Store.action(
+          Schema.Struct({ key: Schema.String }),
+          (before: State<A, E>, { key: name }): State<A, E> => ({
+            ...before,
+            ...withAhead([...aheadOf(before), name]),
+          }),
+        ),
+        taken: Store.action(
+          Schema.Struct({ key: Schema.String }),
+          (before: State<A, E>, { key: name }): State<A, E> => ({
+            entries: before.entries,
+            ...withAhead(aheadOf(before).filter((held) => held !== name)),
+          }),
+        ),
         invalidated: Store.action(Schema.Void, (before: State<A, E>): State<A, E> => ({
           entries: Record.map(before.entries, (held) => ({ ...held, loadedAt: null })),
         })),
@@ -365,16 +401,25 @@ export const Tag =
         Option.toArray(asked),
         (wanted) => {
           const known = held.entries[wanted.key]
+          const request = Effect.annotateSpans(
+            Effect.andThen(
+              store.commands.requested({ ...wanted, after, ...from }),
+              onServer ? store.commands.loadedAhead({ key: wanted.key }) : Effect.void,
+            ),
+            {
+              "spar.kind": "data",
+              "spar.query.after": after ?? "",
+              "spar.query.input": wanted.key,
+            },
+          )
           if (known === undefined && coming) return Effect.void
-          if (known !== undefined && stands(known, now, staleAfter, onServer)) {
-            return served(wanted, known)
+          if (known === undefined) return request
+          if (loadedAhead(held, wanted.key, onServer)) {
+            return Effect.andThen(store.commands.taken({ key: wanted.key }), served(wanted, known))
           }
+          if (stands(known, now, staleAfter, onServer)) return served(wanted, known)
 
-          return Effect.annotateSpans(store.commands.requested({ ...wanted, after, ...from }), {
-            "spar.kind": "data",
-            "spar.query.after": after ?? "",
-            "spar.query.input": wanted.key,
-          })
+          return request
         },
         { discard: true },
       )

@@ -231,8 +231,9 @@ what it waited for. `--back 1` is the navigation before; `--id` takes a trace id
 `Server.render` draws the page, waits until every query has settled, and draws again until a
 pass finds nothing still loading. That covers queries inside a routed page or a list, which only
 start once the page is drawn, and dependent ones. The queries' stores travel with the page like
-any store's, so in the browser the first `ask` finds its data fresh and makes no request. Give a
-query a `staleAfter` or the browser will ask again straight away.
+any store's, so in the browser the first `ask` finds its data and makes no request. Data the
+server or a link preload loaded is used once by the first `ask` that wants it, whatever the
+query's `staleAfter`; asks after that follow `staleAfter`, which is 0 unless set.
 
 The server boundary is one Effect RPC group and one service with two layers. On the server the
 layer reads the database; in the browser it calls the group over `Backend.rpc`. The query's

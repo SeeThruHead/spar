@@ -480,8 +480,9 @@ what it waited for. `--back 1` is the navigation before; `--id` takes a trace id
 `Server.render` draws the page, waits until every query has settled, and draws again until a
 pass finds nothing still loading. That covers queries inside a routed page or a list, which only
 start once the page is drawn, and dependent ones. The queries' stores travel with the page like
-any store's, so in the browser the first `ask` finds its data fresh and makes no request. Give a
-query a `staleAfter` or the browser will ask again straight away.
+any store's, so in the browser the first `ask` finds its data and makes no request. Data the
+server or a link preload loaded is used once by the first `ask` that wants it, whatever the
+query's `staleAfter`; asks after that follow `staleAfter`, which is 0 unless set.
 
 The server boundary is one Effect RPC group and one service with two layers. On the server the
 layer reads the database; in the browser it calls the group over `Backend.rpc`. The query's
@@ -2337,14 +2338,14 @@ made. What Spar's reports still lack next to Solid's: a location for anything fi
 
 Read from the README of Solid Router's main branch, whose 1.0 line targets Solid 2.
 
-|                                         | Solid Router 1.0                                                                                  | Spar                                                                                        |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Where a route's data is                 | A `query` function, read with a memo in the component, and started early by the route's `preload` | `ask` in the component; nothing is declared on the route                                    |
-| Preload on intent                       | Opt-in for the router: after the pointer rests on a link for 20 ms, or on focus or touch          | Opt-in for each link: `onIntent` on the anchor                                              |
-| What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask` |
-| How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | The query's `staleAfter`, which is 0 unless set, so a preload can be wasted                 |
-| Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                             |
-| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request               |
+|                                         | Solid Router 1.0                                                                                  | Spar                                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Where a route's data is                 | A `query` function, read with a memo in the component, and started early by the route's `preload` | `ask` in the component; nothing is declared on the route                                                                                   |
+| Preload on intent                       | Opt-in for the router: after the pointer rests on a link for 20 ms, or on focus or touch          | Opt-in for each link: `onIntent` on the anchor                                                                                             |
+| What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask`                                                |
+| How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | Data a preload or the server loaded is used once by the first real read, whatever `staleAfter` is; after that, `staleAfter` (0 unless set) |
+| Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                                                                            |
+| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request                                                              |
 
 Two things Solid Router does that bear on Spar's list of open cases. Preloaded data is fresh for
 a few seconds by itself, which is the behaviour the default stale time of 0 lacks. And a
@@ -2806,8 +2807,6 @@ Built since, and smaller than they sound, but not done:
 - **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
   the components that changed, put in place by a one-line script (not the app's bundle); with
   scripts off the page stays as first drawn.
-- **A query's default stale time is 0,** so a preload that finishes before the click, or a page
-  drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
 - **What a JSX child needs is checked by the build, not by the types.** TypeScript gives every JSX

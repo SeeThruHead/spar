@@ -43,8 +43,6 @@ Built since, and smaller than they sound, but not done:
 - **A page sent in pieces needs scripts turned on to fill in.** Each piece is the finished HTML of
   the components that changed, put in place by a one-line script (not the app's bundle); with
   scripts off the page stays as first drawn.
-- **A query's default stale time is 0,** so a preload that finishes before the click, or a page
-  drawn on the server, is asked for again unless the query sets `staleAfter`.
 - **Spar does not check that every action has considered every state** of a state machine store.
   A guard you did not write is a command that is accepted.
 - **What a JSX child needs is checked by the build, not by the types.** TypeScript gives every JSX

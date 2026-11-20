@@ -98,6 +98,21 @@ class Price extends Query.Tag<Price>()("test/Price", {
   staleAfter: "1 minute",
 }) {}
 
+class Note extends Query.Tag<Note>()("test/Note", {
+  input: Schema.Void,
+  success: Schema.String,
+  failure: Schema.Never,
+  load: () => answering("note", "kept"),
+}) {}
+
+const Noted = compose(
+  Effect.fnUntraced(function* () {
+    const note = yield* Note.ask()
+
+    return { status: note.status, count: Reactive.map(note.value, (found) => found?.length ?? 0) }
+  }),
+)(OrdersView)
+
 const Priced = compose(
   Effect.fnUntraced(function* () {
     const catalog = yield* Catalog.ask()
@@ -190,6 +205,37 @@ describe("a page whose data comes from queries, drawn on the server", () => {
         Object.keys(made.state.stores).filter((key) => key.startsWith("test/Shelf")),
       ).toHaveLength(1)
     }),
+  )
+
+  it.live(
+    "data a query with no stale time sent with the page is used once, then asked for again",
+    () =>
+      Effect.gen(function* () {
+        const noted = Note.live.pipe(Layer.provideMerge(Asked.layer))
+        const made = yield* Server.render(Noted, { layer: noted })
+
+        expect(JSON.stringify(made.state.stores["test/Note"])).toContain('"ahead":["null"]')
+
+        const built = yield* Effect.provideService(
+          Layer.build(noted),
+          Store.Seed,
+          made.state.stores,
+        )
+        const asked = Context.get(built, Asked)
+
+        yield* Effect.provide(
+          Effect.gen(function* () {
+            const first = yield* Note.ask()
+
+            expect([yield* first.value.get, yield* Ref.get(asked)]).toEqual(["kept", []])
+
+            yield* Note.ask()
+            yield* Effect.sleep("10 millis")
+            expect(yield* Ref.get(asked)).toEqual(["note"])
+          }),
+          built,
+        )
+      }),
   )
 
   it.live("the browser starts with that data in hand and asks for nothing again", () =>
