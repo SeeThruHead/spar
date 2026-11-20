@@ -11,6 +11,7 @@ import {
   Dropdown,
   Gallery,
   OrdersQuery,
+  Picker,
   ResetCounter,
   SessionStore,
   Shop,
@@ -158,6 +159,31 @@ describe("a component composed from enhancers, its view last and inline", () => 
       expect(screen.getByRole("status", { name: "Counted" })).toBe(output)
       expect(screen.getByRole("button", { name: "More" })).toBe(button)
     }).pipe(Effect.provide(Layer.merge(CounterStore.layer([resetAfterDelay]), withTree))),
+  )
+
+  it.live(
+    "keeps each row's own state by its key in a For, so reordering moves it with the row",
+    () =>
+      Effect.gen(function* () {
+        yield* Testing.mount(Picker)
+        yield* Testing.click("button", "tea")
+        yield* Testing.find("menu", "tea")
+        yield* Testing.click("button", "Flip")
+        yield* Testing.find("menu", "tea")
+
+        expect(screen.queryByRole("menu", { name: "fruit" })).toBeNull()
+
+        const tree = yield* UiState.snapshot
+
+        expect(
+          tree
+            .filter((piece) => piece.name === "open")
+            .map((piece) => [piece.path.join(" / "), piece.value]),
+        ).toEqual([
+          ["Picker / Dropdown[fruit]", false],
+          ["Picker / Dropdown[tea]", true],
+        ])
+      }).pipe(Effect.provide(withTree)),
   )
 
   it.live("runs an effect for as long as it is mounted, inside a span that names it", () =>

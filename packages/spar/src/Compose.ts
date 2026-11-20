@@ -1,7 +1,8 @@
-import { Effect, Predicate, Record } from "effect"
-import type { Context, Schema } from "effect"
+import { Context, Effect, Predicate, Record } from "effect"
+import type { Schema } from "effect"
 import type { Scope } from "effect"
 import type { Action } from "./internal/action.ts"
+import { RowKey } from "./internal/uiTree.ts"
 import { drawingIn, drawingNow, drawnHere } from "./internal/drawing.ts"
 import { keyed } from "./internal/element.ts"
 import type { Element } from "./internal/element.ts"
@@ -209,7 +210,8 @@ export const For = <A>(props: {
     kind: "drawn",
     items: isReactive(props.each) ? props.each : succeed(props.each),
     key: props.by,
-    draw: (key, item) => drawingNow(context, () => props.children(item, key)),
+    draw: (key, item) =>
+      drawingNow(Context.add(context, RowKey, key), () => props.children(item, key)),
   })
 }
 

@@ -233,6 +233,20 @@ export const Tags = compose(withUiState("tags", Schema.Array(Schema.String), ["o
   ),
 )
 
+export const Picker = compose(
+  withUiState("order", Schema.Array(Schema.String), ["fruit", "tea"]),
+  withHandlers((props) => ({
+    onFlip: UiState.update(props.order, (order) => order.toReversed()),
+  })),
+)((props) => (
+  <section>
+    <button onClick={props.onFlip}>Flip</button>
+    <For each={props.order} by={(name) => name}>
+      {(_name, key) => <Dropdown label={key} items={["a", "b"]} onPick={() => Effect.void} />}
+    </For>
+  </section>
+))
+
 export const Gallery = compose(withHandlers(() => ({})))(() => (
   <main>
     <Card title="Release notes" />
