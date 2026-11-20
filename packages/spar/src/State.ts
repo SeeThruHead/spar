@@ -9,6 +9,8 @@ export type Written = {
   readonly key: string
   readonly name: string
   readonly value: Schema.Json
+  readonly traceId: string
+  readonly spanId: string
 }
 
 export type Slot<A> = {
@@ -17,7 +19,11 @@ export type Slot<A> = {
   readonly update: (name: string, change: (now: A) => A) => Effect.Effect<void>
 }
 
-type Held = { readonly cell: Cell.Cell<Schema.Json>; readonly users: number }
+type Held = {
+  readonly cell: Cell.Cell<Schema.Json>
+  readonly users: number
+  readonly initial: Schema.Json
+}
 
 export class State extends Context.Service<
   State,
@@ -29,6 +35,9 @@ export class State extends Context.Service<
     ) => Effect.Effect<Slot<A>, never, Scope.Scope>
     readonly log: Reactive<ReadonlyArray<Written>>
     readonly tree: Reactive<ReadonlyMap<string, Schema.Json>>
+    readonly viewing: Reactive<number | null>
+    readonly travelTo: (seq: number | null) => Effect.Effect<void>
+    readonly fork: Effect.Effect<void>
   }
 >()("spar/State") {}
 
@@ -37,34 +46,78 @@ const keyOf = (path: ReadonlyArray<string>): string => path.join(" / ")
 const without = <V>(entries: ReadonlyMap<string, V>, key: string): ReadonlyMap<string, V> =>
   new Map([...entries].filter(([name]) => name !== key))
 
+const tracedBy = Effect.map(Effect.option(Effect.currentSpan), (span) =>
+  Option.match(span, {
+    onNone: () => ({ traceId: "", spanId: "" }),
+    onSome: (current) => ({ traceId: current.traceId, spanId: current.spanId }),
+  }),
+)
+
 const make = Effect.sync(() => {
   const held = Cell.make<ReadonlyMap<string, Held>>(new Map())
   const tree = Cell.make<ReadonlyMap<string, Schema.Json>>(new Map())
   const log = Cell.make<ReadonlyArray<Written>>([])
+  const viewing = Cell.make<number | null>(null)
 
-  const counted = (key: string, cell: Cell.Cell<Schema.Json>, by: number): number => {
+  const counted = (key: string, kept: Omit<Held, "users">, by: number): number => {
     const users = (held.read().get(key)?.users ?? 0) + by
 
-    held.write(new Map([...held.read(), [key, { cell, users }]]))
+    held.write(new Map([...held.read(), [key, { ...kept, users }]]))
 
     return users
   }
 
-  const joined = (key: string, initial: Schema.Json): Cell.Cell<Schema.Json> => {
-    const cell = held.read().get(key)?.cell ?? Cell.make(initial)
+  const joined = (key: string, initial: Schema.Json): Omit<Held, "users"> => {
+    const kept = held.read().get(key) ?? { cell: Cell.make(initial), initial }
 
-    counted(key, cell, 1)
-    tree.write(new Map([...tree.read(), [key, cell.read()]]))
+    counted(key, kept, 1)
+    tree.write(new Map([...tree.read(), [key, kept.cell.read()]]))
 
-    return cell
+    return kept
   }
 
-  const left = (key: string, cell: Cell.Cell<Schema.Json>): void => {
-    if (counted(key, cell, -1) > 0) return
+  const left = (key: string, kept: Omit<Held, "users">): void => {
+    if (counted(key, kept, -1) > 0) return
 
     held.write(without(held.read(), key))
     tree.write(without(tree.read(), key))
   }
+
+  const valueAt = (key: string, kept: Omit<Held, "users">, seq: number): Schema.Json =>
+    log.read().findLast((entry) => entry.key === key && entry.seq <= seq)?.value ?? kept.initial
+
+  const shown = (seq: number | null): void =>
+    [...held.read()].forEach(([key, kept]) =>
+      kept.cell.write(valueAt(key, kept, seq ?? Number.POSITIVE_INFINITY)),
+    )
+
+  const travelTo = (seq: number | null) =>
+    Effect.sync(() => {
+      viewing.write(seq)
+      shown(seq)
+    })
+
+  const fork = Effect.sync(() => {
+    const at = viewing.read()
+    if (at === null) return
+
+    log.write(log.read().filter((entry) => entry.seq <= at))
+    tree.write(new Map([...held.read()].map(([key, kept]) => [key, valueAt(key, kept, at)])))
+    viewing.write(null)
+    shown(null)
+  })
+
+  const written = (key: string, cell: Cell.Cell<Schema.Json>, name: string, value: Schema.Json) =>
+    Effect.flatMap(tracedBy, (trace) =>
+      Effect.andThen(
+        travelTo(null),
+        Effect.sync(() => {
+          cell.write(value)
+          tree.write(new Map([...tree.read(), [key, value]]))
+          log.write([...log.read(), { seq: log.read().length + 1, key, name, value, ...trace }])
+        }),
+      ),
+    )
 
   const slot = <A, I>(
     path: ReadonlyArray<string>,
@@ -79,17 +132,10 @@ const make = Effect.sync(() => {
     return Effect.map(
       Effect.acquireRelease(
         Effect.sync(() => joined(key, encode(initial))),
-        (cell) => Effect.sync(() => left(key, cell)),
+        (kept) => Effect.sync(() => left(key, kept)),
       ),
-      (cell) => {
-        const set = (name: string, next: A) =>
-          Effect.sync(() => {
-            const value = encode(next)
-
-            cell.write(value)
-            tree.write(new Map([...tree.read(), [key, value]]))
-            log.write([...log.read(), { seq: log.read().length + 1, key, name, value }])
-          })
+      ({ cell }) => {
+        const set = (name: string, next: A) => written(key, cell, name, encode(next))
 
         return {
           value: map(fromCell(cell), decode),
@@ -100,10 +146,30 @@ const make = Effect.sync(() => {
     )
   }
 
-  return State.of({ slot, log: fromCell(log), tree: fromCell(tree) })
+  return State.of({
+    slot,
+    log: fromCell(log),
+    tree: fromCell(tree),
+    viewing: fromCell(viewing),
+    travelTo,
+    fork,
+  })
 })
 
 export const layer: Layer.Layer<State> = Layer.effect(State, make)
+
+export const Tag =
+  <Self>() =>
+  <const Key extends string, A, I>(key: Key, schema: Schema.Codec<A, I>, initial: NoInfer<A>) => {
+    const service = Context.Service<Self, Slot<A>>()(key)
+
+    return class extends service {
+      static readonly layer = Layer.effect(
+        service,
+        Effect.flatMap(Effect.service(State), (state) => state.slot([key], schema, initial)),
+      )
+    }
+  }
 
 const savedSlot = (state: State["Service"], store: KeyValueStore.KeyValueStore) =>
   Effect.fnUntraced(function* <A, I>(

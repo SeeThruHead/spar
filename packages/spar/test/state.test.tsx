@@ -151,4 +151,60 @@ describe("one state for everything", () => {
       expect((yield* state.tree.get).size).toBe(0)
     }).pipe(Effect.provide(State.layer)),
   )
+
+  it.effect("a slot defined once is used by its value, and each write carries its trace", () =>
+    Effect.gen(function* () {
+      const state = yield* State.State
+      const theme = yield* Theme
+
+      yield* Effect.withSpan(theme.set("chosen", "dark"), "choose theme")
+
+      const [written] = yield* state.log.get
+
+      expect([written?.key, written?.name, written?.value]).toEqual(["app/Theme", "chosen", "dark"])
+      expect(written?.traceId.length).toBe(32)
+      expect(yield* theme.value.get).toBe("dark")
+    }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(State.layer)))),
+  )
+
+  it.effect(
+    "every slot can be shown as it was after any write, and a fork carries on from there",
+    () =>
+      Effect.gen(function* () {
+        const state = yield* State.State
+        const theme = yield* Theme
+        const scope = yield* Scope.make()
+        const size = yield* Scope.provide(state.slot(["size"], Schema.Int, 1), scope)
+
+        yield* theme.set("chosen", "dark")
+        yield* size.set("grown", 2)
+        yield* theme.set("chosen", "light")
+
+        yield* state.travelTo(1)
+        expect([yield* theme.value.get, yield* size.value.get, yield* state.viewing.get]).toEqual([
+          "dark",
+          1,
+          1,
+        ])
+
+        yield* state.travelTo(null)
+        expect([yield* theme.value.get, yield* size.value.get]).toEqual(["light", 2])
+
+        yield* state.travelTo(2)
+        yield* state.fork
+        expect([yield* theme.value.get, yield* size.value.get]).toEqual(["dark", 2])
+        expect((yield* state.log.get).map((entry) => entry.seq)).toEqual([1, 2])
+
+        yield* state.fork
+        yield* state.travelTo(1)
+        yield* size.set("grown", 5)
+        expect([yield* state.viewing.get, yield* theme.value.get, yield* size.value.get]).toEqual([
+          null,
+          "dark",
+          5,
+        ])
+      }).pipe(Effect.provide(Theme.layer.pipe(Layer.provideMerge(State.layer)))),
+  )
 })
+
+class Theme extends State.Tag<Theme>()("app/Theme", Schema.Literals(["light", "dark"]), "light") {}
