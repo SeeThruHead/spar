@@ -5,6 +5,7 @@ import { SecureRandom } from "effect/crypto"
 import { App, Query, Reactive, Router, Server, Store, UiState, compose } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { Seed } from "../src/internal/server.ts"
 import { RowsView } from "./graphics.tsx"
 import { NotFoundView } from "./routes.tsx"
 import { ShelfView } from "./shelf.tsx"
@@ -217,11 +218,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
 
         expect(JSON.stringify(made.state.stores["test/Note"])).toContain('"ahead":["null"]')
 
-        const built = yield* Effect.provideService(
-          Layer.build(noted),
-          Store.Seed,
-          made.state.stores,
-        )
+        const built = yield* Effect.provideService(Layer.build(noted), Seed, made.state.stores)
         const asked = Context.get(built, Asked)
 
         yield* Effect.provide(
@@ -242,11 +239,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
   it.live("the browser starts with that data in hand and asks for nothing again", () =>
     Effect.gen(function* () {
       const made = yield* Server.render(Priced, { layer: queries })
-      const built = yield* Effect.provideService(
-        Layer.build(queries),
-        Store.Seed,
-        made.state.stores,
-      )
+      const built = yield* Effect.provideService(Layer.build(queries), Seed, made.state.stores)
       const taken = yield* Effect.provide(
         Effect.gen(function* () {
           const catalog = yield* Catalog.ask()

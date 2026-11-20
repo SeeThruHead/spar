@@ -5,7 +5,8 @@ import * as Cell from "./internal/cell.ts"
 import { fromCell } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { Tree as UiTreeClass, UiTree } from "./internal/uiTree.ts"
-import type { Kept, Snapshot, Trace, Tree, Written } from "./internal/uiTree.ts"
+import type { Kept, Snapshot, Tree, Written } from "./internal/uiTree.ts"
+import { writeTo } from "./internal/written.ts"
 
 export type { Snapshot, Written } from "./internal/uiTree.ts"
 
@@ -38,31 +39,9 @@ export type Service = {
   readonly fork: Effect.Effect<void>
 }
 
-export const Saving = Context.Reference<Option.Option<KeyValueStore.KeyValueStore>>(
-  "spar/State/Saving",
-  { defaultValue: Option.none },
-)
-
-export const tracedBy: Effect.Effect<Trace> = Effect.map(
-  Effect.option(Effect.currentSpan),
-  (span) =>
-    Option.match(span, {
-      onNone: () => ({ traceId: "", spanId: "" }),
-      onSome: (current) => ({ traceId: current.traceId, spanId: current.spanId }),
-    }),
-)
-
-export const writeTo = <A>(
-  kept: Kept<A>,
-  name: string,
-  next: A,
-  payload?: Schema.Json,
-): Effect.Effect<void> =>
-  Effect.flatMap(tracedBy, (trace) =>
-    Effect.sync(() =>
-      kept.writtenAs(name, next, payload === undefined ? trace : { ...trace, payload }),
-    ),
-  )
+const Saving = Context.Reference<Option.Option<KeyValueStore.KeyValueStore>>("spar/State/Saving", {
+  defaultValue: Option.none,
+})
 
 const storedKey = (path: ReadonlyArray<string>): string => `spar/state/${path.join(" / ")}`
 
@@ -166,7 +145,7 @@ const slotIn = (tree: Tree) =>
     }
   })
 
-export const serviceOf = (tree: Tree): Service => ({
+const serviceOf = (tree: Tree): Service => ({
   slot: slotIn(tree),
   log: fromCell(tree.log),
   viewing: fromCell(tree.viewing),

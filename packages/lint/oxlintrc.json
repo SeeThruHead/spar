@@ -243,7 +243,7 @@
     },
     {
       "files": [
-        "**/packages/spar/src/Store.ts"
+        "**/packages/spar/src/internal/store.ts"
       ],
       "rules": {
         "typescript/consistent-type-definitions": "off"
