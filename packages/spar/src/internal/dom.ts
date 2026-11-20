@@ -77,6 +77,10 @@ export const setAttribute = (node: Host, name: string, value: unknown): void => 
   return node.setAttribute(name, text)
 }
 
+export const setMarkup = (node: Host, html: string): void => {
+  node.innerHTML = html
+}
+
 export const toggleClass = (node: Host, names: string, on: unknown): void => {
   names
     .split(/\s+/)

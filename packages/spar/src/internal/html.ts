@@ -6,6 +6,7 @@ import { TypeId, isElement } from "./element.ts"
 import type { Element, Intrinsic, Rows } from "./element.ts"
 import { isHandle } from "./handle.ts"
 import { fromCell, isReactive } from "./reactive.ts"
+import * as Markup from "../Markup.ts"
 
 type Piece = { readonly text: boolean; readonly html: string }
 
@@ -67,7 +68,8 @@ const styleText = (pairs: ReadonlyArray<readonly [string, unknown]>): string =>
     .join("; ")
 
 const attributeOf = (name: string, value: unknown): Effect.Effect<string> => {
-  if (name === "children" || isEventName(name) || isHandle(value)) return Effect.succeed("")
+  if (name === "children" || name === "markup") return Effect.succeed("")
+  if (isEventName(name) || isHandle(value)) return Effect.succeed("")
   if (name === "class" && isRecord(value)) {
     return Effect.map(eachNow(value), (pairs) => attribute("class", classText(pairs)))
   }
@@ -99,6 +101,11 @@ const intrinsic: (element: Intrinsic) => Pieces = Effect.fnUntraced(function* (e
   )
   const open = `<${element.tag}${attributes.join("")}>`
   if (voids.has(element.tag)) return solid(open)
+  if (element.props["markup"] !== undefined) {
+    const html = yield* now(element.props["markup"])
+
+    return solid(`${open}${Markup.htmlOf(html)}</${element.tag}>`)
+  }
 
   const inside = yield* pieces(element.props["children"])
 

@@ -4,6 +4,7 @@ import { fragment, intrinsic } from "./internal/element.ts"
 import type { Element as SparElement } from "./internal/element.ts"
 import type { Handle } from "./internal/handle.ts"
 import type { Reactive } from "./internal/reactive.ts"
+import type { Markup } from "./Markup.ts"
 import type { View } from "./View.ts"
 
 type Child = string | number | Reactive<string | number> | SparElement
@@ -61,6 +62,7 @@ type Common = {
   readonly style?: Attribute<string> | Styles
   readonly for?: Attribute<string>
   readonly role?: Attribute<string>
+  readonly markup?: Attribute<Markup>
 } & {
   readonly [name: `aria-${string}` | `data-${string}`]: Attribute<string | number | boolean | null>
 }

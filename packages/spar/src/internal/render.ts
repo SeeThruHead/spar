@@ -27,6 +27,7 @@ import { settled } from "./order.ts"
 import { Direct, Observe, fromCell, isReactive } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 import * as Diagnostics from "../Diagnostics.ts"
+import * as Markup from "../Markup.ts"
 
 export class DuplicateKey extends Schema.TaggedError<
   DuplicateKey,
@@ -183,7 +184,7 @@ const within = (place: Place, namespace: Dom.Namespace): Place => {
 
 const applyOwnProps = (node: Dom.Host, props: Intrinsic["props"], place: Place): void =>
   Object.keys(props)
-    .filter((name) => name !== "children")
+    .filter((name) => name !== "children" && name !== "markup")
     .forEach((name) => applyProp(node, name, props[name], place))
 
 const applyOwnPropsInTurn = (node: Dom.Host, props: Intrinsic["props"], place: Place): void => {
@@ -200,13 +201,49 @@ const fill = (node: Dom.Host, element: Intrinsic, inside: Place): void => {
   applyOwnPropsInTurn(node, element.props, inside)
 }
 
+const fillMarkup = (node: Dom.Host, element: Intrinsic, place: Place, there: boolean): void => {
+  const kept = Cell.make(there)
+
+  apply(
+    element.props["markup"],
+    (current) => {
+      if (!kept.read()) Dom.setMarkup(node, Markup.htmlOf(current))
+
+      kept.write(false)
+    },
+    place,
+  )
+  applyOwnPropsInTurn(node, element.props, place)
+}
+
 const claimed = (element: Intrinsic, place: Place): Dom.Host | undefined =>
   place.claim === undefined ? undefined : Dom.claimElement(place.claim, element.tag)
+
+const markedUp = (
+  element: Intrinsic,
+  inside: Place,
+  place: Place,
+  found: Dom.Host | undefined,
+): Dom.Host => {
+  if (found !== undefined) {
+    fillMarkup(found, element, { ...inside, claim: undefined }, true)
+
+    return found
+  }
+
+  const node = Dom.create(element.tag, inside.namespace)
+
+  fillMarkup(node, element, { ...inside, claim: undefined }, false)
+  insert(node, place)
+
+  return node
+}
 
 const renderIntrinsic = (element: Intrinsic, place: Place): Dom.Host => {
   const namespace = element.tag === "svg" ? "svg" : place.namespace
   const inside = within(place, childNamespace(element.tag, namespace))
   const found = claimed(element, place)
+  if (element.props["markup"] !== undefined) return markedUp(element, inside, place, found)
   if (found !== undefined) {
     const children = Dom.cursorIn(found)
 

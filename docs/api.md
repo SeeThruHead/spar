@@ -47,6 +47,15 @@ not data has a Schema of its own kind:
 `Props.kind(guard, show)` makes one for a type of your own. `Props.allShown(fields, props)` gives a
 view's props as plain values, which is what the inspector and the MCP tools read.
 
+## Markup
+
+`Markup.trusted(html)` marks a string of HTML as safe to put on the page, and the `markup` attribute
+puts it in an element: `<article markup={body} />`, where `body` is a `Markup` or a reactive one.
+A view declares such a prop as `Markup.Markup`, or `Props.Reactive(Markup.Markup)`. The element
+has no other children. It is drawn the same on the server, and hydrating keeps the nodes the
+server sent. Use it for HTML you made yourself, such as rendered markdown; never for text a user
+typed.
+
 ## Reactive
 
 A `Reactive<A>` is a value that changes: `get` reads it and `changes` is a stream that starts with
