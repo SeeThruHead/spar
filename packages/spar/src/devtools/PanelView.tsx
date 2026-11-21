@@ -680,6 +680,7 @@ export const StoreView = View.make(
     name: Schema.String,
     position: Props.Reactive(Schema.String),
     state: Props.Reactive(Schema.String),
+    changed: Props.Reactive(Schema.String),
     entries: Props.Element,
     exported: Props.Reactive(Schema.String),
     pasted: Props.State(Schema.String),
@@ -701,6 +702,9 @@ export const StoreView = View.make(
       <button onClick={props.onForward}>Forward</button>
       <button onClick={props.onLive}>Live</button>
       <ol aria-label={`${props.name} actions`}>{props.entries}</ol>
+      <h4>What the action changed</h4>
+      <pre aria-label={`${props.name} changed`}>{props.changed}</pre>
+      <h4>State</h4>
       <pre aria-label={`${props.name} state`}>{props.state}</pre>
       <button onClick={props.onExport}>Export log</button>
       <textarea aria-label={`${props.name} exported log`} readOnly={true} value={props.exported} />

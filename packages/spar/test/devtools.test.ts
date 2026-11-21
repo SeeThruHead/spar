@@ -63,6 +63,10 @@ const problem = (): string | null => screen.getByLabelText("test/Tally problem")
 
 const waiting = (): string | null => screen.getByLabelText("Outbox waiting").textContent
 
+const changed = (): string | null => screen.getByLabelText("test/Tally changed").textContent
+
+const said = (expected: string) => Testing.eventually(() => expect(changed()).toBe(expected))
+
 const shows = (expected: string, where: string) =>
   Testing.eventually(() => expect([count(), position()]).toEqual([expected, where]))
 
@@ -74,14 +78,17 @@ describe("devtools", () => {
       yield* Testing.mount(Screen)
       yield* Testing.click("button", "Back")
       yield* shows("0", "live")
+      yield* said("No action yet.")
       yield* tally.commands.added({ by: 1 })
       yield* tally.commands.added({ by: 10 })
       yield* tally.commands.added({ by: 100 })
       yield* Testing.findText('added {"by":100}')
       yield* shows("111", "live")
+      yield* said("count: 11 → 111")
 
       yield* Testing.click("button", "Back")
       yield* shows("11", "action 2")
+      yield* said("count: 1 → 11")
       yield* Testing.click("button", "Back")
       yield* Testing.click("button", "Back")
       yield* shows("1", "action 1")
@@ -137,6 +144,7 @@ describe("devtools", () => {
         )
         yield* Testing.click("button", "Load log")
         yield* shows("77", "action 2")
+        yield* said("count: 7 → 77")
         yield* Testing.findText('added {"by":70}')
         yield* Testing.click("button", "Back")
         yield* shows("7", "action 1")

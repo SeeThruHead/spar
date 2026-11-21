@@ -29,6 +29,7 @@ export type Inspected = {
   readonly base: number
   readonly encoded: Effect.Effect<Schema.Json>
   readonly state: Reactive<unknown>
+  readonly stateAt: (seq: number) => Effect.Effect<unknown>
   readonly log: Reactive<ReadonlyArray<Entry>>
   readonly viewing: Reactive<number | null>
   readonly travelTo: (seq: number | null) => Effect.Effect<void>
@@ -254,6 +255,11 @@ export const made = Effect.fnUntraced(function* <
     base: 0,
     encoded: Effect.orDie(Effect.flatMap(slot.value.get, encodeState)),
     state: slot.value,
+    stateAt: (seq) =>
+      Option.match(borrowed.read(), {
+        onNone: () => slot.valueAt(seq),
+        onSome: (past) => Effect.succeed(stateAt(past, definition.initialState, seq)),
+      }),
     log: map(both, ([entries, past]) =>
       Option.match(past, { onNone: () => entries, onSome: (loaded) => loaded.entries }),
     ),

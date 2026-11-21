@@ -9,6 +9,7 @@ import {
   Predicate,
   Record,
   Schema,
+  Stream,
   pipe,
 } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
@@ -408,6 +409,40 @@ const step = Effect.fnUntraced(function* (
   )
 })
 
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const printed = (value: unknown): string => shortened(Formatter.formatJson(value))
+
+const fieldOf = (record: Readonly<Record<string, unknown>>, key: string): string =>
+  Object.hasOwn(record, key) ? printed(record[key]) : "(absent)"
+
+export const fieldChanges = (prior: unknown, next: unknown): ReadonlyArray<string> => {
+  if (!isRecord(prior) || !isRecord(next)) {
+    return printed(prior) === printed(next) ? [] : [`${printed(prior)} → ${printed(next)}`]
+  }
+
+  return [...new Set([...Object.keys(prior), ...Object.keys(next)])]
+    .filter((key) => fieldOf(prior, key) !== fieldOf(next, key))
+    .map((key) => `${key}: ${fieldOf(prior, key)} → ${fieldOf(next, key)}`)
+}
+
+const changedText = (lines: ReadonlyArray<string>): string =>
+  lines.length === 0 ? "Nothing in this store changed." : lines.join("\n")
+
+const changedBy = (
+  store: Store.Inspected,
+  viewing: number | null,
+  log: ReadonlyArray<Store.Entry>,
+) =>
+  Option.match(Option.fromNullishOr(viewing ?? log.at(-1)?.seq), {
+    onNone: () => Effect.succeed("No action yet."),
+    onSome: (seq) =>
+      Effect.map(Effect.all([store.stateAt(seq - 1), store.stateAt(seq)]), ([prior, next]) =>
+        changedText(fieldChanges(prior, next)),
+      ),
+  })
+
 const StorePanel = compose(
   withProps({ inspected: Props.Reactive(InspectedStore) }),
   Effect.fnUntraced(function* (props) {
@@ -426,6 +461,11 @@ const StorePanel = compose(
       ),
     )
 
+    const watched = yield* Reactive.zip(store.viewing, store.log)
+    const changed = yield* Reactive.fromStream(
+      "",
+      Stream.mapEffect(watched.changes, ([viewing, log]) => changedBy(store, viewing, log)),
+    )
     const exported = yield* UiState.make("exported", Schema.String, "")
     const pasted = yield* UiState.make("pasted", Schema.String, "")
     const problem = yield* UiState.make("problem", Schema.String, "")
@@ -453,6 +493,7 @@ const StorePanel = compose(
         viewing === null ? "live" : `action ${viewing}`,
       ),
       state: Reactive.map(store.state, (state) => Formatter.formatJson(state, { space: 2 })),
+      changed,
       entries,
       onBack: step(store, before),
       onForward: step(store, after),

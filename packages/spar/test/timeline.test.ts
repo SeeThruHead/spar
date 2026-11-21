@@ -395,6 +395,7 @@ describe("one log of everything that happened", () => {
         base: 7,
         encoded: Effect.succeed(null),
         state: Reactive.succeed(null),
+        stateAt: () => Effect.succeed(null),
         log: Reactive.succeed([]),
         viewing: Reactive.succeed(null),
         travelTo: (seq) => Ref.update(sentTo, (all) => [...all, seq]),

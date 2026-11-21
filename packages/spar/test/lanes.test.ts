@@ -9,6 +9,7 @@ import {
   lanesOf,
   seqAt,
   backgroundOf,
+  fieldChanges,
   summaryOfMoment,
   ticksDrawn,
   waitBefore,
@@ -77,6 +78,23 @@ describe("a wait between spans", () => {
     expect(waitBefore(first, all)).toBe("")
     expect(waitBefore(deliver, all)).toBe("")
     expect(waitBefore(recordedSpan("close", "deliver", 70, 71), all)).toBe("")
+  })
+})
+
+describe("what an action changed in a store", () => {
+  it("names each field that changed, from before to after, and only those", () => {
+    expect(
+      fieldChanges(
+        { count: 1, phase: "idle", gone: true },
+        { count: 2, phase: "idle", added: "x" },
+      ),
+    ).toEqual(["count: 1 → 2", "gone: true → (absent)", 'added: (absent) → "x"'])
+  })
+
+  it("compares a value that is not a record as a whole", () => {
+    expect(fieldChanges(1, 2)).toEqual(["1 → 2"])
+    expect(fieldChanges([1], [1])).toEqual([])
+    expect(fieldChanges({ count: 1 }, { count: 1 })).toEqual([])
   })
 })
 
