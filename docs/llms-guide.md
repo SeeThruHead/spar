@@ -215,14 +215,7 @@ with async work. The short version:
 
 Declare the contract once, in a file both sides import:
 
-```ts
-export class Agents extends RpcGroup.make(
-  Rpc.make("Start", {
-    payload: { name: Schema.String, idempotencyKey: Schema.String },
-    error: ServerUnreachable,
-  }),
-) {}
-```
+<<< apps/sidebar/src/api.ts#Agents
 
 On the page, `Backend.rpc(Agents, url)` gives a typed client. Its calls are spans in the trace of
 whatever caused them, the trace context travels to the backend in the request, and the backend's

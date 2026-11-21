@@ -1,3 +1,5 @@
+import { expanded, includesIn } from "./includes.ts"
+
 const root = new URL("..", import.meta.url).pathname
 const src = `${root}packages/spar/src/`
 
@@ -80,14 +82,32 @@ const unknownNames = async (page: string): Promise<ReadonlyArray<string>> => {
   )
 }
 
-const counted = async (page: string): Promise<number> =>
-  [...(await Bun.file(`${root}${page}`).text()).matchAll(anySample)].length
+const handWritten = async (page: string): Promise<ReadonlyArray<string>> => {
+  const text = await Bun.file(`${root}${page}`).text()
+
+  return [...text.matchAll(anySample)].map((found) => {
+    const line = text.slice(0, found.index).split("\n").length
+
+    return `${page}:${line}: TypeScript written by hand. Put it in a file that is type-checked and tested, and show it with <<< path#Name`
+  })
+}
+
+const brokenIncludes = async (page: string): Promise<ReadonlyArray<string>> =>
+  expanded(await Bun.file(`${root}${page}`).text()).then(
+    () => [],
+    (problem: unknown) => [`${page}: ${String(problem)}`],
+  )
+
+const included = async (page: string): Promise<number> =>
+  includesIn(await Bun.file(`${root}${page}`).text()).length
 
 const problems = [
   ...(await Promise.all(pages.map(missing))).flat(),
   ...new Set((await Promise.all(pages.map(unknownNames))).flat()),
+  ...(await Promise.all(pages.map(handWritten))).flat(),
+  ...(await Promise.all(pages.map(brokenIncludes))).flat(),
 ]
-const total = (await Promise.all(pages.map(counted))).reduce((sum, count) => sum + count, 0)
+const total = (await Promise.all(pages.map(included))).reduce((sum, count) => sum + count, 0)
 
 if (problems.length > 0) {
   console.error(problems.join("\n"))
@@ -95,5 +115,5 @@ if (problems.length > 0) {
 }
 
 console.log(
-  `All ${total} samples use only what spar exports, and those that name a file are in that file`,
+  `All ${total} samples are included from code, and every include points at a declaration`,
 )

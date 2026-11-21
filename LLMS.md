@@ -217,12 +217,22 @@ Declare the contract once, in a file both sides import:
 
 ```ts
 export class Agents extends RpcGroup.make(
+  Rpc.make("Describe", {
+    payload: { name: Schema.String },
+    success: Started,
+    error: NoRecord,
+  }),
   Rpc.make("Start", {
     payload: { name: Schema.String, idempotencyKey: Schema.String },
     error: ServerUnreachable,
   }),
+  Rpc.make("Started", { success: Schema.Array(Schema.String) }),
+  Rpc.make("Users", { success: Schema.Array(User) }),
+  Rpc.make("Lookup", { payload: { kind: Schema.String, id: Schema.String }, success: Found }),
 ) {}
 ```
+
+(`apps/sidebar/src/api.ts`)
 
 On the page, `Backend.rpc(Agents, url)` gives a typed client. Its calls are spans in the trace of
 whatever caused them, the trace context travels to the backend in the request, and the backend's
