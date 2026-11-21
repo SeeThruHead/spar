@@ -85,6 +85,7 @@ export class Registry extends Context.Service<
     readonly viewing: Reactive.Reactive<number | null>
     readonly travelTo: (seq: number | null) => Effect.Effect<void>
     readonly uiState: () => UiState.Snapshot
+    readonly changesAt: (seq: number | null) => ReadonlyArray<string>
     readonly setUi: (path: UiState.Path, name: string, value: Schema.Json) => boolean
     readonly follow: (tree: ReturnType<typeof Trees.makeTree>) => void
     readonly branches: Reactive.Reactive<ReadonlyArray<Branch>>
@@ -98,6 +99,37 @@ type Remembered = {
   readonly moment: Timeline.Moment
   readonly ui: UiState.Snapshot
   readonly stores: Readonly<Record<string, number>>
+}
+
+type Kept = { readonly ui: UiState.Snapshot; readonly stores: Readonly<Record<string, number>> }
+
+const uiPlace = (entry: UiState.Snapshot[number]): string =>
+  [...entry.path, entry.name].join(" / ").replace(/ \/ (?=[^/]*$)/, " . ")
+
+const valueText = (value: Schema.Json): string => Formatter.formatJson(value)
+
+export const changeLines = (before: Kept | undefined, now: Kept): ReadonlyArray<string> => {
+  const earlier = before?.ui ?? []
+  const was = new Map(earlier.map((entry) => [uiPlace(entry), entry.value]))
+  const is = new Map(now.ui.map((entry) => [uiPlace(entry), entry.value]))
+  const changed = now.ui.flatMap((entry) => {
+    const place = uiPlace(entry)
+    const found = was.get(place)
+    if (found === undefined) return [`+ ${place}  ${valueText(entry.value)}`]
+
+    const old = valueText(found)
+    const next = valueText(entry.value)
+
+    return old === next ? [] : [`${place}  ${old} → ${next}`]
+  })
+  const gone = earlier
+    .filter((entry) => !is.has(uiPlace(entry)))
+    .map((entry) => `- ${uiPlace(entry)}`)
+  const moved = Object.entries(now.stores)
+    .filter(([key, at]) => before?.stores[key] !== at)
+    .map(([key, at]) => `${key}  entry ${before?.stores[key] ?? "none"} → ${at}`)
+
+  return [...moved, ...changed, ...gone]
 }
 
 type Named = { readonly id: number; readonly name: string; readonly from: number | null }
@@ -324,6 +356,13 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
       travelTo,
       uiState: () => trees.read().uiSnapshot(),
+      changesAt: (seq) => {
+        const all = past.read().remembered
+        const index =
+          seq === null ? all.length - 1 : all.findIndex((kept) => kept.moment.seq === seq)
+
+        return all.slice(index, index + 1).flatMap((now) => changeLines(all[index - 1], now))
+      },
       setUi: (path, name, value) => trees.read().put(path, name, value),
       follow: (tree) => {
         tree.keepAtLeast(1000)
@@ -667,9 +706,13 @@ export const EventPanel = compose(
       detail: Reactive.map(shown, (now) => now.detail),
       traceId: Reactive.map(shown, (now) => now.traceId),
       spanId: Reactive.map(shown, (now) => now.spanId),
+      changes: Reactive.map(chosen, ([, viewing]) => changesText(registry.changesAt(viewing))),
     }
   }),
 )(EventView)
+
+export const changesText = (lines: ReadonlyArray<string>): string =>
+  lines.length === 0 ? "Nothing in the state changed." : lines.join("\n")
 
 export const TimelinePanel = compose(
   withProps({

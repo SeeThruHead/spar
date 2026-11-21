@@ -204,8 +204,9 @@ export const EventView = View.make(
     detail: Props.Reactive(Schema.String),
     traceId: Props.Reactive(Schema.String),
     spanId: Props.Reactive(Schema.String),
+    changes: Props.Reactive(Schema.String),
   },
-  ({ heading, kind, detail, traceId, spanId }) => (
+  ({ heading, kind, detail, traceId, spanId, changes }) => (
     <section aria-label="Event">
       <h2>{heading}</h2>
       <table aria-label="About the event">
@@ -224,6 +225,8 @@ export const EventView = View.make(
           </tr>
         </tbody>
       </table>
+      <h3>What it changed</h3>
+      <pre aria-label="What the event changed">{changes}</pre>
       <h3>What it carried</h3>
       <pre aria-label="What the event carried">{detail}</pre>
     </section>

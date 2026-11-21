@@ -1,7 +1,10 @@
 import { describe, expect, it } from "@effect/vitest"
+import type { Schema } from "effect"
 import {
   aboutSpan,
   acrossLanes,
+  changeLines,
+  changesText,
   eventShown,
   lanesOf,
   seqAt,
@@ -69,6 +72,45 @@ describe("a picked span", () => {
     ).toBe(
       "Agents.start\npage · 0.0 ms\nspan    s2\nparent  none, it starts the trace\ntrace   t\n",
     )
+  })
+})
+
+const ui = (path: ReadonlyArray<string>, name: string, value: Schema.Json) => ({
+  path,
+  name,
+  value,
+})
+
+describe("what an event changed", () => {
+  it("lists stores that moved, UI state that changed, came or went", () => {
+    const before = {
+      ui: [ui(["Shell", "Sidebar"], "filter", ""), ui(["Shell", "Menu"], "open", true)],
+      stores: { "sidebar/Board": 4, "spar/ui/Toasts": 2 },
+    }
+    const now = {
+      ui: [ui(["Shell", "Sidebar"], "filter", "tri"), ui(["Shell", "Dialog"], "draft", "")],
+      stores: { "sidebar/Board": 5, "spar/ui/Toasts": 2, "sidebar/People": 1 },
+    }
+
+    expect(changeLines(before, now)).toEqual([
+      "sidebar/Board  entry 4 → 5",
+      "sidebar/People  entry none → 1",
+      'Shell / Sidebar . filter  "" → "tri"',
+      '+ Shell / Dialog . draft  ""',
+      "- Shell / Menu . open",
+    ])
+  })
+
+  it("for the first event, everything is new", () => {
+    expect(changeLines(undefined, { ui: [ui([], "x", 1)], stores: { a: 1 } })).toEqual([
+      "a  entry none → 1",
+      "+ x  1",
+    ])
+  })
+
+  it("says so when nothing changed", () => {
+    expect(changesText([])).toBe("Nothing in the state changed.")
+    expect(changesText(["a", "b"])).toBe("a\nb")
   })
 })
 
