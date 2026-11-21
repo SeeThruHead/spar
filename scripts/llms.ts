@@ -1,6 +1,9 @@
+import { expanded } from "./includes.ts"
+
 const root = new URL("..", import.meta.url).pathname
 
-const read = (path: string): Promise<string> => Bun.file(`${root}${path}`).text()
+const read = async (path: string): Promise<string> =>
+  expanded(await Bun.file(`${root}${path}`).text())
 
 const deeper = (markdown: string): string => markdown.replace(/^(#+) /gm, "#$1 ")
 

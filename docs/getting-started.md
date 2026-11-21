@@ -30,33 +30,7 @@ export default defineConfig({
 App state lives in stores. A store is a Schema for its state, an initial state, pure actions
 with a Schema for each payload, and named selectors with a Schema for what each gives.
 
-```ts
-import { Schema } from "effect"
-import { Store } from "spar"
-
-const State = Schema.Struct({ count: Schema.Finite })
-
-type State = typeof State.Type
-
-const initialState: State = { count: 0 }
-
-export class CounterStore extends Store.Tag<CounterStore>()("demo/counter/CounterStore", {
-  state: State,
-  initialState,
-  actions: {
-    incremented: Store.action(Schema.Struct({ by: Schema.Finite }), (state: State, { by }) => ({
-      count: state.count + by,
-    })),
-    reset: Store.action(Schema.Void, (): State => initialState),
-  },
-  selectors: {
-    count: Store.selector(Schema.Finite, (state: State) => state.count),
-    doubled: Store.selector(Schema.Finite, (state: State) => state.count * 2),
-  },
-}) {}
-```
-
-(`apps/demo/src/counter/CounterStore.ts`)
+<<< apps/demo/src/counter/CounterStore.ts
 
 ## A component
 
@@ -65,31 +39,7 @@ enhancers, each a small function that adds props: a store's values and commands,
 query, a key press. The last call is the view, written inline; its props are inferred from the
 enhancers, with nothing declared twice.
 
-```tsx
-import { compose, withStore } from "spar"
-import { CounterStore } from "./CounterStore.ts"
-
-export const Counter = compose(
-  withStore(CounterStore, (store) => ({
-    count: store.select.count,
-    doubled: store.select.doubled,
-    onIncrement: store.commands.incremented({ by: 1 }),
-    onReset: store.commands.reset(),
-  })),
-)((props) => (
-  <section aria-label="Counter">
-    <h2>Counter</h2>
-    <p>
-      Count <output aria-label="Count">{props.count}</output>, doubled{" "}
-      <output aria-label="Doubled">{props.doubled}</output>
-    </p>
-    <button onClick={props.onIncrement}>Add one</button>
-    <button onClick={props.onReset}>Reset</button>
-  </section>
-))
-```
-
-(`apps/demo/src/counter/Counter.tsx`)
+<<< apps/demo/src/counter/Counter.tsx
 
 The enhancers and the view run once, when the component mounts. A reactive value in the markup
 updates the one text node or attribute it sits in; nothing runs again. The component is named
@@ -143,8 +93,8 @@ const program = Effect.gen(function* () {
 Effect.runFork(program)
 ```
 
-A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
-it does not compile. `App.mount` only accepts a component with no errors left and a layer that
+A store's layer needs nothing from you: `App.mount` provides the one state its slot lives in. Leave
+the layer out and it does not compile. `App.mount` only accepts a component with no errors left and a layer that
 provides everything it needs. What a child written in JSX needs is not in its parent's type,
 because TypeScript gives every JSX expression the same type, so the Vite plugin checks it when you
 build: a child needing a service the mount's layer does not provide stops the build.

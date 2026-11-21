@@ -112,8 +112,8 @@ dropped at the wrong moment.
 
 The page and the backend share one typed contract over Effect RPC, one trace and one way to
 declare data. The same components render on a server and are picked up in the browser without
-being drawn again. This site is built that way: it is a Spar app, rendered on the server, and its
-search box is a query.
+being drawn again. This site is a Spar app: each page is drawn to HTML with `Renderer.html` when the
+site is built, the browser takes it over without drawing it again, and its search box is a query.
 
 Read on in [Getting started](/docs/getting-started), or see how Spar sits beside
 [React](/docs/from-react), [Foldkit](/docs/from-foldkit) and [Solid 2.0](/docs/beside-solid-2).

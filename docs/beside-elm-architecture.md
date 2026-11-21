@@ -36,8 +36,10 @@ and the backend (`docs/devtools-compared.md`).
 
 ## What Foldkit does better
 
-- **One value holds everything.** The whole app's state is one Model with one Schema. Spar has
-  several stores and UI state, joined by a log; no single value is the app.
+- **The one value is declared in one place.** Both hold the whole app's state in one value: Spar's
+  stores, components' own state and query caches are slots in one tree, read whole with
+  `State.current.snapshot` and rewound together. Foldkit declares that value as one Model with one
+  Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
 - **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
