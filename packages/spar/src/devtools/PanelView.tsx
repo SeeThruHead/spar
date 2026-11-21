@@ -243,39 +243,57 @@ export const BranchView = View.make(
   },
   ({ name, detail, current, onSwitch }) => (
     <li data-current={current}>
-      <button onClick={onSwitch} aria-pressed={current}>
+      <button onClick={onSwitch} aria-pressed={current} title={detail}>
         {name}
-      </button>{" "}
-      <span>{detail}</span>
+      </button>
     </li>
   ),
 )
 
-export const TimelineView = View.make(
-  "TimelineView",
+export const TravelView = View.make(
+  "TravelView",
   {
     position: Props.Reactive(Schema.String),
-    moments: Props.Element,
+    live: Props.Reactive(Schema.Boolean),
     branches: Props.Element,
     onBack: Props.Action,
     onForward: Props.Action,
     onLive: Props.Action,
     onFork: Props.Action,
   },
-  ({ position, moments, branches, onBack, onForward, onLive, onFork }) => (
-    <section aria-label="Everything that happened">
-      <h2>Everything that happened</h2>
-      <p>
-        <output aria-label="Timeline position">{position}</output>{" "}
-        <button onClick={onBack}>Earlier</button> <button onClick={onForward}>Later</button>{" "}
-        <button onClick={onLive}>Back to now</button>{" "}
-        <button onClick={onFork}>Fork from here</button>
-      </p>
-      <ul aria-label="Branches">{branches}</ul>
-      <ol>{moments}</ol>
-    </section>
+  ({ position, live, branches, onBack, onForward, onLive, onFork }) => (
+    <div role="group" aria-label="Time travel" data-travel="">
+      <button onClick={onBack} title="Step to the event before">
+        Earlier
+      </button>
+      <output
+        aria-label="Timeline position"
+        data-live={Reactive.map(live, (now) => (now ? "yes" : "no"))}
+      >
+        {position}
+      </output>
+      <button onClick={onForward} title="Step to the event after">
+        Later
+      </button>
+      <button onClick={onLive} disabled={live} title="Leave the past and follow what happens now">
+        Back to now
+      </button>
+      <button onClick={onFork} title="Start a branch from the event you are looking at">
+        Fork from here
+      </button>
+      <ul aria-label="Branches" data-branches="">
+        {branches}
+      </ul>
+    </div>
   ),
 )
+
+export const TimelineView = View.make("TimelineView", { moments: Props.Element }, ({ moments }) => (
+  <section aria-label="Everything that happened">
+    <h2>Everything that happened</h2>
+    <ol>{moments}</ol>
+  </section>
+))
 
 const veil = {
   position: "fixed",
@@ -446,6 +464,12 @@ const look = [
   "[data-spar-devtools-frame] { display: grid; height: 100%; grid-template: 'bar bar' 36px 'lanes lanes' auto 'events trace' minmax(0, 1fr) 'events detail' minmax(0, 32%) / minmax(0, 42%) minmax(0, 1fr) }",
   "@container (min-width: 1150px) { [data-spar-devtools-frame] { grid-template: 'bar bar bar' 36px 'lanes lanes lanes' auto 'events trace detail' minmax(0, 1fr) / 410px minmax(0, 1fr) 340px } }",
   "[data-grow] { flex: 1 }",
+  "[data-travel] { display: flex; align-items: center; gap: 4px; min-width: 0 }",
+  "[data-travel] output { min-width: 64px; padding: 2px 8px; border-radius: 4px; text-align: center; font-variant-numeric: tabular-nums; background: #2a2210; color: #f5c46b }",
+  "[data-travel] output[data-live=yes] { background: #10261a; color: #6fd39a }",
+  "[data-travel] button:disabled { opacity: 1; color: #6b7280; border-color: #262a33; cursor: default }",
+  "[data-branches] { display: flex; gap: 4px; margin: 0 0 0 8px; padding: 0 0 0 8px; list-style: none; border-left: 1px solid #262a33; overflow-x: auto }",
+  "[data-branches]:not(:has(li + li)) { display: none }",
   "[data-tabs] { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 6px 10px; background: #15181d; border-bottom: 1px solid #262a33 }",
   "[data-tab][hidden] { display: none }",
   "[data-area=lanes] { grid-area: lanes; max-height: 190px; overflow: auto; border-bottom: 1px solid #262a33; border-right: 0; background: #101216; padding: 0 }",
@@ -548,6 +572,7 @@ export const ToolsView = View.make(
     spanAbout: Props.Reactive(Schema.String),
     event: Props.Element,
     inspector: Props.Element,
+    travel: Props.Element,
     lanes: Props.Element,
     timeline: Props.Element,
     trace: Props.Element,
@@ -560,6 +585,7 @@ export const ToolsView = View.make(
     spanAbout,
     event,
     inspector,
+    travel,
     lanes,
     timeline,
     trace,
@@ -574,7 +600,7 @@ export const ToolsView = View.make(
         <div data-spar-devtools-frame="">
           <header data-area="bar">
             <strong>Spar</strong>
-            <small>events · trace · state</small>
+            {travel}
             <span data-grow="" />
             <button
               aria-pressed={lanesShown}

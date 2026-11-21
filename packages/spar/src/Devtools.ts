@@ -32,6 +32,7 @@ import {
   StoreView,
   BranchView,
   TimelineView,
+  TravelView,
   ToolsView,
   Tick as TickSchema,
   TraceView,
@@ -721,22 +722,8 @@ export const TimelinePanel = compose(
   }),
   Effect.fnUntraced(function* ({ onTrace, scrubbed }) {
     const registry = yield* Registry
-    const stepped = Effect.fnUntraced(function* (by: -1 | 1) {
-      yield* registry.step(by)
-
-      const moments = yield* registry.moments.get
-      const viewing = yield* registry.viewing.get
-      const traces = moments
-        .filter((moment) => moment.seq === viewing && moment.traceId !== "")
-        .map((moment) => moment.traceId)
-
-      yield* Effect.forEach(traces, (traceId) => run(onTrace(traceId)), { discard: true })
-    })
 
     return {
-      position: Reactive.map(registry.viewing, (viewing) =>
-        viewing === null ? "Now" : `At ${viewing}`,
-      ),
       moments: yield* pipe(
         registry.moments,
         Reactive.mapBy(
@@ -754,6 +741,31 @@ export const TimelinePanel = compose(
           }),
         ),
       ),
+    }
+  }),
+)(TimelineView)
+
+export const TravelPanel = compose(
+  withProps({ onTrace: Props.Callback(Schema.String) }),
+  Effect.fnUntraced(function* ({ onTrace }) {
+    const registry = yield* Registry
+    const stepped = Effect.fnUntraced(function* (by: -1 | 1) {
+      yield* registry.step(by)
+
+      const moments = yield* registry.moments.get
+      const viewing = yield* registry.viewing.get
+      const traces = moments
+        .filter((moment) => moment.seq === viewing && moment.traceId !== "")
+        .map((moment) => moment.traceId)
+
+      yield* Effect.forEach(traces, (traceId) => run(onTrace(traceId)), { discard: true })
+    })
+
+    return {
+      position: Reactive.map(registry.viewing, (viewing) =>
+        viewing === null ? "Now" : `At ${viewing}`,
+      ),
+      live: Reactive.map(registry.viewing, (viewing) => viewing === null),
       branches: yield* pipe(
         registry.branches,
         Reactive.mapBy(
@@ -773,7 +785,7 @@ export const TimelinePanel = compose(
       onFork: registry.fork,
     }
   }),
-)(TimelineView)
+)(TravelView)
 
 export const Component = Schema.Struct({
   name: Schema.String,
@@ -1249,6 +1261,7 @@ export const Tools = compose(
       event: yield* View.child(EventPanel, {}),
       inspector: yield* View.child(Inspector, {}),
       lanes: yield* View.child(LanesPanel, { shown: lanesShown, scrubbed, onTrace }),
+      travel: yield* View.child(TravelPanel, { onTrace }),
       timeline: yield* View.child(TimelinePanel, { onTrace, scrubbed }),
       trace: yield* View.child(TracePanel, { traceId: tracing, onSpan }),
       stores: yield* View.child(Panel, {}),

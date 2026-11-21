@@ -64,7 +64,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const position = (await page.getByLabel("Timeline position").textContent()) ?? ""
 
   await page.screenshot({ path: `${root}artifacts/devtools-timeline.png` })
-  await log.getByRole("button", { name: "Back to now" }).click()
+  await page.getByLabel("Time travel").getByRole("button", { name: "Back to now" }).click()
 
   const live = await page.getByRole("searchbox").first().inputValue()
 
@@ -182,7 +182,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   const rewoundNotes = (await scratch.getByLabel("Scratchpad count").textContent()) ?? ""
 
-  await log.getByRole("button", { name: "Fork from here" }).click()
+  await page.getByLabel("Time travel").getByRole("button", { name: "Fork from here" }).click()
   await noted("other")
 
   const forkedNotes = await scratch.getByRole("list").innerText()
