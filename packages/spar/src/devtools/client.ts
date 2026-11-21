@@ -33,6 +33,9 @@ const apart = <A, E, R>(tools: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =
     Effect.provideService(Timeline.Recorder, Option.none()),
   )
 
+export const reported = <A, E, R>(starting: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.tapCause(starting, (cause) => Effect.logError("The Spar devtools could not start", cause))
+
 const attach: Hook["attach"] = Effect.gen(function* () {
   const frame = yield* Frame
   const registry = yield* Effect.serviceOption(Devtools.Registry)
@@ -43,9 +46,7 @@ const attach: Hook["attach"] = Effect.gen(function* () {
     (found) => {
       found.follow(tree)
 
-      return apart(shown(found, frame.overlays)).pipe(
-        Effect.tapCause((cause) => Effect.logError("The Spar devtools could not start", cause)),
-      )
+      return reported(apart(shown(found, frame.overlays)))
     },
     {
       discard: true,

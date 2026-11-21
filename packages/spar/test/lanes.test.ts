@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { acrossLanes, lanesOf, seqAt, ticksDrawn } from "../src/Devtools.ts"
+import { acrossLanes, lanesOf, seqAt, summaryOfMoment, ticksDrawn } from "../src/Devtools.ts"
 import type { Moment } from "../src/Timeline.ts"
 
 const moment = (seq: number, kind: Moment["kind"], name: string): Moment => ({
@@ -23,6 +23,18 @@ const session: ReadonlyArray<Moment> = [
 const surface = (left: number, width: number, clientX: number) => ({
   clientX,
   currentTarget: { getBoundingClientRect: () => ({ left, width }) },
+})
+
+describe("an event's row", () => {
+  it("shows a call by its name alone, an event with nothing more by its name, and cuts long detail", () => {
+    expect(
+      summaryOfMoment({ ...moment(1, "call", "POST /rpc/"), detail: { method: "POST" } }),
+    ).toBe("POST /rpc/")
+    expect(summaryOfMoment(moment(2, "command", "a/b"))).toBe("a/b")
+    expect(summaryOfMoment({ ...moment(3, "ui", "Shell . draft"), detail: "x".repeat(100) })).toBe(
+      `Shell . draft "${"x".repeat(78)}…`,
+    )
+  })
 })
 
 describe("the lanes", () => {

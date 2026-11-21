@@ -475,7 +475,7 @@ const detailOfMoment = (moment: Timeline.Moment): string => {
   return shortened(Formatter.formatJson(moment.detail))
 }
 
-const summaryOfMoment = (moment: Timeline.Moment): string =>
+export const summaryOfMoment = (moment: Timeline.Moment): string =>
   `${moment.name} ${detailOfMoment(moment)}`.trim()
 
 export const detailOfBranch = (branch: Branch): string =>
@@ -497,7 +497,7 @@ export type Lane = { readonly slot: string; readonly ticks: ReadonlyArray<Tick> 
 const slotOf = (moment: Timeline.Moment): string => {
   if (moment.kind === "route") return "router"
   if (moment.kind === "call") return "calls"
-  if (moment.kind === "ui") return moment.name.split(" . ")[0] ?? moment.name
+  if (moment.kind === "ui") return moment.name.replace(/ \. .*$/, "")
 
   const parts = moment.name.split("/")
 
@@ -617,15 +617,15 @@ export const LanesPanel = compose(
       onLetGo: Effect.fnUntraced(function* (event: Surface) {
         const moments = yield* registry.moments.get
         const seq = seqAt(moments, event)
-        const traces = moments
-          .filter((moment) => moment.seq === seq)
-          .map((moment) => moment.traceId)
+        const chosen = moments.filter((moment) => moment.seq === seq)
 
         return [
           UiState.set(scrubbing, false),
           UiState.set(scrubbed, null),
-          ...(seq === null ? [] : [registry.travelTo(seq)]),
-          ...traces.filter((id) => id !== "").map((id) => onTrace(id)),
+          ...chosen.map((moment) => registry.travelTo(moment.seq)),
+          ...chosen
+            .filter((moment) => moment.traceId !== "")
+            .map((moment) => onTrace(moment.traceId)),
         ]
       }),
     }

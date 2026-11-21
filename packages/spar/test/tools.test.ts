@@ -3,7 +3,7 @@ import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { App, Router, State as OneState, Store, UiState, compose, uses } from "spar"
-import { install, uninstall } from "spar/devtools/client"
+import { install, reported, uninstall } from "spar/devtools/client"
 import { FetchHttpClient } from "effect/http"
 import * as Cell from "../src/internal/cell.ts"
 import { sparDevtools } from "spar/devtools/vite"
@@ -180,6 +180,66 @@ const listed = (): ReadonlyArray<string | null | undefined> =>
   [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map((item) =>
     item.querySelector("[data-what]")?.textContent?.trim(),
   )
+
+const rowsScrubbed = (): number =>
+  document.querySelectorAll('[data-moment][data-scrubbed="yes"]').length
+
+const lanesSurface = (): Element => {
+  const found = document.querySelector("[data-lanes-surface]")
+  if (found === null) throw new Error("no lanes")
+
+  return found
+}
+
+describe("the lanes", () => {
+  it.live("dragging across them lights up an event, and letting go shows that moment", () =>
+    withTools(
+      Effect.gen(function* () {
+        yield* mounted
+        yield* Testing.click("button", "Devtools")
+        yield* Testing.fill("textbox", "Draft", "hi")
+        yield* Testing.click("button", "Add")
+        yield* Testing.eventually(() => expect(listed().length).toBeGreaterThan(1))
+
+        yield* Effect.sync(() => fireEvent.pointerMove(lanesSurface(), { clientX: 0 }))
+        expect(rowsScrubbed()).toBe(0)
+
+        yield* Effect.sync(() => fireEvent.pointerDown(lanesSurface(), { clientX: 0 }))
+        yield* Testing.eventually(() => expect(rowsScrubbed()).toBe(1))
+        yield* Effect.sync(() => fireEvent.pointerMove(lanesSurface(), { clientX: 0 }))
+        yield* Effect.sync(() => fireEvent.pointerUp(lanesSurface(), { clientX: 0 }))
+        yield* Testing.eventually(() => {
+          expect(rowsScrubbed()).toBe(0)
+          expect(
+            document.querySelector('[data-moment][aria-current="true"] [data-seq]')?.textContent,
+          ).toBe("1")
+        })
+        yield* Testing.click("button", "Back to now")
+      }).pipe(Effect.scoped),
+    ),
+  )
+
+  it.live("hide and show from the bar", () =>
+    withTools(
+      Effect.gen(function* () {
+        yield* mounted
+        yield* Testing.click("button", "Devtools")
+        yield* Testing.click("button", "Lanes")
+        yield* Testing.eventually(() =>
+          expect(document.querySelector('[aria-label="Lanes"]')?.hasAttribute("hidden")).toBe(true),
+        )
+      }).pipe(Effect.scoped),
+    ),
+  )
+
+  it.effect("a devtools start that fails is logged and still fails", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(reported(Effect.fail("no tools")))
+
+      expect(exit._tag).toBe("Failure")
+    }),
+  )
+})
 
 describe("devtools an app did not ask for", () => {
   it.live("once installed, an app that never mentions them gets the tools and the one log", () =>
