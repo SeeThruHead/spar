@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { NotKnown } from "../src/api.ts"
-import type { Hit, Page } from "../src/api.ts"
+import { NotKnown } from "./api.ts"
+import type { Hit, Page } from "./api.ts"
 import type { Content, Section } from "./content.ts"
 
 const wordsOf = (text: string): ReadonlyArray<string> =>
@@ -35,13 +35,13 @@ export const pageIn =
     )
 
 export const searchIn =
-  (content: Content) =>
+  (sections: ReadonlyArray<Section>) =>
   (text: string): Effect.Effect<ReadonlyArray<Hit>> =>
     Effect.sync(() => {
       const words = wordsOf(text)
       if (words.length === 0) return []
 
-      return content.sections
+      return sections
         .map((section) => ({ section, score: scoreOf(section, words) }))
         .filter((scored) => scored.score > 0)
         .toSorted((left, right) => right.score - left.score)

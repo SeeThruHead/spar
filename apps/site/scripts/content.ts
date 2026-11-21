@@ -1,6 +1,6 @@
 import type { Heading, Page } from "../src/api.ts"
 import { entries } from "../src/nav.ts"
-import type { Content, Section } from "../server/content.ts"
+import type { Content, Section } from "../src/content.ts"
 import { drawing } from "./diagrams.ts"
 import type { Drawing } from "./diagrams.ts"
 import { highlight, unescaped } from "./highlight.ts"

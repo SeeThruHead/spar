@@ -20,6 +20,12 @@ const content = await built()
 
 await Bun.write(`${root}dist/site.css`, `${components}\n${own}`)
 await Bun.write(`${root}dist/content.json`, JSON.stringify(content))
+await Bun.write(`${root}dist/search.json`, JSON.stringify(content.sections))
+await Promise.all(
+  content.pages.map((page) =>
+    Bun.write(`${root}dist/pages/${page.slug}.json`, JSON.stringify(page)),
+  ),
+)
 
 console.log(
   `Built the client, the styles and ${content.pages.length} pages (${content.sections.length} sections to search) into dist/`,

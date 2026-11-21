@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Page } from "../src/api.ts"
+import { Page } from "./api.ts"
 
 export const Section = Schema.Struct({
   slug: Schema.String,

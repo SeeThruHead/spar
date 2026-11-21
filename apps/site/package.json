@@ -9,6 +9,7 @@
     "browser:install": "playwright install --with-deps chromium",
     "dev": "bun run build && bun scripts/serve.ts",
     "look": "bun run build && bun scripts/look.ts",
+    "static": "bun run build && bun scripts/static.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
