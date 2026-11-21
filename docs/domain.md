@@ -38,12 +38,26 @@ For an app with no backend, alchemy's in-memory runtime decides and folds in the
 
 <<< packages/domain/test/store.test.ts#local
 
+## Behind an Api
+
+When the aggregate runs on a server, the page reaches it through the model's alchemy Api.
+`Aggregates.remote` takes the aggregate, one of the model's views over it, and the Api client:
+
+<<< packages/domain/test/remote.test.ts#counterOver
+
+Each command goes to the Api by its name with a fresh `commandId`, so the server applies it once
+however often it is retried. The Api answers with the stream and version it committed, not the
+events, so the store then reads the view at that version and writes the slot with what it says.
+A refusal fails `send` with the command's typed rejection, as it does in the browser.
+
+The test gives the client alchemy's in-process protocol, which runs the real Api path in memory.
+An app gives it `protocolHttp` or `protocolWebSocket` with the server's address instead:
+
+<<< packages/domain/test/remote.test.ts#served
+
 ## Not done yet
 
-- A store over a server's aggregate. Alchemy's API client sends a command by name
-  (`api.Increment(input)`) and answers with the stream and version it committed, not the
-  events, so a remote store has to take its state from one of the model's views
-  (`api.CounterView.watch(id)`) rather than folding events itself.
-- That remote store would send its commands through an `Outbox.channel` with alchemy's
-  `commandId` as the idempotency key, so a command survives a closed tab or a dropped connection
-  and is never applied twice.
+- The remote store reads the view after each command. Following `api.CounterView.watch(id)`
+  instead would also show other people's commands as they land.
+- Commands are sent at once. Sending them through an `Outbox.channel`, with the `commandId` as
+  its key, would let a command survive a closed tab or a dropped connection.

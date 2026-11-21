@@ -57,4 +57,21 @@ export class Counter extends Domain.Aggregate("Counter", {
   },
 }) {}
 
-export class CounterModel extends Domain.Model("CounterModel", { aggregates: [Counter] }) {}
+export class CounterView extends Domain.View("CounterView", {
+  from: [Counter],
+  key: Counter,
+  state: Counting,
+  initial: { count: 0, phase: "idle" },
+  evolve: {
+    Incremented: (counter) => ({ ...counter, count: counter.count + 1 }),
+    ResetStarted: (counter) => ({ ...counter, phase: "resetting" as const }),
+    ResetFinished: () => ({ count: 0, phase: "idle" as const }),
+  },
+}) {}
+
+export class CounterModel extends Domain.Model("CounterModel", {
+  aggregates: [Counter],
+  views: [CounterView],
+}) {}
+
+export class CounterApi extends Domain.Api("CounterApi", { model: CounterModel }) {}

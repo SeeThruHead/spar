@@ -1,5 +1,6 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate"
 import { Effect, Schema } from "effect"
+import { SecureRandom } from "effect/crypto"
 import type { Context } from "effect"
 import { State } from "spar"
 
@@ -45,6 +46,69 @@ export const folded = <S, I>(
       ),
     ),
   )
+
+type Written = { readonly stream: string; readonly version: number }
+
+type Tagged = { readonly _tag: string }
+
+type CommandOfTag<Cmd extends Tagged, T> = Extract<Cmd, { readonly _tag: T }>
+
+export type Senders<Cmd extends Tagged, R> = {
+  readonly [T in Cmd["_tag"]]: (
+    input: CommandOfTag<Cmd, T>,
+    options: { readonly commandId: string },
+  ) => Effect.Effect<Written, R>
+}
+
+type SentOf<Def extends Aggregate.AnyDefinition> = Extract<CommandOf<Def>, Tagged>
+
+type Viewed<S, Id, E> = {
+  readonly get: (
+    key: Id,
+    options?: { readonly atLeast?: ReadonlyArray<Written> },
+  ) => Effect.Effect<S | null, E>
+}
+
+type RejectionsOf<C> = {
+  readonly [K in keyof C]: C[K] extends (...args: never[]) => Effect.Effect<unknown, infer X>
+    ? X
+    : never
+}[keyof C]
+
+export type Remote<Def extends Aggregate.AnyDefinition, Id, E, C> = {
+  readonly aggregate: Pick<Aggregated<Def, Id>, "aggregateName" | "definition">
+  readonly view: Viewed<StateOf<Def>, Id, E>
+  readonly commands: C & Senders<SentOf<Def>, RejectionsOf<C>>
+}
+
+export const remote = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefinition, Id, E, C>(
+  over: Remote<Def, Id, E, C>,
+  id: Id,
+) {
+  const { aggregateName, definition } = over.aggregate
+  const state = yield* State.current
+  const random = yield* SecureRandom.SecureRandom
+  const readAfter = (writes: ReadonlyArray<Written>) =>
+    Effect.map(over.view.get(id, { atLeast: writes }), (found) => found ?? definition.initial)
+  const first = yield* readAfter([])
+  const slot = yield* state.slot([`${aggregateName}/${String(id)}`], definition.state, first)
+
+  const send = <T extends SentOf<Def>["_tag"]>(
+    command: CommandOfTag<SentOf<Def>, T> & { readonly _tag: T },
+  ) =>
+    Effect.flatMap(random.uuidV7(), (commandId) => {
+      const senders: Senders<SentOf<Def>, RejectionsOf<C>> = over.commands
+      const sender = senders[command._tag]
+
+      return Effect.tap(sender(command, { commandId }), (receipt) =>
+        Effect.flatMap(readAfter([receipt]), (now) =>
+          slot.set(command._tag, now, { version: receipt.version }),
+        ),
+      )
+    })
+
+  return { state: slot.value, send }
+})
 
 export const store = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefinition, Id>(
   aggregate: Aggregated<Def, Id>,

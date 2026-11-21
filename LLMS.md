@@ -3484,15 +3484,70 @@ const local = Layer.mergeAll(
 
 (`packages/domain/test/store.test.ts`)
 
+### Behind an Api
+
+When the aggregate runs on a server, the page reaches it through the model's alchemy Api.
+`Aggregates.remote` takes the aggregate, one of the model's views over it, and the Api client:
+
+```ts
+const counterOver = Effect.gen(function* () {
+  const api = yield* CounterApi.Client
+
+  return { aggregate: Counter, view: api.CounterView, commands: api }
+})
+
+describe("an aggregate behind an Api as a store", () => {
+  it.effect("sends each command through the Api and reads the state back from the view", () =>
+    Effect.gen(function* () {
+      const over = yield* counterOver
+      const counter = yield* Aggregates.remote(over, "r-1")
+
+      expect(yield* counter.state.get).toEqual({ count: 0, phase: "idle" })
+
+      yield* counter.send(new Increment({ counterId: "r-1" }))
+      yield* counter.send(new Increment({ counterId: "r-1" }))
+
+      expect(yield* counter.state.get).toEqual({ count: 2, phase: "idle" })
+
+      yield* counter.send(new Reset({ counterId: "r-1" }))
+
+      const refused = yield* Effect.flip(counter.send(new Increment({ counterId: "r-1" })))
+
+      expect(refused._tag).toBe("ResetInProgress")
+      expect(yield* counter.state.get).toEqual({ count: 2, phase: "resetting" })
+    }).pipe(Effect.provide(served), Effect.scoped),
+  )
+})
+```
+
+(`packages/domain/test/remote.test.ts`)
+
+Each command goes to the Api by its name with a fresh `commandId`, so the server applies it once
+however often it is retried. The Api answers with the stream and version it committed, not the
+events, so the store then reads the view at that version and writes the slot with what it says.
+A refusal fails `send` with the command's typed rejection, as it does in the browser.
+
+The test gives the client alchemy's in-process protocol, which runs the real Api path in memory.
+An app gives it `protocolHttp` or `protocolWebSocket` with the server's address instead:
+
+```ts
+const served = Layer.mergeAll(
+  CounterApi.layerClientInProcess.pipe(
+    Layer.provide(CounterModel.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory))),
+  ),
+  State.layer,
+  SecureRandom.layerWebCrypto,
+)
+```
+
+(`packages/domain/test/remote.test.ts`)
+
 ### Not done yet
 
-- A store over a server's aggregate. Alchemy's API client sends a command by name
-  (`api.Increment(input)`) and answers with the stream and version it committed, not the
-  events, so a remote store has to take its state from one of the model's views
-  (`api.CounterView.watch(id)`) rather than folding events itself.
-- That remote store would send its commands through an `Outbox.channel` with alchemy's
-  `commandId` as the idempotency key, so a command survives a closed tab or a dropped connection
-  and is never applied twice.
+- The remote store reads the view after each command. Following `api.CounterView.watch(id)`
+  instead would also show other people's commands as they land.
+- Commands are sent at once. Sending them through an `Outbox.channel`, with the `commandId` as
+  its key, would let a command survive a closed tab or a dropped connection.
 
 
 # Coming from React
