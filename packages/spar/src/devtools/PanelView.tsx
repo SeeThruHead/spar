@@ -13,11 +13,18 @@ export const MomentView = View.make(
     summary: Props.Reactive(Schema.String),
     trace: Props.Reactive(Schema.String),
     current: Props.Reactive(Schema.Boolean),
+    scrubbed: Props.Reactive(Schema.Boolean),
     onJump: Props.Action,
     onTrace: Props.Action,
   },
-  ({ seq, kind, summary, trace, current, onJump, onTrace }) => (
-    <li aria-current={current} data-kind={kind} data-moment="" onClick={[onJump, onTrace]}>
+  ({ seq, kind, summary, trace, current, scrubbed, onJump, onTrace }) => (
+    <li
+      aria-current={current}
+      data-scrubbed={Reactive.map(scrubbed, (now) => (now ? "yes" : "no"))}
+      data-kind={kind}
+      data-moment=""
+      onClick={[onJump, onTrace]}
+    >
       <span data-seq="">{seq}</span>
       <span data-what="">
         <i data-dot="" /> <span data-kind-name="">{kind}</span> <code>{summary}</code>
@@ -134,6 +141,61 @@ export const TraceView = View.make(
       <ol aria-label="Spans" data-spans="">
         {bars}
       </ol>
+    </section>
+  ),
+)
+
+export const Tick = Schema.Struct({
+  seq: Schema.Int,
+  kind: Schema.String,
+  at: Schema.String,
+})
+
+export const LaneView = View.make(
+  "LaneView",
+  { slot: Schema.String, ticks: Props.Element },
+  ({ slot, ticks }) => (
+    <li data-lane="">
+      <span data-lane-name="">{slot}</span>
+      <span data-lane-track="">{ticks}</span>
+    </li>
+  ),
+)
+
+export const TickView = View.make(
+  "TickView",
+  { kind: Props.Reactive(Schema.String), at: Props.Reactive(Schema.String) },
+  ({ kind, at }) => <i data-tick="" data-kind={kind} style={{ left: at }} />,
+)
+
+export const LanesView = View.make(
+  "LanesView",
+  {
+    shown: Props.Reactive(Schema.Boolean),
+    lanes: Props.Element,
+    marker: Props.Reactive(Schema.String),
+    scrubAt: Props.Reactive(Schema.String),
+    scrubbing: Props.Reactive(Schema.Boolean),
+    onScrub: Props.Handler("pointermove", "div"),
+    onStart: Props.Handler("pointerdown", "div"),
+    onLetGo: Props.Handler("pointerup", "div"),
+  },
+  ({ shown, lanes, marker, scrubAt, scrubbing, onScrub, onStart, onLetGo }) => (
+    <section aria-label="Lanes" data-area="lanes" hidden={Reactive.map(shown, (now) => !now)}>
+      <div
+        data-lanes-surface=""
+        onPointermove={onScrub}
+        onPointerdown={onStart}
+        onPointerup={onLetGo}
+      >
+        <ul>{lanes}</ul>
+        <i data-marker="" style={{ left: marker }} />
+        <i
+          data-scrubber=""
+          hidden={Reactive.map(scrubbing, (now) => !now)}
+          style={{ left: scrubAt }}
+        />
+      </div>
     </section>
   ),
 )
@@ -348,8 +410,20 @@ export const InspectorView = View.make(
 const look = [
   "[data-spar-devtools] * { box-sizing: border-box }",
   "[data-spar-devtools-sheet] { position: fixed; inset: 0 0 0 auto; width: clamp(760px, 62vw, 1400px); container-type: inline-size; background: #121418; color: #d6d9e0; border-left: 1px solid #262a33; box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35); overflow: hidden; font: 12.5px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif }",
-  "[data-spar-devtools-frame] { display: grid; height: 100%; grid-template: 'bar bar' 36px 'events trace' minmax(0, 1fr) 'events detail' minmax(0, 40%) / minmax(0, 42%) minmax(0, 1fr) }",
-  "@container (min-width: 1150px) { [data-spar-devtools-frame] { grid-template: 'bar bar bar' 36px 'events trace detail' minmax(0, 1fr) / 410px minmax(0, 1fr) 340px } }",
+  "[data-spar-devtools-frame] { display: grid; height: 100%; grid-template: 'bar bar' 36px 'lanes lanes' auto 'events trace' minmax(0, 1fr) 'events detail' minmax(0, 40%) / minmax(0, 42%) minmax(0, 1fr) }",
+  "@container (min-width: 1150px) { [data-spar-devtools-frame] { grid-template: 'bar bar bar' 36px 'lanes lanes lanes' auto 'events trace detail' minmax(0, 1fr) / 410px minmax(0, 1fr) 340px } }",
+  "[data-grow] { flex: 1 }",
+  "[data-area=lanes] { grid-area: lanes; max-height: 190px; overflow: auto; border-bottom: 1px solid #262a33; border-right: 0; background: #101216; padding: 0 }",
+  "[data-area=lanes][hidden] { display: none }",
+  "[data-lanes-surface] { position: relative; cursor: ew-resize; user-select: none; touch-action: none }",
+  "[data-lane] { display: grid; grid-template-columns: 180px minmax(0, 1fr); height: 18px; border-bottom: 1px solid #191c22 }",
+  "[data-lane-name] { padding: 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a91a0; font: 11px/18px ui-monospace, Menlo, monospace }",
+  "[data-lane-track] { position: relative; margin-right: 12px }",
+  "[data-tick] { position: absolute; top: 4px; width: 6px; height: 10px; margin-left: -3px; border-radius: 2px; background: #6ea8fe }",
+  "[data-tick][data-kind=ui] { background: #c39bff } [data-tick][data-kind=route] { background: #f0b45a } [data-tick][data-kind=data] { background: #4fd1c5 } [data-tick][data-kind=call] { background: #8bd17c } [data-tick][data-kind=noticed], [data-tick][data-kind=refused] { background: #ff8a94 }",
+  "[data-marker], [data-scrubber] { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; pointer-events: none }",
+  "[data-marker] { background: #ffffff; opacity: 0.85 } [data-scrubber] { background: #f0b45a }",
+  "[data-moment][data-scrubbed=yes] { background: #3a2e17; color: #fff }",
   "[data-spar-devtools-sheet][hidden] { display: none }",
   "html:has([data-spar-devtools-sheet]:not([hidden])) body { margin-inline-end: clamp(760px, 62vw, 1400px) }",
   "@media (max-width: 1000px) { [data-spar-devtools-sheet] { inset: auto 0 0 0; width: 100%; height: 60vh; border-left: 0; border-top: 1px solid #262a33 } html:has([data-spar-devtools-sheet]:not([hidden])) body { margin-inline-end: 0; margin-block-end: 60vh } }",
@@ -427,12 +501,14 @@ export const ToolsView = View.make(
   "ToolsView",
   {
     open: Props.State(Schema.Boolean),
+    lanesShown: Props.State(Schema.Boolean),
     inspector: Props.Element,
+    lanes: Props.Element,
     timeline: Props.Element,
     trace: Props.Element,
     stores: Props.Element,
   },
-  ({ open, inspector, timeline, trace, stores }) => (
+  ({ open, lanesShown, inspector, lanes, timeline, trace, stores }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
       <style>{look}</style>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
@@ -443,7 +519,16 @@ export const ToolsView = View.make(
           <header data-area="bar">
             <strong>Spar</strong>
             <small>events · trace · state</small>
+            <span data-grow="" />
+            <button
+              aria-pressed={lanesShown}
+              title="Show or hide the lanes: one row per slot, a tick per event; drag across them to scrub"
+              onClick={UiState.update(lanesShown, (shown) => !shown)}
+            >
+              Lanes
+            </button>
           </header>
+          {lanes}
           <div data-area="events">{timeline}</div>
           <div data-area="trace">{trace}</div>
           <div data-area="detail">

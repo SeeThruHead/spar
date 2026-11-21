@@ -22,6 +22,8 @@ import {
   EntryView,
   FactView,
   InspectorView,
+  LaneView,
+  LanesView,
   MomentView,
   OutboxView,
   OutlineView,
@@ -30,6 +32,8 @@ import {
   BranchView,
   TimelineView,
   ToolsView,
+  Tick as TickSchema,
+  TickView,
   TraceView,
   VeilView,
 } from "./devtools/PanelView.tsx"
@@ -483,9 +487,149 @@ const neighbour = (
 ): number | null =>
   seqs.at(Math.max((viewing === null ? seqs.length : seqs.indexOf(viewing)) + by, 0)) ?? null
 
+type Tick = typeof TickSchema.Type
+
+export type Lane = { readonly slot: string; readonly ticks: ReadonlyArray<Tick> }
+
+const slotOf = (moment: Timeline.Moment): string => {
+  if (moment.kind === "route") return "router"
+  if (moment.kind === "call") return "calls"
+  if (moment.kind === "ui") return moment.name.split(" . ")[0] ?? moment.name
+
+  const parts = moment.name.split("/")
+
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : moment.name
+}
+
+const fractionOf = (index: number, count: number): number =>
+  count <= 1 ? 0.5 : index / (count - 1)
+
+export const lanesOf = (moments: ReadonlyArray<Timeline.Moment>): ReadonlyArray<Lane> => {
+  const ticked = moments.map((moment, index) => ({
+    slot: slotOf(moment),
+    tick: {
+      seq: moment.seq,
+      kind: moment.kind,
+      at: `${(fractionOf(index, moments.length) * 100).toFixed(2)}%`,
+    },
+  }))
+
+  return [...new Set(ticked.map((each) => each.slot))].map((slot) => ({
+    slot,
+    ticks: ticked.filter((each) => each.slot === slot).map((each) => each.tick),
+  }))
+}
+
+const laneName = 180
+
+const laneEnd = 12
+
+export const acrossLanes = (
+  moments: ReadonlyArray<Timeline.Moment>,
+  seq: number | null,
+): string => {
+  const index =
+    seq === null ? moments.length - 1 : moments.findIndex((moment) => moment.seq === seq)
+  const fraction = fractionOf(Math.max(index, 0), moments.length)
+
+  return `calc(${laneName}px + (100% - ${laneName + laneEnd}px) * ${fraction.toFixed(4)})`
+}
+
+type Surface = { readonly clientX: number; readonly currentTarget: HTMLDivElement }
+
+export const seqAt = (moments: ReadonlyArray<Timeline.Moment>, event: Surface): number | null => {
+  const box = event.currentTarget.getBoundingClientRect()
+  const fraction =
+    (event.clientX - box.left - laneName) / Math.max(box.width - laneName - laneEnd, 1)
+  const index = Math.round(Math.min(Math.max(fraction, 0), 1) * Math.max(moments.length - 1, 0))
+
+  return moments[index]?.seq ?? null
+}
+
+const LaneRow = compose(
+  withProps({ slot: Schema.String, ticks: Props.Reactive(Schema.Array(TickSchema)) }),
+  Effect.fnUntraced(function* ({ slot, ticks }) {
+    return {
+      slot,
+      ticks: yield* pipe(
+        ticks,
+        Reactive.mapBy(
+          (tick: Tick) => String(tick.seq),
+          TickView,
+          (tick) => ({
+            kind: Reactive.map(tick, (now) => now.kind),
+            at: Reactive.map(tick, (now) => now.at),
+          }),
+        ),
+      ),
+    }
+  }),
+)(LaneView)
+
+export const LanesPanel = compose(
+  withProps({
+    shown: Props.Reactive(Schema.Boolean),
+    scrubbed: Props.State(Schema.NullOr(Schema.Int)),
+    onTrace: Props.Callback(Schema.String),
+  }),
+  Effect.fnUntraced(function* ({ shown, scrubbed, onTrace }) {
+    const registry = yield* Registry
+    const scrubbing = yield* UiState.make("scrubbing", Schema.Boolean, false)
+    const viewed = yield* Reactive.zip(registry.moments, registry.viewing)
+    const scrubbedAt = yield* Reactive.zip(registry.moments, scrubbed)
+    const pointed = (event: Surface) =>
+      Effect.map(registry.moments.get, (moments) => seqAt(moments, event))
+
+    return {
+      shown,
+      scrubbing,
+      marker: Reactive.map(viewed, ([moments, viewing]) => acrossLanes(moments, viewing)),
+      scrubAt: Reactive.map(scrubbedAt, ([moments, seq]) => acrossLanes(moments, seq)),
+      lanes: yield* pipe(
+        Reactive.map(registry.moments, lanesOf),
+        Reactive.mapBy(
+          (lane: Lane) => lane.slot,
+          LaneRow,
+          (lane, slot) => ({ slot, ticks: Reactive.map(lane, (now) => now.ticks) }),
+        ),
+      ),
+      onStart: (event: Surface) =>
+        Effect.map(pointed(event), (seq) => [
+          UiState.set(scrubbing, true),
+          UiState.set(scrubbed, seq),
+        ]),
+      onScrub: Effect.fnUntraced(function* (event: Surface) {
+        const dragging = yield* scrubbing.get
+        if (!dragging) return
+
+        const seq = yield* pointed(event)
+
+        return UiState.set(scrubbed, seq)
+      }),
+      onLetGo: Effect.fnUntraced(function* (event: Surface) {
+        const moments = yield* registry.moments.get
+        const seq = seqAt(moments, event)
+        const traces = moments
+          .filter((moment) => moment.seq === seq)
+          .map((moment) => moment.traceId)
+
+        return [
+          UiState.set(scrubbing, false),
+          UiState.set(scrubbed, null),
+          ...(seq === null ? [] : [registry.travelTo(seq)]),
+          ...traces.filter((id) => id !== "").map((id) => onTrace(id)),
+        ]
+      }),
+    }
+  }),
+)(LanesView)
+
 export const TimelinePanel = compose(
-  withProps({ onTrace: Props.Callback(Schema.String) }),
-  Effect.fnUntraced(function* ({ onTrace }) {
+  withProps({
+    onTrace: Props.Callback(Schema.String),
+    scrubbed: Props.Reactive(Schema.NullOr(Schema.Int)),
+  }),
+  Effect.fnUntraced(function* ({ onTrace, scrubbed }) {
     const registry = yield* Registry
     const stepped = Effect.fnUntraced(function* (by: -1 | 1) {
       yield* registry.step(by)
@@ -514,6 +658,7 @@ export const TimelinePanel = compose(
             summary: Reactive.map(moment, summaryOfMoment),
             trace: Reactive.map(moment, (now) => now.traceId),
             current: Reactive.map(registry.viewing, (viewing) => String(viewing) === seq),
+            scrubbed: Reactive.map(scrubbed, (at) => String(at) === seq),
             onJump: registry.travelTo(Number(seq)),
             onTrace: Effect.flatMap(moment.get, (now) => run(onTrace(now.traceId))),
           }),
@@ -966,13 +1111,16 @@ export const TracePanel = compose(
 export const Tools = compose(
   Effect.fnUntraced(function* () {
     const tracing = yield* UiState.make("tracing", Schema.String, "")
+    const scrubbed = yield* UiState.make("scrubbed", Schema.NullOr(Schema.Int), null)
+    const lanesShown = yield* UiState.make("lanes", Schema.Boolean, true)
+    const onTrace = (traceId: string) => UiState.set(tracing, traceId)
 
     return {
       open: yield* UiState.make("open", Schema.Boolean, false),
+      lanesShown,
       inspector: yield* View.child(Inspector, {}),
-      timeline: yield* View.child(TimelinePanel, {
-        onTrace: (traceId) => UiState.set(tracing, traceId),
-      }),
+      lanes: yield* View.child(LanesPanel, { shown: lanesShown, scrubbed, onTrace }),
+      timeline: yield* View.child(TimelinePanel, { onTrace, scrubbed }),
       trace: yield* View.child(TracePanel, { traceId: tracing }),
       stores: yield* View.child(Panel, {}),
     }
