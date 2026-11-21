@@ -44,6 +44,7 @@ import * as Outbox from "./Outbox.ts"
 import * as Reactive from "./Reactive.ts"
 import * as Store from "./Store.ts"
 import * as Timeline from "./Timeline.ts"
+import * as Shown from "./internal/props.ts"
 import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
 import * as Trees from "./internal/uiTrees.ts"
@@ -52,14 +53,14 @@ import { compose, withProps } from "./Compose.ts"
 
 type OutboxService = Context.Service.Shape<typeof Outbox.Outbox>
 
-export const InspectedStore = Props.kind(
+export const InspectedStore = Shown.kind(
   (value): value is Store.Inspected => Predicate.hasProperty(value, "travelTo"),
-  Props.named("store"),
+  Shown.named("store"),
 )
 
-export const OutboxShown = Props.kind(
+export const OutboxShown = Shown.kind(
   (value): value is OutboxService => Predicate.hasProperty(value, "persist"),
-  Props.named("outbox"),
+  Shown.named("outbox"),
 )
 
 export const Branch = Schema.Struct({
@@ -549,7 +550,7 @@ const componentOf = (seen: Seen, placed: Placed, snapshot: UiState.Snapshot): Co
   place: placed.path.join(" / "),
   services: placed.services,
   recovers: seen.recovers,
-  props: Props.allShown(seen.fields, seen.props),
+  props: Shown.allShown(seen.fields, seen.props),
   state: Object.fromEntries(
     snapshot
       .filter((entry) => samePath(entry.path, placed.path))
@@ -622,7 +623,7 @@ const detailsOf = (
     onNone: () => "None: a view cannot reach a service",
     onSome: (placed) => placed.services.join(", "),
   }),
-  props: factsOf(Props.allShown(seen.fields, seen.props), seen.props),
+  props: factsOf(Shown.allShown(seen.fields, seen.props), seen.props),
   recovers: seen.recovers.join(". "),
   state: Option.match(seen.placed, {
     onNone: () => [],

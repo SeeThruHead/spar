@@ -162,8 +162,8 @@ not data has a Schema of its own kind:
 | `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element                                                                 |
 | `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits                                                                 |
 
-`Props.kind(guard, show)` makes one for a type of your own. `Props.allShown(fields, props)` gives a
-view's props as plain values, which is what the inspector and the MCP tools read.
+For a type of your own, `Schema.declare(guard)` is a prop kind like any other. The inspector and
+the MCP tools show each prop as plain JSON where its Schema can encode it.
 
 ## Markup
 

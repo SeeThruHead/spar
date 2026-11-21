@@ -6,6 +6,7 @@ import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { check } from "spar/transform/check"
 import * as Cell from "../src/internal/cell.ts"
+import { allShown, shown } from "../src/internal/props.ts"
 import { backedBy, fromCell } from "../src/internal/reactive.ts"
 import type { Kept } from "../src/internal/uiTree.ts"
 import { BadgeView, CardView } from "./made.tsx"
@@ -65,7 +66,7 @@ describe("a view made from a Schema of its props", () => {
 
       expect(CardView.displayName).toBe("Card")
       expect(
-        Props.allShown(CardView.props, {
+        allShown(CardView.props, {
           title: Reactive.succeed("Notes"),
           draft: Reactive.succeed("typed"),
           count: 2,
@@ -80,15 +81,15 @@ describe("a view made from a Schema of its props", () => {
         onSave: "action",
         onPick: "callback",
       })
-      expect(Props.allShown(BadgeView.props, { text: "x", tone: "loud" })).toEqual({
+      expect(allShown(BadgeView.props, { text: "x", tone: "loud" })).toEqual({
         text: "x",
         tone: "loud",
       })
-      expect(Props.allShown(BadgeView.props, { text: 4 })).toEqual({ tone: null })
-      expect(Props.allShown(BadgeView.props, null)).toEqual({ tone: null })
-      expect(Option.isNone(Props.shown(Props.Reactive(Schema.String), "plain"))).toBe(true)
+      expect(allShown(BadgeView.props, { text: 4 })).toEqual({ tone: null })
+      expect(allShown(BadgeView.props, null)).toEqual({ tone: null })
+      expect(Option.isNone(shown(Props.Reactive(Schema.String), "plain"))).toBe(true)
       expect(
-        Props.allShown(
+        allShown(
           { title: Props.Reactive(Schema.String) },
           { title: Reactive.fromSubscriptionRef(live) },
         ),
@@ -109,29 +110,29 @@ describe("a view made from a Schema of its props", () => {
     expect(fits(Props.Element, BadgeView({ text: "x" }))).toBe(true)
     expect(fits(Props.Element, "x")).toBe(false)
     expect(fits(Props.Handle, {})).toBe(false)
-    expect(Props.shown(Props.Action, [])).toEqual(Option.some("action"))
-    expect(Props.shown(Props.Handle, {})).toEqual(Option.none())
+    expect(shown(Props.Action, [])).toEqual(Option.some("action"))
+    expect(shown(Props.Handle, {})).toEqual(Option.none())
     expect(fits(Props.Callback(Schema.String), () => [])).toBe(true)
     expect(fits(Props.Callback(Schema.String), [])).toBe(false)
     expect(fits(Props.Handler("keydown"), () => [])).toBe(true)
     expect(fits(Props.Handler("keydown"), null)).toBe(false)
-    expect(Props.shown(Props.Handler("click"), [])).toEqual(Option.some("handler"))
+    expect(shown(Props.Handler("click"), [])).toEqual(Option.some("handler"))
     expect(fits(Form.Field(Schema.String), formField)).toBe(true)
     expect(fits(Form.Field(Schema.String), { change: 1 })).toBe(false)
     expect(fits(Form.Field(Schema.String), { value: 1 })).toBe(false)
-    expect(Props.shown(Form.Field(Schema.String), formField)).toEqual(Option.some("typed"))
-    expect(Props.shown(Form.Field(Schema.String), "typed")).toEqual(Option.none())
+    expect(shown(Form.Field(Schema.String), formField)).toEqual(Option.some("typed"))
+    expect(shown(Form.Field(Schema.String), "typed")).toEqual(Option.none())
     expect(fits(Router.Link, link)).toBe(true)
     expect(fits(Router.Link, { href: "/people" })).toBe(false)
-    expect(Props.shown(Router.Link, link)).toEqual(Option.some("/people"))
-    expect(Props.shown(Router.Link, "/people")).toEqual(Option.none())
+    expect(shown(Router.Link, link)).toEqual(Option.some("/people"))
+    expect(shown(Router.Link, "/people")).toEqual(Option.none())
     expect(fits(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toBe(true)
     expect(fits(Overlay.Placement, { position: "fixed" })).toBe(false)
     expect(fits(Devtools.InspectedStore, { travelTo: 1 })).toBe(true)
     expect(fits(Devtools.InspectedStore, {})).toBe(false)
     expect(fits(Devtools.OutboxShown, { persist: 1 })).toBe(true)
     expect(fits(Devtools.OutboxShown, {})).toBe(false)
-    expect(Props.shown(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toEqual(
+    expect(shown(Overlay.Placement, { position: "fixed", maxHeight: "1px" })).toEqual(
       Option.some("placement"),
     )
   })

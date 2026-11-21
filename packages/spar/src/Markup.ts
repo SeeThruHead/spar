@@ -1,6 +1,6 @@
 import { Predicate } from "effect"
 import type { Schema } from "effect"
-import * as Props from "./Props.ts"
+import * as Props from "./internal/props.ts"
 
 const TypeId = "~spar/Markup"
 

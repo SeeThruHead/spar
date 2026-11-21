@@ -6,6 +6,7 @@ import * as Cell from "./internal/cell.ts"
 import { fromCell, map, typed } from "./internal/reactive.ts"
 import type { Reactive, Typed } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
+import * as Shown from "./internal/props.ts"
 import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
 
@@ -36,11 +37,11 @@ const isField = <Value>(value: unknown): value is Field<Value> => {
 export const Field = <Value>(inner: Schema.Codec<Value, unknown>): Schema.declare<Field<Value>> => {
   const reading = Props.Reactive(inner)
 
-  return Props.kind(
+  return Shown.kind(
     (value): value is Field<Value> => isField(value),
     (value) =>
       Option.flatMap(Option.liftPredicate(value, isField), (field) =>
-        Props.shown(reading, field.value),
+        Shown.shown(reading, field.value),
       ),
   )
 }

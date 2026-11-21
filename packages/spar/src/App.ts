@@ -16,6 +16,7 @@ import { starter } from "./internal/listen.ts"
 import * as Pieces from "./internal/pieces.ts"
 import { fromCell } from "./internal/reactive.ts"
 import { renderInto } from "./internal/render.ts"
+import { live } from "./internal/rendererIn.ts"
 import * as Renderer from "./Renderer.ts"
 import { Inspector } from "./Store.ts"
 import type { Router } from "./Router.ts"
@@ -125,7 +126,7 @@ const started = <R, LayerError>(
 
   const app = Effect.all({
     scope: Effect.scope,
-    renderer: Renderer.live,
+    renderer: live,
     context: Effect.context<Exclude<R, Frame>>(),
   }).pipe(
     Effect.tap(({ renderer }) =>
