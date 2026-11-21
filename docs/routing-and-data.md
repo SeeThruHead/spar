@@ -9,28 +9,11 @@ loaders, fragments or lists of dependencies.
 A parent reads a value from a store and passes it to a child. The child declares a query that
 uses the prop.
 
-```tsx
-class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
-  input: Schema.Int,
-  success: Schema.Array(Order),
-  failure: ServerUnreachable,
-  load: (userId) => Effect.flatMap(Effect.service(Server), (server) => server.orders(userId)),
-  staleAfter: "30 seconds",
-}) {}
+<<< packages/spar/test/serverData.test.tsx#OrdersQuery
 
-const Orders = compose(
-  withProps({ userId: Props.Reactive(Schema.Int) }),
-  withQuery("orders", OrdersQuery, (props) => props.userId),
-)((props) => (
-  <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
-  </p>
-))
+<<< packages/spar/test/serverData.test.tsx#Orders
 
-const Parent = compose(
-  withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
-)((props) => <Orders userId={props.selected} />)
-```
+<<< packages/spar/test/serverData.test.tsx#Parent
 
 That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and it works.
 
@@ -49,12 +32,7 @@ What Spar does with it:
 
 A query that needs another query's answer takes its input from that answer:
 
-```ts
-const report = yield * ReportQuery.ask(reportId)
-const author =
-  yield *
-  AuthorQuery.ask(Reactive.map(report.value, (found) => Option.fromNullishOr(found?.authorId)))
-```
+<<< apps/sidebar/src/DeepPage.tsx#ReportPage
 
 While the input is none the author query is `waiting`. The moment the report answers, it starts.
 That is the only waterfall Spar allows, it is the one the data really has, and it shows: as the
@@ -69,53 +47,26 @@ query cannot follow it when it changes.
 A route is a path and a Schema. Fields named in the path are path params; every other field is a
 search param. Links and navigation take the decoded params, so a wrong param is a type error.
 
-```ts
-export const reportRoute = Router.route(
-  "/org/:org/team/:team/member/:member/reports/:report",
-  Schema.Struct({
-    org: Schema.String,
-    team: Schema.String,
-    member: Schema.String,
-    report: Schema.String,
-  }),
-)
+<<< apps/sidebar/src/Deep.ts#orgRoute
 
-const link = router.link(reportRoute, { org: "acme", team: "core", member: "ada", report: "q3" })
-```
-
-Segments nest with open-ended routes and an outlet in each layout. `Router.live` keeps a layout
-mounted while only its params change and gives it the params as a reactive value, which is what a
-query wants as its input:
-
-```tsx
-const orgRoute = Router.route("/org/:org/*", Org)
-
-const withTeams = () =>
-  Effect.map(
-    Router.outlet({ routes: [Router.live(teamRoute, TeamSegment)], otherwise: Missing }),
-    (inner) => ({ inner }),
-  )
-
-const OrgSegment = compose(
-  withProps({ params: Props.Reactive(Org) }),
-  withQuery("org", OrgQuery, (props) => Reactive.map(props.params, (now) => now.org)),
-  withTeams,
-)((props) => (
-  <section>
-    <h2>{Reactive.map(props.org.value, (found) => found?.label ?? "")}</h2>
-    {props.inner}
-  </section>
-))
-```
+A link is `router.link(route, params)`, with the params typed by the route's Schema.
 
 A route inside another is declared under it, so its path is written once. The parent must end
 with `/*`, and the Schema must carry every param of the whole path; both are compile errors
 otherwise:
 
-```ts
-const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
-const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
-```
+<<< apps/sidebar/src/Deep.ts#teamRoute
+
+<<< apps/sidebar/src/Deep.ts#memberRoute
+
+Segments nest with open-ended routes and an outlet in each layout. `Router.live` keeps a layout
+mounted while only its params change and gives it the params as a reactive value, which is what a
+query wants as its input. In the showcase each segment asks for its own data from its params and
+places the next segment's outlet:
+
+<<< apps/sidebar/src/DeepPage.tsx#withInner
+
+<<< apps/sidebar/src/DeepPage.tsx#OrgSegment
 
 There is no separate route tree to keep in step: the nesting is the outlets, and the paths follow
 from `under`.
@@ -127,12 +78,9 @@ needs (`apps/sidebar/scripts/deep.ts`).
 
 ## Preload on intent
 
-A link has `onIntent`. Put it on the anchor and pointing at the link, or focusing it, starts the
-target page's queries before the click:
-
-```tsx
-<a href={link.href} onClick={link.onClick} onPointerenter={link.onIntent} onFocus={link.onIntent}>
-```
+A link has `onIntent`. Put it on the anchor (`onPointerenter={link.onIntent}` and
+`onFocus={link.onIntent}`, beside `href={link.href}` and `onClick={link.onClick}`) and pointing at
+the link, or focusing it, starts the target page's queries before the click.
 
 Spar rehearses the target: it mounts the app at that address without drawing anything, which
 reaches every `ask` on the way, and throws the result away. The queries are real and their answers
@@ -146,19 +94,14 @@ a heading on the same page, and a click with a modifier key are left to the brow
 
 ## Loading a page's code when it is first shown
 
-```ts
-Router.live(
-  orgRoute,
-  View.split(LoadingView, () => import("./DeepPage.ts").then((module) => module.OrgSegment)),
-)
-```
+<<< apps/sidebar/src/Shell.tsx#withPage
 
 `View.split` shows the placeholder, a view that takes the same props, until the code has
 arrived. Routes, param Schemas and query classes stay in the main bundle because the query layers
 are provided at the root; the components and their views are what is split off. Preloading a link
 fetches the code too, since the rehearsal mounts the page. On the server and while taking over a
 server-drawn page the real component is used, not the placeholder. The showcase's deep page is
-loaded this way (`apps/sidebar/src/Shell.ts`).
+loaded this way, as above.
 
 ## Pending and failure, per segment
 
@@ -174,7 +117,7 @@ start late.
 
 - The build refuses a wait written straight into an enhancer inside `compose(...)`: `yield*` of
   `Effect.sleep`, `Effect.promise`, `Effect.tryPromise`, `Effect.callback`, `Deferred.await`,
-  `Fiber.join` (rule `no-waiting-in-components`). A wait in a handler, in a store's reaction or
+  `Fiber.join` (rule `no-waiting-in-components`). A wait in a handler, in a service's Effect or
   anywhere outside a component is fine.
 - The build cannot see a wait behind a call such as `yield* server.describe(name)`, or in an
   enhancer written outside the `compose(...)` call. For that,
@@ -201,7 +144,7 @@ panel, lenses show one kind at a time:
 
 A request that waited for another query's value draws that wait as a line before its bar, from
 when the other was asked for to when this one started. Data that was already there (after a
-preload, or going back) is a short `served` span that links to the trace that loaded it.
+preload, or going back) is a short `<query key>/served` span that links to the trace that loaded it.
 
 Hovering a link and then clicking it follows one rule. Hovering starts the target page's
 queries in the hover's own trace. When the click asks for the same queries, nothing is asked
@@ -248,15 +191,7 @@ database's spans, and going back loads no new document.
 `Server.render` and `renderToStream` wait for every query, so the page arrives complete and
 works without JavaScript. `Server.renderInPieces` does not wait:
 
-```ts
-Server.renderInPieces(Site, {
-  layer: layer(url),
-  open,
-  close: "</div>",
-  script: '<script type="module" async src="/client.js"></script>',
-  end: "</body></html>",
-})
-```
+<<< apps/ssr/scripts/site.ts#inPieces
 
 It sends the page as first drawn, with each query showing its own `loading` or `waiting`
 state, and the state it had then. The queries go on running on the server, dependent ones too,
