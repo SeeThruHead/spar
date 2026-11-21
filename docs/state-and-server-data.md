@@ -32,15 +32,7 @@ A reset that takes two seconds is three steps: start, wait, finish. Written as o
 by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothing, from a button,
 a key or an agent alike:
 
-```ts
-const reset = Effect.gen(function* () {
-  yield* store.commands.resetClicked()
-  yield* Effect.sleep("2 seconds")
-  yield* store.commands.resetCompleted()
-})
-
-FiberHandle.run(running, reset, { onlyIfMissing: true })
-```
+<<< apps/site/src/StoreDemo.ts#withReset
 
 The same tools cover the other cases:
 
@@ -67,28 +59,13 @@ A query is a store, and declaring that a component needs one is a line in that c
 A parent reads a value from a store and passes it to a child as a prop. The child declares a
 query that uses the prop. That is all anybody writes:
 
-```tsx
-class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
-  input: Schema.Int,
-  success: Schema.Array(Order),
-  failure: ServerUnreachable,
-  load: (userId) => Effect.flatMap(Effect.service(Server), (server) => server.orders(userId)),
-  staleAfter: "30 seconds",
-}) {}
+<<< packages/spar/test/serverData.test.tsx#OrdersQuery
 
-const Orders = compose(
-  withProps({ userId: Props.Reactive(Schema.Int) }),
-  withQuery("orders", OrdersQuery, (props) => props.userId),
-)((props) => (
-  <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
-  </p>
-))
+<<< packages/spar/test/serverData.test.tsx#Orders
 
-const Parent = compose(
-  withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
-)((props) => <Orders userId={props.selected} />)
-```
+<<< packages/spar/test/serverData.test.tsx#Parent
+
+That file mounts `Parent` and checks it shows `loaded: 3 orders`.
 
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
@@ -107,16 +84,11 @@ What makes that enough:
   from another query's value and it is `waiting` until that value arrives, then starts at once.
   That is the only waterfall there is, and it is visible as a state.
 
-```ts
-const users = yield * UsersQuery.ask()
-const stock = yield * StockQuery.ask()
-const first = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
-const orders = yield * OrdersQuery.ask(first)
-```
+<<< packages/spar/test/query.test.ts#askedTogether
 
 Users and stock start together. Orders starts the moment users has answered, whether or not
-stock has. The test that controls the order of the answers and checks exactly that is
-`packages/spar/test/query.test.ts`.
+stock has. The test in that file runs exactly this, controls the order of the answers, and checks
+it.
 
 The one line of the natural version that matters: the prop has to be passed as the reactive
 value it is (`Props.Reactive`), not read out into a plain number first. A plain number works as
@@ -150,34 +122,12 @@ Each of these is an entry in the log and a span in the trace.
 A page is an input, so each page is its own entry in the cache. `pages` keeps the list of pages a
 component has opened, as that component's UI state, and asks for each:
 
-```tsx
-const withFeed = Effect.fnUntraced(function* () {
-  const feed = yield* PostsQuery.pages({
-    first: { after: null },
-    next: (page) => Option.map(Option.fromNullishOr(page.nextCursor), (after) => ({ after })),
-  })
+<<< packages/spar/test/serverData.test.tsx#withFeed
 
-  return {
-    posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
-    loading: feed.loading,
-    more: feed.more,
-    onMore: feed.loadMore,
-  }
-})
+<<< packages/spar/test/serverData.test.tsx#Feed
 
-const Feed = compose(withFeed)((props) => (
-  <section aria-label="Posts">
-    <ul>
-      <For each={props.posts} by={(post) => post.id}>
-        {(post) => <li>{Reactive.map(post, (now) => now.title)}</li>}
-      </For>
-    </ul>
-    <button type="button" hidden={Reactive.map(props.more, (more) => !more)} onClick={props.onMore}>
-      More
-    </button>
-  </section>
-))
-```
+The same file mounts `Feed`, presses More, sees the second page, and checks that More goes away
+at the end.
 
 `next` is given a loaded page and its input and says what the following input is, or none at
 the end. `loadMore` does nothing while the last page is still loading or when there is no more.
@@ -193,18 +143,7 @@ ship it with the view that shows it.
 Because the data is in a store, nothing has to carry it. In the showcase the people table loads,
 rows are selected, and "Export CSV" is one Effect with no arguments:
 
-```ts
-export const exportCsv = Effect.fn("People.exportCsv")(function* () {
-  const people = yield* PeopleStore
-  const selected = yield* people.select.selected.get
-
-  if (selected.length === 0) return yield* people.commands.nothingToExport()
-
-  const loaded = yield* UsersQuery.read()
-
-  yield* people.commands.exported(csvOf(loaded ?? [], selected))
-})
-```
+<<< apps/sidebar/src/People.ts#exportCsv
 
 It takes the selection from the store and the emails from the users query. No prop carries a
 user, and the view never sees an email it does not draw. The click and the result are one trace

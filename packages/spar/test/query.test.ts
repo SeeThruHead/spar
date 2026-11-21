@@ -177,25 +177,22 @@ const hidden = (state: string) =>
 
 const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new Event(type)))
 
+const askedTogether = Effect.gen(function* () {
+  const users = yield* Users.ask()
+  const stock = yield* Stock.ask()
+  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const orders = yield* Orders.ask(firstUser)
+
+  return { users, stock, orders }
+})
+
 describe("the natural way: a value from one place feeds a query declared in another", () => {
   it.effect(
     "what waits for nothing starts at once, and a dependent query waits only for its input",
     () =>
       Effect.gen(function* () {
         const { built, noted, whats, answer } = yield* opened
-        const declared = yield* Effect.provide(
-          Effect.gen(function* () {
-            const users = yield* Users.ask()
-            const stock = yield* Stock.ask()
-            const firstUser = Reactive.map(users.value, (loaded) =>
-              Option.fromNullishOr(loaded?.[0]?.id),
-            )
-            const orders = yield* Orders.ask(firstUser)
-
-            return { users, stock, orders }
-          }),
-          built,
-        )
+        const declared = yield* Effect.provide(askedTogether, built)
 
         yield* Effect.yieldNow
         expect(yield* whats).toEqual(["users", "stock"])
