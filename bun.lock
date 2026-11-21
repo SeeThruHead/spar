@@ -219,6 +219,27 @@
         "vitest": "5.0.5",
       },
     },
+    "packages/domain": {
+      "name": "@spar/domain",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alchemy.run/domain": "workspace:*",
+        "effect": "4.1.4",
+        "spar": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/tsgo": "0.67.7",
+        "@effect/vitest": "4.1.4",
+        "@spar/lint": "workspace:*",
+        "@types/bun": "1.4.3",
+        "@vitest/coverage-istanbul": "5.0.5",
+        "happy-dom": "20.0.11",
+        "oxfmt": "0.73.0",
+        "oxlint": "1.91.0",
+        "typescript": "7.0.2",
+        "vitest": "5.0.5",
+      },
+    },
     "packages/lint": {
       "name": "@spar/lint",
       "devDependencies": {
@@ -653,6 +674,8 @@
     "@spar/demo": ["@spar/demo@workspace:apps/demo"],
 
     "@spar/devtools-mcp": ["@spar/devtools-mcp@workspace:packages/devtools-mcp"],
+
+    "@spar/domain": ["@spar/domain@workspace:packages/domain"],
 
     "@spar/lint": ["@spar/lint@workspace:packages/lint"],
 
