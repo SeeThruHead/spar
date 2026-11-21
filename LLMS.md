@@ -1853,16 +1853,13 @@ answer is in the log.
 
 # Getting started
 
-Spar apps are Bun and Effect v4 projects. Every example below is taken from code in this repo that
-is type-checked and tested in CI; the file is named under each one.
+Spar apps are Bun and Effect v4 projects. Every example below is copied from code in this repo when
+the docs are built, and that code is type-checked and tested in CI; the file is named under each one.
 
 ### Set up a project
 
-In `tsconfig.json`, point JSX at Spar:
-
-```json
-{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "spar" } }
-```
+In `tsconfig.json`, point JSX at Spar: `"jsx": "react-jsx"` and `"jsxImportSource": "spar"` under
+`compilerOptions` (this repo sets them once, in `tsconfig.base.json`).
 
 In `vite.config.ts`, add the build check and the same JSX setting:
 
@@ -1873,10 +1870,13 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [sparJsx],
   oxc: { jsx: { runtime: "automatic", importSource: "spar" } },
+  server: { host: "127.0.0.1", port: 4180 },
 })
 ```
 
-(`apps/stories/vite.config.ts`. For `Bun.build` use `spar/transform/bun`, as `apps/demo/scripts/build.ts` does.)
+(`apps/stories/vite.config.ts`)
+
+For `Bun.build` use `spar/transform/bun`, as `apps/demo/scripts/build.ts` does.
 
 ### A store
 
@@ -1959,32 +1959,62 @@ export const Dropdown = compose(
     onPick: Props.Callback(Schema.String),
   }),
   withUiState("open", Schema.Boolean, false),
-)((props) => <div class="dropdown">...</div>)
+  withKey("Escape", (props) => UiState.set(props.open, false)),
+)((props) => (
+  <div class="dropdown">
+    <button aria-expanded={props.open} onClick={UiState.update(props.open, (open) => !open)}>
+      {props.label}
+    </button>
+    <Show when={props.open}>
+      <ul role="menu" aria-label={props.label}>
+        <For each={props.items} by={(item) => item}>
+          {(item, key) => (
+            <li role="menuitem" onClick={[props.onPick(key), UiState.set(props.open, false)]}>
+              {item}
+            </li>
+          )}
+        </For>
+      </ul>
+    </Show>
+  </div>
+))
+```
 
-export const Toolbar = compose(withUiState("sort", Schema.String, "Newest"))((props) => (
+(`packages/spar/test/composed.tsx`)
+
+```tsx
+export const Toolbar = compose(
+  withUiState("sort", Schema.String, "Newest"),
+  withUiState("show", Schema.String, "Everything"),
+)((props) => (
   <header>
     <Dropdown
       label="Sort by"
-      items={["Newest", "Oldest"]}
+      items={["Newest", "Oldest", "Largest"]}
       onPick={(item) => UiState.set(props.sort, item)}
     />
+    <Dropdown
+      label="Show"
+      items={["Everything", "Mine"]}
+      onPick={(item) => UiState.set(props.show, item)}
+    />
+    <output aria-label="Sort">{props.sort}</output>
+    <output aria-label="Shown">{props.show}</output>
   </header>
 ))
 ```
 
-(`packages/spar/test/composed.tsx`, which also has a query, `For`, `Show` and your own enhancer)
+(`packages/spar/test/composed.tsx`)
 
-An enhancer is a plain function from the props so far to an Effect of what it adds, so your own is
-one line: `(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`.
-A group of enhancers is `compose(...)` without a view, and is used like any other.
+That file also has a query, `For`, `Show` and an enhancer of its own. An enhancer is a plain
+function from the props so far to an Effect of what it adds, so your own is one line:
+`(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`. A
+group of enhancers is `compose(...)` without a view, and is used like any other.
 
 ### Mount it
 
-```ts
-import { Effect } from "effect"
-import { App } from "spar"
-
-const program = Effect.gen(function* () {
+```tsx
+export const program = Effect.gen(function* () {
   const target = yield* Effect.fromNullishOr(document.getElementById("root"))
 
   return yield* App.mount(Counter, {
@@ -1992,34 +2022,33 @@ const program = Effect.gen(function* () {
     layer: CounterStore.layer,
   })
 })
-
-Effect.runFork(program)
 ```
 
-A store's layer needs nothing from you: `App.mount` provides the one state its slot lives in. Leave
-the layer out and it does not compile. `App.mount` only accepts a component with no errors left and a layer that
-provides everything it needs. What a child written in JSX needs is not in its parent's type,
-because TypeScript gives every JSX expression the same type, so the Vite plugin checks it when you
-build: a child needing a service the mount's layer does not provide stops the build.
+(`packages/spar/test/gettingStarted.test.tsx`)
+
+Run it with `Effect.runFork(program)`. A store's layer needs nothing from you: `App.mount` provides
+the one state its slot lives in. Leave the layer out and it does not compile. `App.mount` only
+accepts a component with no errors left and a layer that provides everything it needs. What a child
+written in JSX needs is not in its parent's type, because TypeScript gives every JSX expression the
+same type, so the Vite plugin checks it when you build: a child needing a service the mount's layer
+does not provide stops the build.
 
 ### Test it
 
-```ts
-import { expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as Testing from "spar/testing"
+```tsx
+export const theCounterCounts = Effect.gen(function* () {
+  yield* Testing.mount(Counter)
+  yield* Testing.click("button", "Add one")
 
-it.live("the counter counts", () =>
-  Effect.gen(function* () {
-    yield* Testing.mount(Counter)
-    yield* Testing.click("button", "Add one")
+  const count = yield* Testing.find("status", "Count")
 
-    const count = yield* Testing.find("status", "Count")
-
-    yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(CounterStore.layer)),
-)
+  yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
+}).pipe(Effect.provide(CounterStore.layer))
 ```
+
+(`packages/spar/test/gettingStarted.test.tsx`)
+
+`it.live("the counter counts", () => theCounterCounts)` runs it with `@effect/vitest`.
 
 ### Where to go next
 

@@ -1,29 +1,18 @@
 # Getting started
 
-Spar apps are Bun and Effect v4 projects. Every example below is taken from code in this repo that
-is type-checked and tested in CI; the file is named under each one.
+Spar apps are Bun and Effect v4 projects. Every example below is copied from code in this repo when
+the docs are built, and that code is type-checked and tested in CI; the file is named under each one.
 
 ## Set up a project
 
-In `tsconfig.json`, point JSX at Spar:
-
-```json
-{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "spar" } }
-```
+In `tsconfig.json`, point JSX at Spar: `"jsx": "react-jsx"` and `"jsxImportSource": "spar"` under
+`compilerOptions` (this repo sets them once, in `tsconfig.base.json`).
 
 In `vite.config.ts`, add the build check and the same JSX setting:
 
-```ts
-import { sparJsx } from "spar/transform/vite"
-import { defineConfig } from "vite"
+<<< apps/stories/vite.config.ts
 
-export default defineConfig({
-  plugins: [sparJsx],
-  oxc: { jsx: { runtime: "automatic", importSource: "spar" } },
-})
-```
-
-(`apps/stories/vite.config.ts`. For `Bun.build` use `spar/transform/bun`, as `apps/demo/scripts/build.ts` does.)
+For `Bun.build` use `spar/transform/bun`, as `apps/demo/scripts/build.ts` does.
 
 ## A store
 
@@ -48,75 +37,31 @@ updates the one text node or attribute it sits in; nothing runs again. The compo
 A component that takes props from its parent names them with a Schema in `withProps`, and its
 parent writes it in JSX like any element:
 
-```tsx
-export const Dropdown = compose(
-  withProps({
-    label: Schema.String,
-    items: Schema.Array(Schema.String),
-    onPick: Props.Callback(Schema.String),
-  }),
-  withUiState("open", Schema.Boolean, false),
-)((props) => <div class="dropdown">...</div>)
+<<< packages/spar/test/composed.tsx#Dropdown
 
-export const Toolbar = compose(withUiState("sort", Schema.String, "Newest"))((props) => (
-  <header>
-    <Dropdown
-      label="Sort by"
-      items={["Newest", "Oldest"]}
-      onPick={(item) => UiState.set(props.sort, item)}
-    />
-  </header>
-))
-```
+<<< packages/spar/test/composed.tsx#Toolbar
 
-(`packages/spar/test/composed.tsx`, which also has a query, `For`, `Show` and your own enhancer)
-
-An enhancer is a plain function from the props so far to an Effect of what it adds, so your own is
-one line: `(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`.
-A group of enhancers is `compose(...)` without a view, and is used like any other.
+That file also has a query, `For`, `Show` and an enhancer of its own. An enhancer is a plain
+function from the props so far to an Effect of what it adds, so your own is one line:
+`(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`. A
+group of enhancers is `compose(...)` without a view, and is used like any other.
 
 ## Mount it
 
-```ts
-import { Effect } from "effect"
-import { App } from "spar"
+<<< packages/spar/test/gettingStarted.test.tsx#program
 
-const program = Effect.gen(function* () {
-  const target = yield* Effect.fromNullishOr(document.getElementById("root"))
-
-  return yield* App.mount(Counter, {
-    target,
-    layer: CounterStore.layer,
-  })
-})
-
-Effect.runFork(program)
-```
-
-A store's layer needs nothing from you: `App.mount` provides the one state its slot lives in. Leave
-the layer out and it does not compile. `App.mount` only accepts a component with no errors left and a layer that
-provides everything it needs. What a child written in JSX needs is not in its parent's type,
-because TypeScript gives every JSX expression the same type, so the Vite plugin checks it when you
-build: a child needing a service the mount's layer does not provide stops the build.
+Run it with `Effect.runFork(program)`. A store's layer needs nothing from you: `App.mount` provides
+the one state its slot lives in. Leave the layer out and it does not compile. `App.mount` only
+accepts a component with no errors left and a layer that provides everything it needs. What a child
+written in JSX needs is not in its parent's type, because TypeScript gives every JSX expression the
+same type, so the Vite plugin checks it when you build: a child needing a service the mount's layer
+does not provide stops the build.
 
 ## Test it
 
-```ts
-import { expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as Testing from "spar/testing"
+<<< packages/spar/test/gettingStarted.test.tsx#theCounterCounts
 
-it.live("the counter counts", () =>
-  Effect.gen(function* () {
-    yield* Testing.mount(Counter)
-    yield* Testing.click("button", "Add one")
-
-    const count = yield* Testing.find("status", "Count")
-
-    yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(CounterStore.layer)),
-)
-```
+`it.live("the counter counts", () => theCounterCounts)` runs it with `@effect/vitest`.
 
 ## Where to go next
 
