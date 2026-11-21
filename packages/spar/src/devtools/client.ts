@@ -43,7 +43,9 @@ const attach: Hook["attach"] = Effect.gen(function* () {
     (found) => {
       found.follow(tree)
 
-      return apart(shown(found, frame.overlays))
+      return apart(shown(found, frame.overlays)).pipe(
+        Effect.tapCause((cause) => Effect.logError("The Spar devtools could not start", cause)),
+      )
     },
     {
       discard: true,

@@ -33,7 +33,6 @@ import {
   TimelineView,
   ToolsView,
   Tick as TickSchema,
-  TickView,
   TraceView,
   VeilView,
 } from "./devtools/PanelView.tsx"
@@ -469,8 +468,12 @@ export const Panel = compose(
 
 const shortened = (text: string): string => (text.length > 80 ? `${text.slice(0, 79)}…` : text)
 
-const detailOfMoment = (moment: Timeline.Moment): string =>
-  moment.detail === null ? "" : shortened(Formatter.formatJson(moment.detail))
+const detailOfMoment = (moment: Timeline.Moment): string => {
+  if (moment.kind === "call") return ""
+  if (moment.detail === null) return ""
+
+  return shortened(Formatter.formatJson(moment.detail))
+}
 
 const summaryOfMoment = (moment: Timeline.Moment): string =>
   `${moment.name} ${detailOfMoment(moment)}`.trim()
@@ -535,7 +538,12 @@ export const acrossLanes = (
   return `calc(${laneName}px + (100% - ${laneName + laneEnd}px) * ${fraction.toFixed(4)})`
 }
 
-type Surface = { readonly clientX: number; readonly currentTarget: HTMLDivElement }
+type Surface = {
+  readonly clientX: number
+  readonly currentTarget: {
+    readonly getBoundingClientRect: () => { readonly left: number; readonly width: number }
+  }
+}
 
 export const seqAt = (moments: ReadonlyArray<Timeline.Moment>, event: Surface): number | null => {
   const box = event.currentTarget.getBoundingClientRect()
@@ -546,25 +554,25 @@ export const seqAt = (moments: ReadonlyArray<Timeline.Moment>, event: Surface): 
   return moments[index]?.seq ?? null
 }
 
-const LaneRow = compose(
-  withProps({ slot: Schema.String, ticks: Props.Reactive(Schema.Array(TickSchema)) }),
-  Effect.fnUntraced(function* ({ slot, ticks }) {
-    return {
-      slot,
-      ticks: yield* pipe(
-        ticks,
-        Reactive.mapBy(
-          (tick: Tick) => String(tick.seq),
-          TickView,
-          (tick) => ({
-            kind: Reactive.map(tick, (now) => now.kind),
-            at: Reactive.map(tick, (now) => now.at),
-          }),
-        ),
-      ),
-    }
-  }),
-)(LaneView)
+const tickColor: Readonly<Record<string, string>> = {
+  command: "#6ea8fe",
+  ui: "#c39bff",
+  route: "#f0b45a",
+  data: "#4fd1c5",
+  call: "#8bd17c",
+  noticed: "#ff8a94",
+  refused: "#ff8a94",
+  waited: "#f0b45a",
+}
+
+export const ticksDrawn = (ticks: ReadonlyArray<Tick>): string =>
+  ticks
+    .map((tick) => {
+      const color = tickColor[tick.kind] ?? "#6ea8fe"
+
+      return `linear-gradient(${color}, ${color}) calc(${tick.at} - 3px) 4px / 6px 10px no-repeat`
+    })
+    .join(", ")
 
 export const LanesPanel = compose(
   withProps({
@@ -589,8 +597,8 @@ export const LanesPanel = compose(
         Reactive.map(registry.moments, lanesOf),
         Reactive.mapBy(
           (lane: Lane) => lane.slot,
-          LaneRow,
-          (lane, slot) => ({ slot, ticks: Reactive.map(lane, (now) => now.ticks) }),
+          LaneView,
+          (lane, slot) => ({ slot, ticks: Reactive.map(lane, (now) => ticksDrawn(now.ticks)) }),
         ),
       ),
       onStart: (event: Surface) =>

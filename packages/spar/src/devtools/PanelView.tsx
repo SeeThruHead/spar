@@ -153,19 +153,13 @@ export const Tick = Schema.Struct({
 
 export const LaneView = View.make(
   "LaneView",
-  { slot: Schema.String, ticks: Props.Element },
+  { slot: Schema.String, ticks: Props.Reactive(Schema.String) },
   ({ slot, ticks }) => (
     <li data-lane="">
       <span data-lane-name="">{slot}</span>
-      <span data-lane-track="">{ticks}</span>
+      <span data-lane-track="" style={{ backgroundImage: ticks }} />
     </li>
   ),
-)
-
-export const TickView = View.make(
-  "TickView",
-  { kind: Props.Reactive(Schema.String), at: Props.Reactive(Schema.String) },
-  ({ kind, at }) => <i data-tick="" data-kind={kind} style={{ left: at }} />,
 )
 
 export const LanesView = View.make(
@@ -418,7 +412,7 @@ const look = [
   "[data-lanes-surface] { position: relative; cursor: ew-resize; user-select: none; touch-action: none }",
   "[data-lane] { display: grid; grid-template-columns: 180px minmax(0, 1fr); height: 18px; border-bottom: 1px solid #191c22 }",
   "[data-lane-name] { padding: 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a91a0; font: 11px/18px ui-monospace, Menlo, monospace }",
-  "[data-lane-track] { position: relative; margin-right: 12px }",
+  "[data-lane-track] { position: relative; margin-right: 12px; background-repeat: no-repeat }",
   "[data-tick] { position: absolute; top: 4px; width: 6px; height: 10px; margin-left: -3px; border-radius: 2px; background: #6ea8fe }",
   "[data-tick][data-kind=ui] { background: #c39bff } [data-tick][data-kind=route] { background: #f0b45a } [data-tick][data-kind=data] { background: #4fd1c5 } [data-tick][data-kind=call] { background: #8bd17c } [data-tick][data-kind=noticed], [data-tick][data-kind=refused] { background: #ff8a94 }",
   "[data-marker], [data-scrubber] { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; pointer-events: none }",
