@@ -10,6 +10,11 @@ import { OnServer } from "../src/internal/server.ts"
 
 const yesNo = (value: boolean): string => (value ? "yes" : "no")
 
+const everySecond = Reactive.fromStream(
+  0,
+  Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.map((count) => count + 1)),
+)
+
 const text = (label: string) => screen.getByLabelText(label).textContent
 
 const narrowTo = (width: number) =>
@@ -60,10 +65,7 @@ const Status = compose(
         ),
       ),
     )
-    const ticks = yield* Reactive.fromStream(
-      0,
-      Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.map((count) => count + 1)),
-    )
+    const ticks = yield* everySecond
 
     return {
       online: Reactive.map(online, yesNo),

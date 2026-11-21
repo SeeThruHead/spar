@@ -836,7 +836,11 @@ export const withHover = compose(
     onLeave: UiState.set(props.hovered, false),
   })),
 )
+```
 
+(`packages/spar/test/composed.tsx`)
+
+```tsx
 export const Card = compose(
   withProps({ title: Schema.String }),
   withHover,
@@ -897,10 +901,7 @@ export const FolderRow: View.Component<{ readonly folder: Reactive.Reactive<Fold
 The Schema of a tree refers to itself too: `Schema.suspend` and a written-out type.
 
 ```tsx
-export const Folder: Schema.Codec<Folder> = Schema.Struct({
-  name: Schema.String,
-  folders: Schema.Array(Schema.suspend((): Schema.Codec<Folder> => Folder)),
-})
+export type Folder = { readonly name: string; readonly folders: ReadonlyArray<Folder> }
 ```
 
 (`packages/spar/test/folderTree.tsx`)
@@ -931,9 +932,32 @@ export const AgentPage = pipe(
     withAgent,
     withStore(Router.Router, (router) => ({ home: router.link(home, {}) })),
   )((props) => (
-
-    ...
-
+    <section>
+      <p>
+        <a
+          href={props.home.href}
+          onClick={props.home.onClick}
+          onPointerenter={props.home.onIntent}
+          onFocus={props.home.onIntent}
+        >
+          All agents
+        </a>
+      </p>
+      <h1>{props.name}</h1>
+      <dl>
+        <dt>Status</dt>
+        <dd>{props.status}</dd>
+        <dt>Project</dt>
+        <dd>{props.project}</dd>
+        <dt>Tags</dt>
+        <dd>{props.tags}</dd>
+      </dl>
+      <ServerRecordView name={props.agentName} />
+      <Notes id="agent-note" title="Notes on this agent" />
+      <button type="button" class="spar-button spar-quiet" onClick={props.onPin}>
+        {props.pinLabel}
+      </button>
+    </section>
   )),
   View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
@@ -984,8 +1008,7 @@ the current value.
 | `Reactive.fromSubscriptionRef(ref)`, `Reactive.succeed(value)`, `Reactive.make(get, changes)` | Other ways to make one.                                               |
 
 ```ts
-const rows =
-  yield *
+const agentRows = (props: Schema.Struct<typeof sectionFields>["Type"]) =>
   pipe(
     Reactive.map(props.section, (section) => section.rows),
     Reactive.mapBy(
@@ -1008,10 +1031,7 @@ down, with a row's key in brackets (`Board / Note[a]`), and a number when two sh
 (`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
 the same one state that stores live in, so the devtools and agents read, set and rewind UI state
 through it. Give an app or a test its own with `State.layer`; a server render always has its own.
-
-```tsx
-<button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
-```
+A handler that flips one is `onClick={UiState.update(open, (shown) => !shown)}`.
 
 ### Store
 
@@ -1043,14 +1063,82 @@ is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
 #### A store beside its view
 
 ```tsx
-export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
+import { Effect, Schema } from "effect"
+import { Events, For, Form, Reactive, Store, compose, withProps, withStore } from "spar"
+import { SubmitButton, TextField } from "@spar/ui"
 
-const NotesPanel = compose(withProps({ id: Schema.String, title: Schema.String }), ...)(
-  (props) => <section aria-label={props.title}>...</section>,
-)
+const Note = Schema.Struct({ id: Schema.Int, text: Schema.String })
+
+type Note = typeof Note.Type
+
+const State = Schema.Struct({ notes: Schema.Array(Note) })
+
+type State = typeof State.Type
+
+const counted = (state: State): string =>
+  state.notes.length === 1 ? "1 note" : `${state.notes.length} notes`
+
+export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", {
+  state: State,
+  initialState: { notes: [] },
+  actions: {
+    added: Store.action(Schema.String, (state: State, text) => ({
+      notes: [...state.notes, { id: state.notes.length + 1, text }],
+    })),
+  },
+  selectors: {
+    notes: Store.selector(Schema.Array(Note), (state: State) => state.notes),
+    count: Store.selector(Schema.String, counted),
+  },
+}) {}
+
+const Draft = Schema.Struct({
+  text: Schema.String.check(Schema.makeFilter((text) => text.trim().length > 0 || "Write a note")),
+})
+
+const withDraft = (props: { readonly onAdd: (text: string) => Effect.Effect<void> }) =>
+  Effect.map(Form.make(Draft, { text: "" }), (form) => ({
+    field: form.field("text"),
+    busy: form.submitting,
+    onSubmit: form.submitThen(({ text }) => props.onAdd(text.trim()), form.reset),
+  }))
+
+const NotesPanel = compose(
+  withProps({ id: Schema.String, title: Schema.String }),
+  withStore(NotesStore, (store) => ({
+    count: store.select.count,
+    notes: store.select.notes,
+    onAdd: store.commands.added,
+  })),
+  withDraft,
+)((props) => (
+  <section class="notes" aria-label={props.title}>
+    <h2>{props.title}</h2>
+    <p>
+      <output aria-label={`${props.title} count`}>{props.count}</output>
+    </p>
+    <ul>
+      <For each={props.notes} by={(note) => String(note.id)}>
+        {(note) => <li>{Reactive.map(note, (now) => now.text)}</li>}
+      </For>
+    </ul>
+    <form aria-label={`Add to ${props.title}`} onSubmit={Events.prevent(props.onSubmit)}>
+      <TextField
+        id={props.id}
+        label="Note"
+        hint={`Kept in ${props.title}`}
+        type="text"
+        field={props.field}
+      />
+      <SubmitButton label="Add note" busy={props.busy} />
+    </form>
+  </section>
+))
 
 export const Notes = NotesStore.with(NotesPanel)
 ```
+
+(`apps/sidebar/src/Notes.tsx`)
 
 `Notes` is one unit: mount it anywhere with `<Notes id="..." title="..." />` and nothing is wired at the
 app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
@@ -1101,14 +1189,29 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 ### Form
 
 ```ts
-const form = yield * Form.make(Named, { name: "" })
+const ProjectForm = compose(
+  withProps(formFields),
+  Effect.fnUntraced(function* ({ onClose }: FormProps) {
+    const store = yield* BoardStore
+    const form = yield* Form.make(Named, { name: "" })
 
-return {
-  field: form.field("name"),
-  busy: form.submitting,
-  onSubmit: form.submit(({ name }) => store.commands.spaceAdded({ name })),
-}
+    return {
+      id: "project-name",
+      label: "Project name",
+      hint: "Agents can be moved into it afterwards",
+      action: "Add project",
+      field: form.field("name"),
+      busy: form.submitting,
+      onSubmit: form.submitThen(
+        ({ name }) => store.commands.spaceAdded({ name: name.trim() }),
+        onClose,
+      ),
+    }
+  }),
+)(NameFormView)
 ```
+
+(`apps/sidebar/src/Sidebar.ts`)
 
 A form's values, which fields have been left, whether a submit was tried and what the server
 rejected are the component's UI state, under a name such as `form (name)`. So typing, leaving a
@@ -1132,15 +1235,37 @@ the submit has worked, and not when the input was invalid or the server refused 
 ### Router
 
 ```ts
-export const home = Router.route("/")
-export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
+import { Schema } from "effect"
+import { Router } from "spar"
 
-page: yield *
-  Router.outlet({
-    routes: [Router.on(home, EmptyPageView), Router.on(agentRoute, AgentPage)],
-    otherwise: MissingPageView,
-  })
+export const home = Router.route("/")
+
+export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
 ```
+
+(`apps/sidebar/src/routes.ts`)
+
+```tsx
+const withPage = () =>
+  Effect.map(
+    Router.outlet({
+      routes: [
+        Router.on(home, EmptyPageView),
+        Router.on(agentRoute, AgentPage),
+        Router.live(
+          orgRoute,
+          View.split(DeepLoadingView, () =>
+            import("./DeepPage.tsx").then((module) => module.OrgSegment),
+          ),
+        ),
+      ],
+      otherwise: MissingPageView,
+    }),
+    (page) => ({ page }),
+  )
+```
+
+(`apps/sidebar/src/Shell.tsx`)
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
 layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
@@ -1314,11 +1439,36 @@ The devtools are not part of an app. In development the Vite plugin adds them:
 
 ```ts
 import { sparDevtools } from "spar/devtools/vite"
+import { sparJsx } from "spar/transform/vite"
+import { defineConfig } from "vite"
+
+const backend = process.env["SIDEBAR_BACKEND"]
+
+const backends = backend === undefined ? [] : [backend]
+
+const servedByBackend = {
+  name: "sidebar-backend",
+  apply: "serve",
+  transformIndexHtml: () =>
+    backends.map(() => ({
+      tag: "meta",
+      attrs: { name: "sidebar-backend", content: "/rpc" },
+      injectTo: "head",
+    })),
+} as const
 
 export default defineConfig({
-  plugins: [sparJsx, sparDevtools({ backends: ["http://127.0.0.1:4182"] })],
+  plugins: [sparJsx, sparDevtools({ backends }), servedByBackend],
+  oxc: { jsx: { runtime: "automatic", importSource: "spar" } },
+  server: {
+    host: "127.0.0.1",
+    port: 4181,
+    proxy: Object.fromEntries(backends.map((target) => ["/rpc", target])),
+  },
 })
 ```
+
+(`apps/sidebar/vite.config.ts`)
 
 It only acts on the dev server. A production build carries no devtools code at all
 (`apps/sidebar` checks its own build for that as part of `check`). `backends` are the servers
@@ -1397,18 +1547,40 @@ The component and its view do not change between them, and an update writes the 
 | `Renderer.html`                                    | Text, for a server: each value read once, with the markers the browser takes over by  |
 
 ```ts
-App.mount(Counter, {
-  layer: Layer.merge(
-    CounterStore.layer,
-    Terminal.layer((frame) => Console.log(frame)),
-  ),
+const program = Effect.gen(function* () {
+  const store = yield* Layer.build(CounterStore.layer.pipe(Layer.provideMerge(State.layer)))
+  const counter = yield* Effect.provide(Effect.service(CounterStore), store)
+
+  yield* Effect.forkScoped(
+    App.mount(Counter, {
+      layer: Layer.merge(
+        Layer.succeedContext(store),
+        Terminal.layer((frame) => Console.log(`${frame}\n--`)),
+      ),
+    }),
+  )
+  yield* Effect.sleep("50 millis")
+  yield* counter.commands.incremented({ by: 1 })
+  yield* Effect.sleep("50 millis")
+  yield* counter.commands.incremented({ by: 2 })
+  yield* Effect.sleep("50 millis")
 })
 
-Server.renderToString(Counter, { layer: Layer.merge(CounterStore.layer, Renderer.html) })
+await Effect.runPromise(Effect.scoped(program))
 ```
 
-(`apps/demo/scripts/terminal.ts` draws the demo's counter in a terminal, unchanged; the server
-layers in `apps/ssr/server/layers.ts` give `Renderer.html`.) The first three draw into a document
+(`apps/demo/scripts/terminal.ts`)
+
+```tsx
+export const rendered = Server.renderToString(Page, {
+  layer: Layer.merge(Table.layer, Renderer.html),
+})
+```
+
+(`apps/ssr/scripts/render-page.tsx`)
+
+(The first draws the demo's counter in a terminal, unchanged; the second renders a page as text with
+`Renderer.html`.) The first three draw into a document
 and keep it up to date, so `App.mount` takes them; `Renderer.html` writes a page once, so the
 `Server` functions take it. Given the other kind, each says which renderer it needs.
 
@@ -1864,12 +2036,10 @@ Timers are Effect schedules. Turn the stream into a reactive value in the compon
 stops when the component unmounts.
 
 ```ts
-const ticks =
-  yield *
-  Reactive.fromStream(
-    0,
-    Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.map((count) => count + 1)),
-  )
+const everySecond = Reactive.fromStream(
+  0,
+  Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.map((count) => count + 1)),
+)
 ```
 
 (`packages/spar/test/events.test.ts`)
@@ -1884,15 +2054,18 @@ Use `effect/socket`. Decode each message with a Schema, then either show it
 ### Close something on Escape or an outside press
 
 ```ts
-yield * Events.onDocument("pointerdown", UiState.set(open, false))
-yield *
-  Events.onDocument("keydown", (event) => (event.key === "Escape" ? UiState.set(open, false) : []))
+const closedOnEscapeOrOutside = Effect.fnUntraced(function* (open: UiState.UiState<boolean>) {
+  yield* Events.onDocument("pointerdown", UiState.set(open, false))
+  yield* Events.onDocument("keydown", (event) =>
+    event.key === "Escape" ? UiState.set(open, false) : [],
+  )
+})
 ```
+
+(`apps/demo/src/mail/Thread.ts`)
 
 and stop presses inside from reaching the document: `<span onPointerdown={Events.stop([])}>`.
 For a layer above the page use `View.portal` with `Overlay.dismissable`.
-
-(`apps/demo/src/mail/Thread.ts`)
 
 ### A dialog with a form
 
@@ -1900,14 +2073,43 @@ Wrap the form component with the kit's `Dialog` and mount it while some UI state
 is mounted fresh each time the dialog opens.
 
 ```ts
-yield *
-  pipe(
-    when("AddingProject"),
-    Reactive.when(
-      Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
-      closing,
+const dialogs = Effect.fnUntraced(function* (editing: UiState.UiState<Editing>) {
+  const onClose = UiState.set(editing, { _tag: "Nothing" })
+  const shared = { editing, onClose }
+  const closing = { onClose }
+  const when = (tag: Editing["_tag"]) => Reactive.map(editing, (now) => now._tag === tag)
+
+  return [
+    yield* pipe(
+      when("Starting"),
+      Reactive.when(
+        Dialog({ id: "start", title: "Start an agent" }, View.child(StartForm, shared)),
+        closing,
+      ),
     ),
-  )
+    yield* pipe(
+      when("AddingProject"),
+      Reactive.when(
+        Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
+        closing,
+      ),
+    ),
+    yield* pipe(
+      when("Tagging"),
+      Reactive.when(
+        Dialog({ id: "tags", title: "Edit tags" }, View.child(TagsForm, shared)),
+        closing,
+      ),
+    ),
+    yield* pipe(
+      when("Moving"),
+      Reactive.when(
+        Dialog({ id: "move", title: "Move to a project" }, View.child(MoveForm, shared)),
+        closing,
+      ),
+    ),
+  ]
+})
 ```
 
 (`apps/sidebar/src/Sidebar.ts`)
@@ -1943,9 +2145,9 @@ export class AgentStarts extends Context.Service<
 }
 ```
 
-Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.
-
 (`apps/sidebar/src/BoardStore.ts`)
+
+Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.
 
 ### Tracing
 
@@ -1956,10 +2158,11 @@ Every component mount is a span named after its view and every store command is 
 const telemetry = Otlp.layerJson({
   baseUrl: `${location.origin}/otlp`,
   resource: { serviceName: "spar-sidebar" },
-}).pipe(Layer.provide(FetchHttpClient.layer))
-
-Effect.runFork(Effect.provide(program, telemetry))
+  tracerExportInterval: "1 second",
+}).pipe(Layer.provide(Backend.layerTelemetry))
 ```
+
+(`apps/sidebar/src/main.ts`)
 
 Post to your own origin and forward from the server, so the browser needs no cross-origin access to
 the collector. `apps/demo/scripts/site.ts` forwards `/otlp` to `OTLP_ENDPOINT` when it is set and
@@ -1970,16 +2173,107 @@ drops traces otherwise.
 Mount the real component and provide test layers for its services.
 
 ```ts
-it.live("a failed load is shown by the view that recovers its error", () =>
-  Effect.gen(function* () {
-    const probe = yield* Probe
+const failedLoadIsShown = Effect.gen(function* () {
+  const probe = yield* Probe
 
-    yield* mount(LoaderPage)
-    yield* Deferred.fail(probe.loaded, new LoadFailed({ message: "The report is missing." }))
+  yield* mount(LoaderPage)
+  yield* Deferred.fail(probe.loaded, new LoadFailed({ message: "The report is missing." }))
 
-    expect((yield* find("alert")).textContent).toBe("The report is missing.")
-  }).pipe(Effect.provide(layer)),
-)
+  expect((yield* find("alert")).textContent).toBe("The report is missing.")
+}).pipe(Effect.provide(layer))
+
+describe("rendering", () => {
+  it.live("a component's pure view can be taken back out and shown with sample props", () =>
+    Effect.gen(function* () {
+      yield* mount(LoaderStory)
+
+      expect((yield* find("heading", "Sample title")).textContent).toBe("Sample title")
+      expect(LoaderPage.view).toBe(LoadedView)
+    }),
+  )
+
+  it.live("a store change updates the bound text and keeps the surrounding nodes", () =>
+    Effect.gen(function* () {
+      const board = yield* Board
+      const probe = yield* Probe
+
+      yield* mount(BoardPanel)
+
+      const total = yield* find("status", "Total")
+      const button = yield* find("button", "Add item")
+
+      yield* board.commands.added({ label: "From a command" })
+      yield* Effect.sync(() => button.click())
+      yield* findText("From the button")
+
+      expect(total.textContent).toBe("2")
+      expect(yield* find("status", "Total")).toBe(total)
+      expect(yield* Ref.get(probe.mounts)).toBe(1)
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a keyed list keeps each row's node through renames, reorders and removals", () =>
+    Effect.gen(function* () {
+      const board = yield* Board
+
+      yield* mount(BoardPanel)
+      yield* board.commands.added({ label: "Alpha" })
+      yield* board.commands.added({ label: "Beta" })
+
+      const alpha = yield* findText("Alpha")
+      const beta = yield* findText("Beta")
+
+      yield* board.commands.renamed({ id: "item-1", label: "Alpha, renamed" })
+      yield* board.commands.reversed()
+      yield* findText("Alpha, renamed")
+
+      expect(yield* labels).toEqual(["Beta", "Alpha, renamed"])
+      expect(screen.getAllByRole("listitem")).toEqual([beta, alpha])
+
+      yield* board.commands.removed({ id: "item-2" })
+      yield* eventually(() => expect(screen.getAllByRole("listitem")).toEqual([alpha]))
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a conditional mounts its component when shown and cancels its scope when hidden", () =>
+    Effect.gen(function* () {
+      const probe = yield* Probe
+
+      yield* mount(Disclosure)
+
+      const toggle = yield* find("button", "Toggle details")
+
+      expect(screen.queryByRole("note")).toBeNull()
+
+      yield* Effect.sync(() => toggle.click())
+
+      expect((yield* find("note")).textContent).toBe("Now you see me")
+
+      yield* Effect.sync(() => toggle.click())
+      yield* gone("note")
+
+      expect(yield* Ref.get(probe.mounts)).toBe(1)
+      expect(yield* Ref.get(probe.unmounts)).toBe(1)
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a pending component shows its placeholder until the load succeeds", () =>
+    Effect.gen(function* () {
+      const probe = yield* Probe
+
+      yield* mount(LoaderPage)
+
+      expect((yield* find("status")).textContent).toBe("Loading report")
+
+      yield* Deferred.succeed(probe.loaded, "Quarterly report")
+
+      expect((yield* find("heading", "Quarterly report")).textContent).toBe("Quarterly report")
+      expect(screen.queryByRole("status")).toBeNull()
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a failed load is shown by the view that recovers its error", () => failedLoadIsShown)
+})
 ```
 
 (`packages/spar/test/render.test.ts`)
@@ -1987,8 +2281,9 @@ it.live("a failed load is shown by the view that recovers its error", () =>
 ### A long action
 
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
-short: a store command, a UI state change, a navigation. Put slow work in a store reaction, the
-outbox, or a form's submit (which ignores a second submit while the first is running).
+short: a store command, a UI state change, a navigation. Put slow work in an Effect on a service,
+run by a `FiberHandle` so a repeat is ignored while it runs, or on an outbox channel for what must
+reach the server. A form's submit already ignores a second submit while the first is running.
 
 
 # Coming from React

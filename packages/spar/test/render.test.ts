@@ -146,6 +146,15 @@ const LoaderStory = pipe(
   View.mapProps(() => ({ title: "Sample title" })),
 )
 
+const failedLoadIsShown = Effect.gen(function* () {
+  const probe = yield* Probe
+
+  yield* mount(LoaderPage)
+  yield* Deferred.fail(probe.loaded, new LoadFailed({ message: "The report is missing." }))
+
+  expect((yield* find("alert")).textContent).toBe("The report is missing.")
+}).pipe(Effect.provide(layer))
+
 describe("rendering", () => {
   it.live("a component's pure view can be taken back out and shown with sample props", () =>
     Effect.gen(function* () {
@@ -236,14 +245,5 @@ describe("rendering", () => {
     }).pipe(Effect.provide(layer)),
   )
 
-  it.live("a failed load is shown by the view that recovers its error", () =>
-    Effect.gen(function* () {
-      const probe = yield* Probe
-
-      yield* mount(LoaderPage)
-      yield* Deferred.fail(probe.loaded, new LoadFailed({ message: "The report is missing." }))
-
-      expect((yield* find("alert")).textContent).toBe("The report is missing.")
-    }).pipe(Effect.provide(layer)),
-  )
+  it.live("a failed load is shown by the view that recovers its error", () => failedLoadIsShown)
 })

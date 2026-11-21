@@ -33,31 +33,9 @@ The build names each component after the constant it is
 given to. A named view can stand at the end instead of an inline one:
 `compose(withHover)(CardView)`.
 
-```tsx
-export const withHover = compose(
-  withUiState("hovered", Schema.Boolean, false),
-  withHandlers((props) => ({
-    onEnter: UiState.set(props.hovered, true),
-    onLeave: UiState.set(props.hovered, false),
-  })),
-)
+<<< packages/spar/test/composed.tsx#withHover
 
-export const Card = compose(
-  withProps({ title: Schema.String }),
-  withHover,
-)((props) => (
-  <article
-    aria-label={props.title}
-    class={{ card: true, raised: props.hovered }}
-    onPointerenter={props.onEnter}
-    onPointerleave={props.onLeave}
-  >
-    {props.title}
-  </article>
-))
-```
-
-(`packages/spar/test/composed.tsx`)
+<<< packages/spar/test/composed.tsx#Card
 
 ### A component that draws itself
 
@@ -66,49 +44,11 @@ Write the component's type out (`View.Component<Props>`), because TypeScript can
 type that refers to itself. Each row has its own UI state, kept under its key, so closing a
 folder and opening it again starts its children closed.
 
-```tsx
-export const FolderRow: View.Component<{ readonly folder: Reactive.Reactive<Folder> }> = compose(
-  withProps({ folder: Props.Reactive(Folder) }),
-  withUiState("open", Schema.Boolean, false),
-  withHandlers((props) => ({
-    name: Reactive.map(props.folder, nameOf),
-    folders: Reactive.map(props.folder, (folder) => folder.folders),
-    empty: Reactive.map(props.folder, (folder) => folder.folders.length === 0),
-    onToggle: UiState.update(props.open, (open) => !open),
-  })),
-)((props) => (
-  <li>
-    <button
-      type="button"
-      aria-expanded={props.open}
-      disabled={props.empty}
-      onClick={props.onToggle}
-    >
-      {props.name}
-    </button>
-    <Show when={props.open}>
-      <ul>
-        <For each={props.folders} by={nameOf}>
-          {(folder) => <FolderRow folder={folder} />}
-        </For>
-      </ul>
-    </Show>
-  </li>
-))
-```
-
-(`packages/spar/test/folderTree.tsx`)
+<<< packages/spar/test/folderTree.tsx#FolderRow
 
 The Schema of a tree refers to itself too: `Schema.suspend` and a written-out type.
 
-```tsx
-export const Folder: Schema.Codec<Folder> = Schema.Struct({
-  name: Schema.String,
-  folders: Schema.Array(Schema.suspend((): Schema.Codec<Folder> => Folder)),
-})
-```
-
-(`packages/spar/test/folderTree.tsx`)
+<<< packages/spar/test/folderTree.tsx#Folder
 
 ## View
 
@@ -129,23 +69,7 @@ as `.view` and the inspector shows its name.
 | `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                                                                                                   |
 | `View.portal`                          | Mounts the component in a layer above the app.                                                                                                                                                     |
 
-```tsx
-export const AgentPage = pipe(
-  compose(
-    withProps({ id: Schema.String }),
-    withAgent,
-    withStore(Router.Router, (router) => ({ home: router.link(home, {}) })),
-  )((props) => (
-
-    ...
-
-  )),
-  View.recover(AgentNotFound, AgentMissingView),
-  View.pending(AgentLoadingView),
-)
-```
-
-(`apps/sidebar/src/AgentPage.tsx`)
+<<< apps/sidebar/src/AgentPage.tsx#AgentPage
 
 ## Props
 
@@ -188,20 +112,7 @@ the current value.
 | `Reactive.fromStream(initial, stream)`                                                        | Any stream as a reactive value, owned by the scope.                   |
 | `Reactive.fromSubscriptionRef(ref)`, `Reactive.succeed(value)`, `Reactive.make(get, changes)` | Other ways to make one.                                               |
 
-```ts
-const rows =
-  yield *
-  pipe(
-    Reactive.map(props.section, (section) => section.rows),
-    Reactive.mapBy(
-      (agent: Agent) => agent.id,
-      AgentRow,
-      (agent, id) => ({ agent, id, editing: props.editing, dragging: props.dragging }),
-    ),
-  )
-```
-
-(`apps/sidebar/src/Sidebar.ts`)
+<<< apps/sidebar/src/Sidebar.ts#agentRows
 
 ## UiState
 
@@ -213,10 +124,7 @@ down, with a row's key in brackets (`Board / Note[a]`), and a number when two sh
 (`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
 the same one state that stores live in, so the devtools and agents read, set and rewind UI state
 through it. Give an app or a test its own with `State.layer`; a server render always has its own.
-
-```tsx
-<button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
-```
+A handler that flips one is `onClick={UiState.update(open, (shown) => !shown)}`.
 
 ## Store
 
@@ -247,15 +155,7 @@ is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
 
 ### A store beside its view
 
-```tsx
-export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
-
-const NotesPanel = compose(withProps({ id: Schema.String, title: Schema.String }), ...)(
-  (props) => <section aria-label={props.title}>...</section>,
-)
-
-export const Notes = NotesStore.with(NotesPanel)
-```
+<<< apps/sidebar/src/Notes.tsx
 
 `Notes` is one unit: mount it anywhere with `<Notes id="..." title="..." />` and nothing is wired at the
 app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
@@ -305,15 +205,7 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 
 ## Form
 
-```ts
-const form = yield * Form.make(Named, { name: "" })
-
-return {
-  field: form.field("name"),
-  busy: form.submitting,
-  onSubmit: form.submit(({ name }) => store.commands.spaceAdded({ name })),
-}
-```
+<<< apps/sidebar/src/Sidebar.ts#ProjectForm
 
 A form's values, which fields have been left, whether a submit was tried and what the server
 rejected are the component's UI state, under a name such as `form (name)`. So typing, leaving a
@@ -336,16 +228,9 @@ the submit has worked, and not when the input was invalid or the server refused 
 
 ## Router
 
-```ts
-export const home = Router.route("/")
-export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
+<<< apps/sidebar/src/routes.ts
 
-page: yield *
-  Router.outlet({
-    routes: [Router.on(home, EmptyPageView), Router.on(agentRoute, AgentPage)],
-    otherwise: MissingPageView,
-  })
-```
+<<< apps/sidebar/src/Shell.tsx#withPage
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
 layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
@@ -517,13 +402,7 @@ code.
 
 The devtools are not part of an app. In development the Vite plugin adds them:
 
-```ts
-import { sparDevtools } from "spar/devtools/vite"
-
-export default defineConfig({
-  plugins: [sparJsx, sparDevtools({ backends: ["http://127.0.0.1:4182"] })],
-})
-```
+<<< apps/sidebar/vite.config.ts
 
 It only acts on the dev server. A production build carries no devtools code at all
 (`apps/sidebar` checks its own build for that as part of `check`). `backends` are the servers
@@ -601,19 +480,12 @@ The component and its view do not change between them, and an update writes the 
 | `Terminal.layer(print)` (`spar/renderer/terminal`) | A document of its own, printed as text through `print` after each change              |
 | `Renderer.html`                                    | Text, for a server: each value read once, with the markers the browser takes over by  |
 
-```ts
-App.mount(Counter, {
-  layer: Layer.merge(
-    CounterStore.layer,
-    Terminal.layer((frame) => Console.log(frame)),
-  ),
-})
+<<< apps/demo/scripts/terminal.ts#program
 
-Server.renderToString(Counter, { layer: Layer.merge(CounterStore.layer, Renderer.html) })
-```
+<<< apps/ssr/scripts/render-page.tsx#rendered
 
-(`apps/demo/scripts/terminal.ts` draws the demo's counter in a terminal, unchanged; the server
-layers in `apps/ssr/server/layers.ts` give `Renderer.html`.) The first three draw into a document
+(The first draws the demo's counter in a terminal, unchanged; the second renders a page as text with
+`Renderer.html`.) The first three draw into a document
 and keep it up to date, so `App.mount` takes them; `Renderer.html` writes a page once, so the
 `Server` functions take it. Given the other kind, each says which renderer it needs.
 
