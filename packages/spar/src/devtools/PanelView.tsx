@@ -157,7 +157,7 @@ export const LaneView = View.make(
   ({ slot, ticks }) => (
     <li data-lane="">
       <span data-lane-name="">{slot}</span>
-      <span data-lane-track="" style={{ backgroundImage: ticks }} />
+      <span data-lane-track="" style={{ background: ticks }} />
     </li>
   ),
 )
