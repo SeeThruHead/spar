@@ -2,7 +2,7 @@ import type * as Aggregate from "@alchemy.run/domain/Aggregate"
 import { Effect, Ref, Schema, Semaphore, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
 import type { Context } from "effect"
-import { State } from "spar"
+import { Outbox, State } from "spar"
 
 type StateOf<Def extends Aggregate.AnyDefinition> = Def["state"]["Type"]
 
@@ -81,7 +81,11 @@ type RejectionsOf<C> = {
 export type Remote<Def extends Aggregate.AnyDefinition, S, I, Id, E, W, C> = {
   readonly aggregate: {
     readonly aggregateName: string
-    readonly definition: Def & { readonly state: Schema.Codec<S, I>; readonly initial: S }
+    readonly definition: Def & {
+      readonly state: Schema.Codec<S, I>
+      readonly initial: S
+      readonly commands: ReadonlyArray<Schema.Codec<SentOf<Def>, unknown>>
+    }
   }
   readonly view: Viewed<S, Id, E, W>
   readonly commands: C & Senders<SentOf<Def>, RejectionsOf<C>>
@@ -122,25 +126,50 @@ export const remote = Effect.fnUntraced(function* <
       same(held, now) ? Effect.void : slot.set(name, now, { version }),
     )
 
+  const sendAs = <T extends SentOf<Def>["_tag"]>(
+    command: CommandOfTag<SentOf<Def>, T> & { readonly _tag: T },
+    commandId: string,
+  ) => {
+    const senders: Senders<SentOf<Def>, RejectionsOf<C>> = over.commands
+    const sender = senders[command._tag]
+
+    return Effect.tap(sender(command, { commandId }), (receipt) =>
+      Effect.flatMap(readAfter([receipt]), (now) => writeNewer(command._tag, receipt.version, now)),
+    )
+  }
+
   const send = <T extends SentOf<Def>["_tag"]>(
     command: CommandOfTag<SentOf<Def>, T> & { readonly _tag: T },
-  ) =>
-    Effect.flatMap(random.uuidV7(), (commandId) => {
-      const senders: Senders<SentOf<Def>, RejectionsOf<C>> = over.commands
-      const sender = senders[command._tag]
+  ) => Effect.flatMap(random.uuidV7(), (commandId) => sendAs(command, commandId))
 
-      return Effect.tap(sender(command, { commandId }), (receipt) =>
-        Effect.flatMap(readAfter([receipt]), (now) =>
-          writeNewer(command._tag, receipt.version, now),
-        ),
-      )
-    })
+  const refused = (command: SentOf<Def>, rejection: unknown) =>
+    Effect.flatMap(slot.value.get, (held) =>
+      slot.set("Refused", held, {
+        command: tagOf(command).join(""),
+        rejection: tagOf(rejection).join(""),
+      }),
+    )
+
+  const delivered = (command: SentOf<Def>, key: string) =>
+    Effect.asVoid(
+      Effect.catchIf(
+        sendAs(command, key),
+        (error) => !tagOf(error).includes("RpcClientError"),
+        (error) => refused(command, error),
+      ),
+    )
+
+  const queued = Outbox.channel(
+    `${aggregateName}/${String(id)}`,
+    Schema.Union(definition.commands),
+    delivered,
+  )
 
   const follow = Stream.runForEach(over.view.watch(id), (snapshot) =>
     writeNewer("Watched", snapshot.cursor, snapshot.state ?? definition.initial),
   )
 
-  return { state: slot.value, send, follow }
+  return { state: slot.value, send, queued, follow }
 })
 
 export const store = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefinition, Id>(

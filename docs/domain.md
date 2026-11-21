@@ -62,7 +62,19 @@ a snapshot older than a command it already applied is dropped, and one that says
 writes nothing: each state reaches the log once. The test beside this page forks `follow`, has a
 second client send `Increment`, and checks that the first store sees it.
 
-## Not done yet
+## Commands that must arrive
 
-- Commands are sent at once. Sending them through an `Outbox.channel`, with the `commandId` as
-  its key, would let a command survive a closed tab or a dropped connection.
+`send` sends a command at once, and its Effect fails if the server cannot be reached. For a
+command that must arrive even if the tab closes or the connection drops, yield the store's
+`queued` instead (it needs `Outbox` in the app's layers) and call what it returns. The command
+is saved on the device first, then delivered by Spar's outbox, with the outbox's key as alchemy's
+`commandId`:
+
+- a dropped connection is retried under the same `commandId`, so the server applies the command
+  once however many times it is sent;
+- a refusal is final: it is written to the slot as `Refused`, naming the command and the
+  rejection, and it is not retried;
+- what has not been delivered is counted in `Outbox.pending`, and a command the outbox gives up
+  on is in `Outbox.dead`, as for any channel.
+
+The tests beside this page check all three against a fake server that drops, refuses or commits.
