@@ -15,6 +15,7 @@
     "apps/authoring": {
       "name": "@spar/authoring",
       "dependencies": {
+        "@alchemy.run/domain": "workspace:*",
         "alchemy": "2.0.0-beta.87",
         "effect": "4.1.4",
         "oxc-parser": "0.141.0",
@@ -174,6 +175,16 @@
         "vite": "8.3.8",
       },
     },
+    "packages/alchemy-domain": {
+      "name": "@alchemy.run/domain",
+      "version": "0.0.0-vendored",
+      "dependencies": {
+        "alchemy": "2.0.0-beta.87",
+        "effect": "4.1.4",
+        "oxc-parser": "0.141.0",
+        "z3-solver": "5.3.3",
+      },
+    },
     "packages/browsers": {
       "name": "@spar/browsers",
       "dependencies": {
@@ -281,6 +292,8 @@
     "effect": "4.1.4",
   },
   "packages": {
+    "@alchemy.run/domain": ["@alchemy.run/domain@workspace:packages/alchemy-domain"],
+
     "@alchemy.run/node-utils": ["@alchemy.run/node-utils@2.0.0-beta.87", "", { "dependencies": { "chokidar": "^5.0.0", "rolldown": "1.2.16" } }, "sha512-GhQSAY89Sz0P046tuHnLqoCUj79PMu1WUAOnIRLCwO4E4yPZ76IkEDrdl3hjCb7YHuqYA1Da6ZfV59TIQgGkSg=="],
 
     "@alchemy.run/sigil": ["@alchemy.run/sigil@0.1.0-alpha.4", "", { "peerDependencies": { "@types/react": ">=19.2.0", "react-devtools-core": ">=6.1.2" }, "optionalPeers": ["@types/react", "react-devtools-core"] }, "sha512-d6Uo16C2P6Wk7TNoYt4qzjjNGyjsrJLjq8bBotl86Nmcp/U6+R34/n4CZomqFERF2wMinut2DBqWNeUQPTBtFQ=="],

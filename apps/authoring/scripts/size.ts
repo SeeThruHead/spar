@@ -1,6 +1,6 @@
 const root = new URL("..", import.meta.url).pathname
 
-const domain = `${root}vendor/alchemy-domain/src/`
+const domain = `${root}../../packages/alchemy-domain/src/`
 
 const aliased = {
   name: "domain-source",

@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config"
 
-const domain = new URL("./vendor/alchemy-domain/src/", import.meta.url).pathname
+const domain = new URL("../../packages/alchemy-domain/src/", import.meta.url).pathname
 
 export default defineConfig({
   resolve: {
