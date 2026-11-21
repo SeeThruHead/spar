@@ -19,10 +19,11 @@ what a store is, with the rules of the domain written once, in the domain.
 
 - `state` is a reactive value of the aggregate's state. It is a slot in the one state, named
   `Counter/c-1`, so it is in snapshots, in the log and in the devtools like any store.
-- `send(command)` sends the command to the aggregate. When the aggregate accepts it, the slot is
-  written under the command's name, with the events it committed and the new version as what the
-  write carried. When the aggregate refuses it, the Effect fails with the command's typed
-  rejection, and nothing is written.
+- `send(command)` sends the command to the aggregate. When the aggregate accepts it, the store
+  folds the committed events into its state with the aggregate's own `evolve`, so a remote
+  aggregate costs one request, not two. The slot is written under the command's name, with the
+  events and the new version as what the write carried. When the aggregate refuses it, the
+  Effect fails with the command's typed rejection, and nothing is written.
 
 <<< packages/domain/test/store.test.ts#counting
 
@@ -42,8 +43,6 @@ commands go to the server's aggregate.
 
 ## Not done yet
 
-- After an accepted command the store reads the instance's state again. Folding the committed
-  events with the aggregate's own `evolve` would save that read when the aggregate is remote.
 - Commands are sent at once. For a remote aggregate, sending them through an `Outbox.channel`, so
   they survive a closed tab or a dropped connection, is next.
 - A test against a real server, through alchemy's API client.

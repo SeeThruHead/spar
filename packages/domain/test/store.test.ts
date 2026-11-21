@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { State } from "spar"
 import * as Aggregates from "../src/index.ts"
-import { Counter, CounterModel, FinishReset, Increment, Reset } from "./counter.ts"
+import { Counter, CounterModel, FinishReset, Increment, Incremented, Reset } from "./counter.ts"
 
 const local = Layer.mergeAll(
   CounterModel.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory)),
@@ -58,6 +58,31 @@ describe("an aggregate as a store", () => {
 
         expect(yield* counter.state.get).toEqual({ count: 0, phase: "idle" })
       }).pipe(Effect.provide(local), Effect.scoped),
+  )
+
+  it.effect(
+    "folds committed events with the aggregate's own evolve, skipping events it does not handle",
+    () =>
+      Effect.gen(function* () {
+        const evolve = Counter.definition.evolve
+        const state = Counter.definition.state
+        const start = { count: 1, phase: "idle" as const }
+        const now = yield* Aggregates.folded(evolve, state, start, [
+          new Incremented(),
+          { _tag: "SomethingElse" },
+          new Incremented(),
+        ])
+
+        expect(now).toEqual({ count: 3, phase: "idle" })
+
+        const broken = yield* Effect.exit(
+          Aggregates.folded({ Incremented: () => ({ count: "many" }) }, state, start, [
+            new Incremented(),
+          ]),
+        )
+
+        expect(broken._tag).toBe("Failure")
+      }),
   )
 
   it("names a write after the command and lists its events by tag, skipping anything untagged", () => {

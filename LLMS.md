@@ -3375,10 +3375,11 @@ export class Counter extends Domain.Aggregate("Counter", {
 
 - `state` is a reactive value of the aggregate's state. It is a slot in the one state, named
   `Counter/c-1`, so it is in snapshots, in the log and in the devtools like any store.
-- `send(command)` sends the command to the aggregate. When the aggregate accepts it, the slot is
-  written under the command's name, with the events it committed and the new version as what the
-  write carried. When the aggregate refuses it, the Effect fails with the command's typed
-  rejection, and nothing is written.
+- `send(command)` sends the command to the aggregate. When the aggregate accepts it, the store
+  folds the committed events into its state with the aggregate's own `evolve`, so a remote
+  aggregate costs one request, not two. The slot is written under the command's name, with the
+  events and the new version as what the write carried. When the aggregate refuses it, the
+  Effect fails with the command's typed rejection, and nothing is written.
 
 ```ts
 const counting = Effect.gen(function* () {
@@ -3431,6 +3432,31 @@ describe("an aggregate as a store", () => {
       }).pipe(Effect.provide(local), Effect.scoped),
   )
 
+  it.effect(
+    "folds committed events with the aggregate's own evolve, skipping events it does not handle",
+    () =>
+      Effect.gen(function* () {
+        const evolve = Counter.definition.evolve
+        const state = Counter.definition.state
+        const start = { count: 1, phase: "idle" as const }
+        const now = yield* Aggregates.folded(evolve, state, start, [
+          new Incremented(),
+          { _tag: "SomethingElse" },
+          new Incremented(),
+        ])
+
+        expect(now).toEqual({ count: 3, phase: "idle" })
+
+        const broken = yield* Effect.exit(
+          Aggregates.folded({ Incremented: () => ({ count: "many" }) }, state, start, [
+            new Incremented(),
+          ]),
+        )
+
+        expect(broken._tag).toBe("Failure")
+      }),
+  )
+
   it("names a write after the command and lists its events by tag, skipping anything untagged", () => {
     expect(Aggregates.tagOf(new Increment({ counterId: "x" }))).toEqual(["Increment"])
     expect([null, 3, {}, { _tag: 4 }].flatMap(Aggregates.tagOf)).toEqual([])
@@ -3463,8 +3489,6 @@ commands go to the server's aggregate.
 
 ### Not done yet
 
-- After an accepted command the store reads the instance's state again. Folding the committed
-  events with the aggregate's own `evolve` would save that read when the aggregate is remote.
 - Commands are sent at once. For a remote aggregate, sending them through an `Outbox.channel`, so
   they survive a closed tab or a dropped connection, is next.
 - A test against a real server, through alchemy's API client.
