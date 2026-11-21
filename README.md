@@ -18,7 +18,8 @@ the same over MCP or from a shell.
 State is held only in a store or in UI state, wherever it is declared, and every backend call goes
 through one client, so there is no change and no call the framework does not see.
 
-This repo is private and nothing here is published.
+The code is public so it can be read; it is not on npm yet. The docs site is at
+[spar.seethruhead.vip](https://spar.seethruhead.vip).
 
 ## Read
 
