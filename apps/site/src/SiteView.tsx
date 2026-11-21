@@ -149,7 +149,7 @@ export const HomeView = View.make(
           src="/spar-promo.mp4"
           aria-label="Spar in under two minutes"
         />
-        <figcaption>Spar in under two minutes (1:42, with sound).</figcaption>
+        <figcaption>Spar in under two minutes (1:48, with sound).</figcaption>
       </figure>
       <article class="prose" markup={before} onClick={onLink} />
       {loads}
