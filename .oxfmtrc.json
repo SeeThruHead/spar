@@ -9,6 +9,7 @@
     "**/coverage/**",
     "**/artifacts/**",
     "**/vendor/**",
+    "packages/alchemy-domain/**",
     "LLMS.md",
     "docs/benchmarks.md",
     "docs/navigation.md",
