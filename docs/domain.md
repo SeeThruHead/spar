@@ -20,8 +20,8 @@ what a store is, with the rules of the domain written once, in the domain.
 - `state` is a reactive value of the aggregate's state. It is a slot in the one state, named
   `Counter/c-1`, so it is in snapshots, in the log and in the devtools like any store.
 - `send(command)` sends the command to the aggregate. When the aggregate accepts it, the store
-  folds the committed events into its state with the aggregate's own `evolve`, so a remote
-  aggregate costs one request, not two. The slot is written under the command's name, with the
+  folds the committed events into its state with the aggregate's own `evolve`, so it does not
+  read the instance again. The slot is written under the command's name, with the
   events and the new version as what the write carried. When the aggregate refuses it, the
   Effect fails with the command's typed rejection, and nothing is written.
 
@@ -38,11 +38,12 @@ For an app with no backend, alchemy's in-memory runtime decides and folds in the
 
 <<< packages/domain/test/store.test.ts#local
 
-For an app with a server, give the model's layer over alchemy's API client instead, and the same
-commands go to the server's aggregate.
-
 ## Not done yet
 
-- Commands are sent at once. For a remote aggregate, sending them through an `Outbox.channel`, so
-  they survive a closed tab or a dropped connection, is next.
-- A test against a real server, through alchemy's API client.
+- A store over a server's aggregate. Alchemy's API client sends a command by name
+  (`api.Increment(input)`) and answers with the stream and version it committed, not the
+  events, so a remote store has to take its state from one of the model's views
+  (`api.CounterView.watch(id)`) rather than folding events itself.
+- That remote store would send its commands through an `Outbox.channel` with alchemy's
+  `commandId` as the idempotency key, so a command survives a closed tab or a dropped connection
+  and is never applied twice.
