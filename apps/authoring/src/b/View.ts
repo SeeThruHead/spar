@@ -33,10 +33,6 @@ export declare const tap: <In, E, R>(
   run: (props: In) => Effect.Effect<unknown, E, R>,
 ) => Step<In, unknown, E, Outside<R>>
 
-export declare const react: <State, R>(
-  reaction: Store.Reaction<State, R>,
-) => Step<unknown, unknown, never, R>
-
 export declare const withSpan: (
   name: string,
   attributes?: Readonly<Record<string, string>>,
