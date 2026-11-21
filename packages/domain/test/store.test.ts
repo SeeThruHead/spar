@@ -10,19 +10,25 @@ const local = Layer.mergeAll(
   State.layer,
 )
 
+const counting = Effect.gen(function* () {
+  const counter = yield* Aggregates.store(Counter, "c-1")
+  const before = yield* counter.state.get
+  const receipt = yield* counter.send(new Increment({ counterId: "c-1" }))
+  const after = yield* counter.state.get
+
+  return { before, events: receipt.events.map((event) => event._tag), after }
+})
+
 describe("an aggregate as a store", () => {
   it.effect(
     "starts from the aggregate's state, and a command moves the slot in the one state",
     () =>
       Effect.gen(function* () {
-        const counter = yield* Aggregates.store(Counter, "c-1")
-
-        expect(yield* counter.state.get).toEqual({ count: 0, phase: "idle" })
-
-        const receipt = yield* counter.send(new Increment({ counterId: "c-1" }))
-
-        expect(receipt.events.map((event) => event._tag)).toEqual(["Incremented"])
-        expect(yield* counter.state.get).toEqual({ count: 1, phase: "idle" })
+        expect(yield* counting).toEqual({
+          before: { count: 0, phase: "idle" },
+          events: ["Incremented"],
+          after: { count: 1, phase: "idle" },
+        })
 
         const snapshot = yield* Effect.flatMap(State.current, (state) => state.snapshot)
 

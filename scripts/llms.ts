@@ -97,6 +97,7 @@ const body = [
   await part("State, events that interleave, and server data", "docs/state-and-server-data.md"),
   await part("Getting started", "docs/getting-started.md"),
   await part("Recipes", "docs/recipes.md"),
+  await part("Aggregates as stores", "docs/domain.md"),
   await part("Coming from React", "docs/from-react.md"),
   await part("Coming from Foldkit", "docs/from-foldkit.md"),
   await part("Spar beside an Elm-architecture framework", "docs/beside-elm-architecture.md"),

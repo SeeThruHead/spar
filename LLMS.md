@@ -3323,6 +3323,153 @@ runs the work once. A handler that finishes at once, such as a store command, co
 and typing is never dropped.
 
 
+# Aggregates as stores
+
+`@spar/domain` lets an [alchemy domain](https://github.com/alchemy-run/alchemy) aggregate be a
+Spar store. It is opt-in: Spar itself has no dependency on alchemy.
+
+An aggregate is a good store. Its commands are named and carry a Schema, `decide` says what each
+one records or why it is refused, and `evolve` folds what was recorded into the state. That is
+what a store is, with the rules of the domain written once, in the domain.
+
+### The aggregate
+
+```ts
+export class Increment extends Domain.Command("Increment", {
+  input: { counterId: CounterId },
+  events: [Incremented],
+  rejects: [ResetInProgress],
+}) {}
+```
+
+(`packages/domain/test/counter.ts`)
+
+```ts
+export class Counter extends Domain.Aggregate("Counter", {
+  id: CounterId,
+  state: Counting,
+  initial: { count: 0, phase: "idle" },
+  commands: [Increment, Reset, FinishReset],
+  keyOf: (command) => command.counterId,
+  decide: {
+    Increment: (counter) =>
+      counter.phase === "resetting" ? new ResetInProgress() : [new Incremented()],
+    Reset: (counter) =>
+      counter.phase === "resetting" ? new ResetInProgress() : [new ResetStarted()],
+    FinishReset: (counter) =>
+      counter.phase === "idle" ? new NoResetInProgress() : [new ResetFinished()],
+  },
+  evolve: {
+    Incremented: (counter) => ({ ...counter, count: counter.count + 1 }),
+    ResetStarted: (counter) => ({ ...counter, phase: "resetting" as const }),
+    ResetFinished: () => ({ count: 0, phase: "idle" as const }),
+  },
+}) {}
+```
+
+(`packages/domain/test/counter.ts`)
+
+### The store
+
+`Aggregates.store(Aggregate, id)` gives a store over one instance:
+
+- `state` is a reactive value of the aggregate's state. It is a slot in the one state, named
+  `Counter/c-1`, so it is in snapshots, in the log and in the devtools like any store.
+- `send(command)` sends the command to the aggregate. When the aggregate accepts it, the slot is
+  written under the command's name, with the events it committed and the new version as what the
+  write carried. When the aggregate refuses it, the Effect fails with the command's typed
+  rejection, and nothing is written.
+
+```ts
+const counting = Effect.gen(function* () {
+  const counter = yield* Aggregates.store(Counter, "c-1")
+  const before = yield* counter.state.get
+  const receipt = yield* counter.send(new Increment({ counterId: "c-1" }))
+  const after = yield* counter.state.get
+
+  return { before, events: receipt.events.map((event) => event._tag), after }
+})
+
+describe("an aggregate as a store", () => {
+  it.effect(
+    "starts from the aggregate's state, and a command moves the slot in the one state",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* counting).toEqual({
+          before: { count: 0, phase: "idle" },
+          events: ["Incremented"],
+          after: { count: 1, phase: "idle" },
+        })
+
+        const snapshot = yield* Effect.flatMap(State.current, (state) => state.snapshot)
+
+        expect(snapshot).toContainEqual({
+          path: [],
+          name: "Counter/c-1",
+          value: { count: 1, phase: "idle" },
+        })
+      }).pipe(Effect.provide(local), Effect.scoped),
+  )
+
+  it.effect(
+    "a command the aggregate rejects fails with that typed rejection and changes nothing",
+    () =>
+      Effect.gen(function* () {
+        const counter = yield* Aggregates.store(Counter, "c-2")
+
+        yield* counter.send(new Increment({ counterId: "c-2" }))
+        yield* counter.send(new Reset({ counterId: "c-2" }))
+
+        const refused = yield* Effect.flip(counter.send(new Increment({ counterId: "c-2" })))
+
+        expect(refused._tag).toBe("ResetInProgress")
+        expect(yield* counter.state.get).toEqual({ count: 1, phase: "resetting" })
+
+        yield* counter.send(new FinishReset({ counterId: "c-2" }))
+
+        expect(yield* counter.state.get).toEqual({ count: 0, phase: "idle" })
+      }).pipe(Effect.provide(local), Effect.scoped),
+  )
+
+  it("names a write after the command and lists its events by tag, skipping anything untagged", () => {
+    expect(Aggregates.tagOf(new Increment({ counterId: "x" }))).toEqual(["Increment"])
+    expect([null, 3, {}, { _tag: 4 }].flatMap(Aggregates.tagOf)).toEqual([])
+  })
+})
+```
+
+(`packages/domain/test/store.test.ts`)
+
+A refusal is the domain's rule, not Spar's: Spar has no guards of its own. The test beside this
+example sends `Increment` while a reset is running and checks that it fails with
+`ResetInProgress` and the state is unchanged.
+
+### In the browser or against a server
+
+Where the aggregate runs is the alchemy layer the app is given, and the store does not change.
+For an app with no backend, alchemy's in-memory runtime decides and folds in the page:
+
+```ts
+const local = Layer.mergeAll(
+  CounterModel.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory)),
+  State.layer,
+)
+```
+
+(`packages/domain/test/store.test.ts`)
+
+For an app with a server, give the model's layer over alchemy's API client instead, and the same
+commands go to the server's aggregate.
+
+### Not done yet
+
+- After an accepted command the store reads the instance's state again. Folding the committed
+  events with the aggregate's own `evolve` would save that read when the aggregate is remote.
+- Commands are sent at once. For a remote aggregate, sending them through an `Outbox.channel`, so
+  they survive a closed tab or a dropped connection, is next.
+- A test against a real server, through alchemy's API client.
+
+
 # Coming from React
 
 | React                                             | Spar                                                                                         |
