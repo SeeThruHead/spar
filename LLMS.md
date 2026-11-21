@@ -683,12 +683,15 @@ needs.
 
 Rules out: a load failure nobody handles and a missing provider. Both are compile errors.
 
-### 4. Children with needs are placed by the Effect, not by JSX
+### 4. A child's needs and failures are not lost in JSX
 
-TypeScript gives every JSX expression the same type, so a connected component used as a tag would
-silently lose its errors and layers. A connected component is therefore not a function and cannot be
-a tag. The parent's Effect mounts it with `View.child`, `Reactive.mapBy`, `Reactive.when` or
-`Router.outlet` and hands the view a finished element. Only pure views are JSX tags.
+TypeScript gives every JSX expression the same type, so a child written as a tag cannot add its
+errors and services to its parent's type. Two things close that hole. A component that can still
+fail cannot be written as a tag at all: recover its error inside it with `View.recover`, or mount it
+from the parent's Effect with `View.child`, `Reactive.mapBy`, `Reactive.when` or `Router.outlet`,
+which keep its type. And the Vite build reads the code, follows components across files to the
+layer given to `App.mount`, and stops with `SPAR_CHILD_NEEDS_A_SERVICE` when a child written as a
+tag needs a service nothing above it provides.
 
 Rules out: requirements and errors that disappear somewhere in the middle of the tree.
 
@@ -763,9 +766,11 @@ Rules out: rules that hold only while everyone remembers them.
 
 ### 12. One way to do each thing
 
-The surface is these modules: View, Reactive, UiState, Store, Outbox, Events, Handle, Form, Router,
-Overlay, Devtools, App, and `spar/testing`. Timers are Effect's schedules and websockets are
-`effect/socket`; Spar adds no wrapper for what Effect already ships.
+The surface is `compose` with its enhancers, and these modules: App, Backend, Diagnostics, Events,
+Form, Handle, Markup, Outbox, Overlay, Props, Query, Reactive, Renderer, Router, Server, State,
+Store, Tabs, Timeline, UiState and View, plus `spar/testing` and the devtools under
+`spar/devtools`. Timers are Effect's schedules and websockets are `effect/socket`; Spar adds no
+wrapper for what Effect already ships.
 
 Rules out: two styles of the same app in one codebase.
 
@@ -830,7 +835,7 @@ Every backend call goes through `Backend`. Effect RPC is the way to talk to a ba
 HttpApi and JSON clients plug into the same client; everything that would go around it is refused
 by the build. A call the framework cannot see is a call missing from the trace.
 
-### 18a. Work that takes time is an Effect, and server data is a store
+### 18. Work that takes time is an Effect, and server data is a store
 
 Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
 command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
@@ -839,7 +844,7 @@ Effect, so a button, a key and an agent get the same behaviour, and every comman
 the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
 and failed states, and any Effect reads it directly, so no prop carries server data.
 
-### 18. The past can be walked and branched
+### 19. The past can be walked and branched
 
 Any moment in the log can be shown again, stepped through with the trace each step caused, and
 forked: the program carries on from there while the original is kept. People do it in the tools
@@ -857,8 +862,12 @@ and agents do it over MCP or from a shell.
   to act on it.
 - A span per component is automatic (named after the view), so there is no `withSpan`.
 - Two internal modules are allowed to mutate, each behind a pure-looking interface: `internal/dom.ts`
-  (all DOM writes) and `internal/cell.ts` (the value cell under reactive values, added after the
-  benchmark showed a stream and a fiber per binding cost 10 seconds for 10,000 rows). The reactive
+  (all DOM writes) and `internal/cell.ts` (the value cell under reactive values). The first
+  benchmark took 10.7 seconds for 10,000 rows with a stream and a fiber per binding, but that
+  change also replaced Effect's default scheduler, whose `setTimeout(0)` browsers stretch to 4 ms.
+  Measured apart later, with the fast scheduler kept: streams per binding cost about 1.5 times the
+  time to build rows and 5 times the memory (89 MB against 18 MB at 10,000 rows), and Effect's own
+  `Atom` about 1.3 times the time and 1.8 times the memory (33 MB). The reactive
   values in `internal/reactive.ts` are small classes for the same reason: one object per value
   instead of an object, two effects and three closures, which with one list of things to stop per
   row took 10,000 rows from 61 MB to 19 MB. The lint rule lets a constructor set its own fields
