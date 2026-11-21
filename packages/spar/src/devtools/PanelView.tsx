@@ -66,12 +66,14 @@ export const BarView = View.make(
     note: Props.Reactive(Schema.String),
     waitedFrom: Props.Reactive(Schema.String),
     waited: Props.Reactive(Schema.String),
+    onSelect: Props.Action,
   },
-  ({ name, where, took, failed, indent, left, width, note, waitedFrom, waited }) => (
+  ({ name, where, took, failed, indent, left, width, note, waitedFrom, waited, onSelect }) => (
     <li
       data-where={where}
       data-failed={Reactive.map(failed, (bad) => (bad ? "yes" : "no"))}
       data-bar=""
+      onClick={onSelect}
     >
       <span data-span-name="" style={{ paddingLeft: indent }}>
         <i data-dot="" /> <strong>{name}</strong> <small data-note="">{note}</small>
@@ -489,6 +491,7 @@ const look = [
   "[data-actions] button { width: 22px; height: 20px; padding: 0; border-radius: 4px; line-height: 18px; text-align: center }",
   "[data-trace-id] { display: none }",
   "[data-bar] { display: grid; grid-template-columns: minmax(0, 44%) minmax(0, 1fr) 72px 92px; align-items: center; gap: 8px; padding: 2px 12px; border-bottom: 1px solid #191c22; font: 12px/1.6 ui-monospace, Menlo, monospace }",
+  "[data-bar] { cursor: pointer } [data-bar]:hover { background: #171b22 }",
   "[data-span-name] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap } [data-span-name] strong { font-weight: 400; color: #e6e8ec }",
   "[data-bar][data-where=backend] [data-dot], [data-bar][data-where=backend] [data-fill] { background: #4fd1c5 }",
   "[data-bar][data-failed=yes] [data-fill] { background: #ff8a94 }",
@@ -539,6 +542,7 @@ export const ToolsView = View.make(
     open: Props.State(Schema.Boolean),
     lanesShown: Props.State(Schema.Boolean),
     detailTab: Props.State(Schema.String),
+    spanAbout: Props.Reactive(Schema.String),
     event: Props.Element,
     inspector: Props.Element,
     lanes: Props.Element,
@@ -546,7 +550,18 @@ export const ToolsView = View.make(
     trace: Props.Element,
     stores: Props.Element,
   },
-  ({ open, lanesShown, detailTab, event, inspector, lanes, timeline, trace, stores }) => (
+  ({
+    open,
+    lanesShown,
+    detailTab,
+    spanAbout,
+    event,
+    inspector,
+    lanes,
+    timeline,
+    trace,
+    stores,
+  }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
       <style>{look}</style>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
@@ -578,6 +593,12 @@ export const ToolsView = View.make(
                 Event
               </button>
               <button
+                aria-pressed={Reactive.map(detailTab, (tab) => tab === "span")}
+                onClick={UiState.set(detailTab, "span")}
+              >
+                Span
+              </button>
+              <button
                 aria-pressed={Reactive.map(detailTab, (tab) => tab === "stores")}
                 onClick={UiState.set(detailTab, "stores")}
               >
@@ -586,6 +607,16 @@ export const ToolsView = View.make(
             </nav>
             <div data-tab="" hidden={Reactive.map(detailTab, (tab) => tab !== "event")}>
               {event}
+            </div>
+            <div data-tab="" hidden={Reactive.map(detailTab, (tab) => tab !== "span")}>
+              <section aria-label="Span">
+                <h2>Span</h2>
+                <pre aria-label="The picked span">
+                  {Reactive.map(spanAbout, (about) =>
+                    about === "" ? "Pick a span in the trace to see it here." : about,
+                  )}
+                </pre>
+              </section>
             </div>
             <div data-tab="" hidden={Reactive.map(detailTab, (tab) => tab !== "stores")}>
               {stores}

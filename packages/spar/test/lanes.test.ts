@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import {
+  aboutSpan,
   acrossLanes,
   eventShown,
   lanesOf,
@@ -40,6 +41,33 @@ describe("an event's row", () => {
     expect(summaryOfMoment(moment(2, "command", "a/b"))).toBe("a/b")
     expect(summaryOfMoment({ ...moment(3, "ui", "Shell . draft"), detail: "x".repeat(100) })).toBe(
       `Shell . draft "${"x".repeat(78)}…`,
+    )
+  })
+})
+
+describe("a picked span", () => {
+  it("is shown with its timing, its place in the trace and every attribute", () => {
+    const span = {
+      name: "Agents.start",
+      traceId: "t",
+      spanId: "s2",
+      parentSpanId: "s1",
+      startedAt: 10,
+      endedAt: 60.8,
+      failed: true,
+      attributes: { "rpc.method": "Agents.start" },
+    }
+
+    expect(aboutSpan(span, "backend")).toBe(
+      "Agents.start\nbackend · 50.8 ms · failed\nspan    s2\nparent  s1\ntrace   t\n\nrpc.method  Agents.start",
+    )
+    expect(
+      aboutSpan(
+        { ...span, parentSpanId: null, failed: false, endedAt: null, attributes: {} },
+        "page",
+      ),
+    ).toBe(
+      "Agents.start\npage · 0.0 ms\nspan    s2\nparent  none, it starts the trace\ntrace   t\n",
     )
   })
 })

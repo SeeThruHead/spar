@@ -999,6 +999,7 @@ type Bar = {
   readonly note: string
   readonly waitedFrom: string
   readonly waited: string
+  readonly about: string
 }
 
 const endOf = (span: Spans.Recorded): number => span.endedAt ?? span.startedAt
@@ -1058,8 +1059,20 @@ export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
       span.startedAt - (askedBefore(span, ordered)?.startedAt ?? span.startedAt),
       whole,
     ),
+    about: aboutSpan(span, where),
   }))
 }
+
+export const aboutSpan = (span: Spans.Recorded, where: string): string =>
+  [
+    span.name,
+    `${where} · ${(endOf(span) - span.startedAt).toFixed(1)} ms${span.failed ? " · failed" : ""}`,
+    `span    ${span.spanId}`,
+    `parent  ${span.parentSpanId ?? "none, it starts the trace"}`,
+    `trace   ${span.traceId}`,
+    "",
+    ...Object.entries(span.attributes).map(([name, value]) => `${name}  ${value}`),
+  ].join("\n")
 
 const backendCount = (): number =>
   Option.getOrElse(
@@ -1085,8 +1098,8 @@ const fromBackends = (traceId: string, ask: number) =>
 const decodeSpans = Schema.decodeUnknownOption(Schema.Array(Spans.Recorded))
 
 export const TracePanel = compose(
-  withProps({ traceId: Props.Reactive(Schema.String) }),
-  Effect.fnUntraced(function* ({ traceId }) {
+  withProps({ traceId: Props.Reactive(Schema.String), onSpan: Props.Callback(Schema.String) }),
+  Effect.fnUntraced(function* ({ traceId, onSpan }) {
     const registry = yield* Registry
     const page = yield* Effect.serviceOption(Spans.SpanBuffer)
     const backend = Cell.make<ReadonlyArray<Spans.Recorded>>([])
@@ -1145,6 +1158,7 @@ export const TracePanel = compose(
             waitedFrom: Reactive.map(bar, (now) => now.waitedFrom),
             waited: Reactive.map(bar, (now) => now.waited),
             note: Reactive.map(bar, (now) => now.note),
+            onSelect: Effect.map(bar.get, (now) => onSpan(now.about)),
           }),
         ),
       ),
@@ -1161,16 +1175,23 @@ export const Tools = compose(
     const scrubbed = yield* UiState.make("scrubbed", Schema.NullOr(Schema.Int), null)
     const lanesShown = yield* UiState.make("lanes", Schema.Boolean, true)
     const onTrace = (traceId: string) => UiState.set(tracing, traceId)
+    const detailTab = yield* UiState.make("detail", Schema.String, "event")
+    const spanAbout = yield* UiState.make("span", Schema.String, "")
+    const onSpan = (about: string) => [
+      UiState.set(spanAbout, about),
+      UiState.set(detailTab, "span"),
+    ]
 
     return {
       open: yield* UiState.make("open", Schema.Boolean, false),
       lanesShown,
-      detailTab: yield* UiState.make("detail", Schema.String, "event"),
+      detailTab,
+      spanAbout,
       event: yield* View.child(EventPanel, {}),
       inspector: yield* View.child(Inspector, {}),
       lanes: yield* View.child(LanesPanel, { shown: lanesShown, scrubbed, onTrace }),
       timeline: yield* View.child(TimelinePanel, { onTrace, scrubbed }),
-      trace: yield* View.child(TracePanel, { traceId: tracing }),
+      trace: yield* View.child(TracePanel, { traceId: tracing, onSpan }),
       stores: yield* View.child(Panel, {}),
     }
   }),

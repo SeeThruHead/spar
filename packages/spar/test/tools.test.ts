@@ -436,6 +436,15 @@ describe("devtools an app did not ask for", () => {
           "backend Tally.still no 12px",
         ])
         expect(screen.getByLabelText("Trace shown").textContent).toBe("4 spans")
+
+        const firstBar = screen.getByLabelText("Spans").querySelector("li")
+
+        yield* Effect.sync(() => firstBar !== null && fireEvent.click(firstBar))
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("The picked span").textContent).toMatch(
+            /^Tally\.add\nbackend · \d+\.\d ms · failed\nspan /,
+          ),
+        )
         expect(asked.read()).toEqual([
           "/@spar/backend/0/spans/",
           "/@spar/backend/1/spans/",

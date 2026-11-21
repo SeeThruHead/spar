@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Effect, Layer, Ref, Schedule, Schema } from "effect"
+import { Effect, Layer, Ref, Schedule, Schema, Struct } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, Router, State as OneState, Store, Timeline, UiState, View, compose } from "spar"
 import { Entry as UiEntry } from "../src/internal/uiTree.ts"
@@ -205,7 +205,8 @@ describe("one log of everything that happened", () => {
       { span: recorded("root", null, 100, 200, false), where: "page" },
     ])
 
-    expect(bars).toEqual([
+    expect(bars.map((bar) => bar.about.split("\n")[0])).toEqual(["root", "inner", "open"])
+    expect(bars.map((bar) => Struct.omit(bar, ["about"]))).toEqual([
       {
         key: "page root",
         name: "root",
