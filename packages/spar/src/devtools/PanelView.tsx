@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import * as Events from "../Events.ts"
 import * as Props from "../Props.ts"
 import * as Reactive from "../Reactive.ts"
 import * as UiState from "../UiState.ts"
@@ -16,15 +17,26 @@ export const MomentView = View.make(
     onTrace: Props.Action,
   },
   ({ seq, kind, summary, trace, current, onJump, onTrace }) => (
-    <li aria-current={current} data-kind={kind} data-moment="">
+    <li aria-current={current} data-kind={kind} data-moment="" onClick={[onJump, onTrace]}>
       <span data-seq="">{seq}</span>
       <span data-what="">
         <i data-dot="" /> <span data-kind-name="">{kind}</span> <code>{summary}</code>
       </span>
       <span data-actions="">
-        <button onClick={onJump}>Jump to {seq}</button>
-        <button onClick={onTrace} hidden={Reactive.map(trace, (id) => id === "")}>
-          Trace {seq}
+        <button
+          aria-label={`Jump to ${seq}`}
+          title="Show the app as it was here"
+          onClick={Events.stop(onJump)}
+        >
+          ⟲
+        </button>
+        <button
+          aria-label={`Trace ${seq}`}
+          title="Show this event's trace"
+          onClick={Events.stop(onTrace)}
+          hidden={Reactive.map(trace, (id) => id === "")}
+        >
+          ≋
         </button>
       </span>
       <small aria-label={`Trace of ${seq}`} data-trace-id="">
@@ -368,7 +380,9 @@ const look = [
   "[data-what] code { color: #d6d9e0 } [data-kind-name] { color: #8a91a0 }",
   "[data-dot] { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #6ea8fe; vertical-align: 1px }",
   "[data-kind=ui] [data-dot] { background: #c39bff } [data-kind=route] [data-dot] { background: #f0b45a } [data-kind=data] [data-dot] { background: #4fd1c5 } [data-kind=call] [data-dot] { background: #8bd17c } [data-kind=refused] [data-dot], [data-kind=noticed] [data-dot] { background: #ff8a94 } [data-kind=waited] [data-dot] { background: #f0b45a }",
-  "[data-actions] { display: flex; gap: 4px; opacity: 0.35 } [data-moment]:hover [data-actions], [data-moment][aria-current=true] [data-actions] { opacity: 1 }",
+  "[data-moment] { cursor: pointer }",
+  "[data-actions] { display: flex; gap: 2px; opacity: 0 } [data-moment]:hover [data-actions], [data-moment][aria-current=true] [data-actions] { opacity: 1 }",
+  "[data-actions] button { width: 22px; height: 20px; padding: 0; border-radius: 4px; line-height: 18px; text-align: center }",
   "[data-trace-id] { display: none }",
   "[data-bar] { display: grid; grid-template-columns: minmax(0, 44%) minmax(0, 1fr) 72px 92px; align-items: center; gap: 8px; padding: 2px 12px; border-bottom: 1px solid #191c22; font: 12px/1.6 ui-monospace, Menlo, monospace }",
   "[data-span-name] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap } [data-span-name] strong { font-weight: 400; color: #e6e8ec }",

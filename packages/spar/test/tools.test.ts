@@ -172,13 +172,13 @@ const spans = (): ReadonlyArray<string> =>
       item.getAttribute("data-where"),
       item.querySelector("strong")?.textContent,
       item.getAttribute("data-failed"),
-      item.querySelector("div")?.style.paddingLeft,
+      item.querySelector<HTMLElement>("[data-span-name]")?.style.paddingLeft,
     ].join(" "),
   )
 
 const listed = (): ReadonlyArray<string | null | undefined> =>
-  [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
-    (item) => item.querySelector("code")?.textContent,
+  [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map((item) =>
+    item.querySelector("[data-what]")?.textContent?.trim(),
   )
 
 describe("devtools an app did not ask for", () => {
@@ -352,7 +352,7 @@ describe("devtools an app did not ask for", () => {
           ...(screen
             .getByLabelText("Spans")
             .querySelector('li[data-where="page"]')
-            ?.querySelectorAll<HTMLElement>("div > div") ?? []),
+            ?.querySelectorAll<HTMLElement>("[data-wait], [data-fill]") ?? []),
         ]
 
         expect([
@@ -362,9 +362,9 @@ describe("devtools an app did not ask for", () => {
         ]).toEqual(["0.00%", bar?.style.left, "0.00%"])
         expect(bar?.style.left).toMatch(/^\d+\.\d\d%$/)
         expect(bar?.style.width).toMatch(/^\d+\.\d\d%$/)
-        expect(
-          screen.getByLabelText("Spans").querySelector("li small:nth-of-type(2)")?.textContent,
-        ).toMatch(/^\d+\.\d ms$/)
+        expect(screen.getByLabelText("Spans").querySelector("li [data-took]")?.textContent).toMatch(
+          /^\d+\.\d ms$/,
+        )
 
         expect(drawn.filter((span) => span.startsWith("page"))).toEqual([
           "page on click no 0px",

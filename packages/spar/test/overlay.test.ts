@@ -167,6 +167,27 @@ describe("overlays", () => {
     }),
   )
 
+  it.live("a dialog never makes the devtools inert, only the app beneath it", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Page)
+      yield* Effect.sync(() =>
+        overlays()?.insertAdjacentHTML(
+          "afterbegin",
+          '<div data-test-tools=""><aside data-spar-devtools=""></aside></div>',
+        ),
+      )
+      yield* openSettings
+      yield* Testing.find("dialog", "Settings")
+
+      expect(appRoot()?.hasAttribute("inert")).toBe(true)
+      expect(document.querySelector("[data-test-tools]")?.hasAttribute("inert")).toBe(false)
+
+      yield* escape
+      yield* Testing.gone("dialog")
+      yield* Effect.sync(() => document.querySelector("[data-test-tools]")?.remove())
+    }),
+  )
+
   it.live("a menu sits by its button and closes on Escape or a press anywhere else", () =>
     Effect.gen(function* () {
       const box = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect")
