@@ -8,6 +8,7 @@ import {
   eventShown,
   lanesOf,
   seqAt,
+  backgroundOf,
   summaryOfMoment,
   ticksDrawn,
   waitBefore,
@@ -76,6 +77,15 @@ describe("a wait between spans", () => {
     expect(waitBefore(first, all)).toBe("")
     expect(waitBefore(deliver, all)).toBe("")
     expect(waitBefore(recordedSpan("close", "deliver", 70, 71), all)).toBe("")
+  })
+})
+
+describe("background work", () => {
+  it("is said on the outbox's delivery, and on nothing else", () => {
+    expect(backgroundOf({ "spar.background": "outbox" })).toBe(
+      "in the background: the click was done when it was saved",
+    )
+    expect(backgroundOf({})).toBe("")
   })
 })
 

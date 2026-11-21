@@ -1106,8 +1106,15 @@ export const waitBefore = (span: Spans.Recorded, all: ReadonlyArray<Sided>): str
   return Number.isFinite(gap) && gap >= noticeableWait ? `after a ${gap.toFixed(0)} ms wait` : ""
 }
 
+export const backgroundOf = (attributes: Readonly<Record<string, string>>): string =>
+  attributes["spar.background"] === "outbox"
+    ? "in the background: the click was done when it was saved"
+    : ""
+
 const notesOf = (span: Spans.Recorded, all: ReadonlyArray<Sided>): string =>
-  [noteOf(span.attributes), waitBefore(span, all)].filter((note) => note !== "").join(" · ")
+  [backgroundOf(span.attributes), noteOf(span.attributes), waitBefore(span, all)]
+    .filter((note) => note !== "")
+    .join(" · ")
 
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
