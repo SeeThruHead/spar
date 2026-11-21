@@ -1,5 +1,8 @@
 # Spar
 
+> **Pre-beta, under heavy active development.** The API changes often and nothing here is stable
+> yet. Do not build anything you depend on with it.
+
 A UI framework for people who are all in on Effect, and for nobody else. It is opinionated on
 purpose: where a thing could be done two ways, one is refused. A component is a pure JSX view plus one Effect that makes its props. The
 Effect runs once when the component mounts; reactive values update single DOM nodes; errors and

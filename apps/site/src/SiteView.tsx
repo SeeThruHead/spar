@@ -182,6 +182,10 @@ export const SiteView = View.make(
   },
   (props) => (
     <div class="site">
+      <p class="stage" role="note">
+        Pre-beta, under heavy active development: the API changes often and nothing here is stable
+        yet.
+      </p>
       <header class="topbar">
         <a
           class="brand"
