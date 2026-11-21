@@ -1,5 +1,5 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate"
-import { Effect, Schema } from "effect"
+import { Effect, Ref, Schema, Semaphore, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
 import type { Context } from "effect"
 import { State } from "spar"
@@ -62,11 +62,14 @@ export type Senders<Cmd extends Tagged, R> = {
 
 type SentOf<Def extends Aggregate.AnyDefinition> = Extract<CommandOf<Def>, Tagged>
 
-type Viewed<S, Id, E> = {
+type Viewed<S, Id, E, W> = {
   readonly get: (
     key: Id,
     options?: { readonly atLeast?: ReadonlyArray<Written> },
   ) => Effect.Effect<S | null, E>
+  readonly watch: (
+    key: Id,
+  ) => Stream.Stream<{ readonly state: S | null; readonly cursor: number }, W>
 }
 
 type RejectionsOf<C> = {
@@ -75,16 +78,24 @@ type RejectionsOf<C> = {
     : never
 }[keyof C]
 
-export type Remote<Def extends Aggregate.AnyDefinition, Id, E, C> = {
-  readonly aggregate: Pick<Aggregated<Def, Id>, "aggregateName" | "definition">
-  readonly view: Viewed<StateOf<Def>, Id, E>
+export type Remote<Def extends Aggregate.AnyDefinition, S, I, Id, E, W, C> = {
+  readonly aggregate: {
+    readonly aggregateName: string
+    readonly definition: Def & { readonly state: Schema.Codec<S, I>; readonly initial: S }
+  }
+  readonly view: Viewed<S, Id, E, W>
   readonly commands: C & Senders<SentOf<Def>, RejectionsOf<C>>
 }
 
-export const remote = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefinition, Id, E, C>(
-  over: Remote<Def, Id, E, C>,
-  id: Id,
-) {
+export const remote = Effect.fnUntraced(function* <
+  Def extends Aggregate.AnyDefinition,
+  S,
+  I,
+  Id,
+  E,
+  W,
+  C,
+>(over: Remote<Def, S, I, Id, E, W, C>, id: Id) {
   const { aggregateName, definition } = over.aggregate
   const state = yield* State.current
   const random = yield* SecureRandom.SecureRandom
@@ -92,6 +103,24 @@ export const remote = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefi
     Effect.map(over.view.get(id, { atLeast: writes }), (found) => found ?? definition.initial)
   const first = yield* readAfter([])
   const slot = yield* state.slot([`${aggregateName}/${String(id)}`], definition.state, first)
+  const same = Schema.toEquivalence(definition.state)
+  const latest = yield* Ref.make(0)
+  const turn = yield* Semaphore.make(1)
+
+  const writeNewer = (name: string, version: number, now: S) =>
+    Semaphore.withPermit(
+      turn,
+      Effect.flatMap(Ref.get(latest), (held) =>
+        version <= held
+          ? Effect.void
+          : Effect.andThen(Ref.set(latest, version), writeChanged(name, version, now)),
+      ),
+    )
+
+  const writeChanged = (name: string, version: number, now: S) =>
+    Effect.flatMap(slot.value.get, (held) =>
+      same(held, now) ? Effect.void : slot.set(name, now, { version }),
+    )
 
   const send = <T extends SentOf<Def>["_tag"]>(
     command: CommandOfTag<SentOf<Def>, T> & { readonly _tag: T },
@@ -102,12 +131,16 @@ export const remote = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefi
 
       return Effect.tap(sender(command, { commandId }), (receipt) =>
         Effect.flatMap(readAfter([receipt]), (now) =>
-          slot.set(command._tag, now, { version: receipt.version }),
+          writeNewer(command._tag, receipt.version, now),
         ),
       )
     })
 
-  return { state: slot.value, send }
+  const follow = Stream.runForEach(over.view.watch(id), (snapshot) =>
+    writeNewer("Watched", snapshot.cursor, snapshot.state ?? definition.initial),
+  )
+
+  return { state: slot.value, send, follow }
 })
 
 export const store = Effect.fnUntraced(function* <Def extends Aggregate.AnyDefinition, Id>(

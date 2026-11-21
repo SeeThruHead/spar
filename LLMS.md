@@ -3495,29 +3495,6 @@ const counterOver = Effect.gen(function* () {
 
   return { aggregate: Counter, view: api.CounterView, commands: api }
 })
-
-describe("an aggregate behind an Api as a store", () => {
-  it.effect("sends each command through the Api and reads the state back from the view", () =>
-    Effect.gen(function* () {
-      const over = yield* counterOver
-      const counter = yield* Aggregates.remote(over, "r-1")
-
-      expect(yield* counter.state.get).toEqual({ count: 0, phase: "idle" })
-
-      yield* counter.send(new Increment({ counterId: "r-1" }))
-      yield* counter.send(new Increment({ counterId: "r-1" }))
-
-      expect(yield* counter.state.get).toEqual({ count: 2, phase: "idle" })
-
-      yield* counter.send(new Reset({ counterId: "r-1" }))
-
-      const refused = yield* Effect.flip(counter.send(new Increment({ counterId: "r-1" })))
-
-      expect(refused._tag).toBe("ResetInProgress")
-      expect(yield* counter.state.get).toEqual({ count: 2, phase: "resetting" })
-    }).pipe(Effect.provide(served), Effect.scoped),
-  )
-})
 ```
 
 (`packages/domain/test/remote.test.ts`)
@@ -3542,10 +3519,15 @@ const served = Layer.mergeAll(
 
 (`packages/domain/test/remote.test.ts`)
 
+To see other people's commands as they land, run the store's `follow`, for as long as the page
+shows it. It follows the view's live stream (pushed over a WebSocket by `protocolWebSocket`) and
+writes the slot under the name `Watched`. The store keeps the newest version it has written, so
+a snapshot older than a command it already applied is dropped, and one that says nothing new
+writes nothing: each state reaches the log once. The test beside this page forks `follow`, has a
+second client send `Increment`, and checks that the first store sees it.
+
 ### Not done yet
 
-- The remote store reads the view after each command. Following `api.CounterView.watch(id)`
-  instead would also show other people's commands as they land.
 - Commands are sent at once. Sending them through an `Outbox.channel`, with the `commandId` as
   its key, would let a command survive a closed tab or a dropped connection.
 

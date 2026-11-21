@@ -55,9 +55,14 @@ An app gives it `protocolHttp` or `protocolWebSocket` with the server's address 
 
 <<< packages/domain/test/remote.test.ts#served
 
+To see other people's commands as they land, run the store's `follow`, for as long as the page
+shows it. It follows the view's live stream (pushed over a WebSocket by `protocolWebSocket`) and
+writes the slot under the name `Watched`. The store keeps the newest version it has written, so
+a snapshot older than a command it already applied is dropped, and one that says nothing new
+writes nothing: each state reaches the log once. The test beside this page forks `follow`, has a
+second client send `Increment`, and checks that the first store sees it.
+
 ## Not done yet
 
-- The remote store reads the view after each command. Following `api.CounterView.watch(id)`
-  instead would also show other people's commands as they land.
 - Commands are sent at once. Sending them through an `Outbox.channel`, with the `commandId` as
   its key, would let a command survive a closed tab or a dropped connection.
