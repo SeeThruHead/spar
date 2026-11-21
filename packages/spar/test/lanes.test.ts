@@ -1,5 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
-import { acrossLanes, lanesOf, seqAt, summaryOfMoment, ticksDrawn } from "../src/Devtools.ts"
+import {
+  acrossLanes,
+  eventShown,
+  lanesOf,
+  seqAt,
+  summaryOfMoment,
+  ticksDrawn,
+} from "../src/Devtools.ts"
 import type { Moment } from "../src/Timeline.ts"
 
 const moment = (seq: number, kind: Moment["kind"], name: string): Moment => ({
@@ -34,6 +41,37 @@ describe("an event's row", () => {
     expect(summaryOfMoment({ ...moment(3, "ui", "Shell . draft"), detail: "x".repeat(100) })).toBe(
       `Shell . draft "${"x".repeat(78)}…`,
     )
+  })
+})
+
+describe("the event panel", () => {
+  it("shows the newest event while the app is live, the chosen one while looking back", () => {
+    const traced = {
+      ...moment(7, "command", "a/added"),
+      detail: { by: 1 },
+      traceId: "t1",
+      spanId: "s1",
+    }
+
+    expect(eventShown([moment(6, "ui", "x . y"), traced], null)).toEqual({
+      heading: "#7 a/added",
+      kind: "command",
+      detail: '{\n  "by": 1\n}',
+      traceId: "t1",
+      spanId: "s1",
+    })
+    expect(eventShown([moment(6, "ui", "x . y"), traced], 6).heading).toBe("#6 x . y")
+    expect(eventShown([moment(6, "ui", "x . y")], 6).detail).toBe("")
+  })
+
+  it("says so when nothing has happened yet", () => {
+    expect(eventShown([], null)).toEqual({
+      heading: "No event yet",
+      kind: "",
+      detail: "",
+      traceId: "",
+      spanId: "",
+    })
   })
 })
 

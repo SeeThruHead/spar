@@ -21,6 +21,7 @@ import {
   DeadView,
   EntryView,
   FactView,
+  EventView,
   InspectorView,
   LaneView,
   LanesView,
@@ -632,6 +633,44 @@ export const LanesPanel = compose(
   }),
 )(LanesView)
 
+const chosenMoment = (
+  moments: ReadonlyArray<Timeline.Moment>,
+  viewing: number | null,
+): ReadonlyArray<Timeline.Moment> =>
+  viewing === null ? moments.slice(-1) : moments.filter((moment) => moment.seq === viewing)
+
+export const eventShown = (moments: ReadonlyArray<Timeline.Moment>, viewing: number | null) => {
+  const found = chosenMoment(moments, viewing)
+
+  return {
+    heading: found.map((moment) => `#${moment.seq} ${moment.name}`).join("") || "No event yet",
+    kind: found.map((moment) => moment.kind).join(""),
+    detail: found
+      .map((moment) =>
+        moment.detail === null ? "" : Formatter.formatJson(moment.detail, { space: 2 }),
+      )
+      .join(""),
+    traceId: found.map((moment) => moment.traceId).join(""),
+    spanId: found.map((moment) => moment.spanId).join(""),
+  }
+}
+
+export const EventPanel = compose(
+  Effect.fnUntraced(function* () {
+    const registry = yield* Registry
+    const chosen = yield* Reactive.zip(registry.moments, registry.viewing)
+    const shown = Reactive.map(chosen, ([moments, viewing]) => eventShown(moments, viewing))
+
+    return {
+      heading: Reactive.map(shown, (now) => now.heading),
+      kind: Reactive.map(shown, (now) => now.kind),
+      detail: Reactive.map(shown, (now) => now.detail),
+      traceId: Reactive.map(shown, (now) => now.traceId),
+      spanId: Reactive.map(shown, (now) => now.spanId),
+    }
+  }),
+)(EventView)
+
 export const TimelinePanel = compose(
   withProps({
     onTrace: Props.Callback(Schema.String),
@@ -1126,6 +1165,8 @@ export const Tools = compose(
     return {
       open: yield* UiState.make("open", Schema.Boolean, false),
       lanesShown,
+      detailTab: yield* UiState.make("detail", Schema.String, "event"),
+      event: yield* View.child(EventPanel, {}),
       inspector: yield* View.child(Inspector, {}),
       lanes: yield* View.child(LanesPanel, { shown: lanesShown, scrubbed, onTrace }),
       timeline: yield* View.child(TimelinePanel, { onTrace, scrubbed }),

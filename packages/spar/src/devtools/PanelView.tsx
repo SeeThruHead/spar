@@ -194,6 +194,40 @@ export const LanesView = View.make(
   ),
 )
 
+export const EventView = View.make(
+  "EventView",
+  {
+    heading: Props.Reactive(Schema.String),
+    kind: Props.Reactive(Schema.String),
+    detail: Props.Reactive(Schema.String),
+    traceId: Props.Reactive(Schema.String),
+    spanId: Props.Reactive(Schema.String),
+  },
+  ({ heading, kind, detail, traceId, spanId }) => (
+    <section aria-label="Event">
+      <h2>{heading}</h2>
+      <table aria-label="About the event">
+        <tbody>
+          <tr>
+            <th scope="row">kind</th>
+            <td>{kind}</td>
+          </tr>
+          <tr>
+            <th scope="row">trace</th>
+            <td>{traceId}</td>
+          </tr>
+          <tr>
+            <th scope="row">span</th>
+            <td>{spanId}</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>What it carried</h3>
+      <pre aria-label="What the event carried">{detail}</pre>
+    </section>
+  ),
+)
+
 export const BranchView = View.make(
   "BranchView",
   {
@@ -407,6 +441,8 @@ const look = [
   "[data-spar-devtools-frame] { display: grid; height: 100%; grid-template: 'bar bar' 36px 'lanes lanes' auto 'events trace' minmax(0, 1fr) 'events detail' minmax(0, 32%) / minmax(0, 42%) minmax(0, 1fr) }",
   "@container (min-width: 1150px) { [data-spar-devtools-frame] { grid-template: 'bar bar bar' 36px 'lanes lanes lanes' auto 'events trace detail' minmax(0, 1fr) / 410px minmax(0, 1fr) 340px } }",
   "[data-grow] { flex: 1 }",
+  "[data-tabs] { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 6px 10px; background: #15181d; border-bottom: 1px solid #262a33 }",
+  "[data-tab][hidden] { display: none }",
   "[data-area=lanes] { grid-area: lanes; max-height: 190px; overflow: auto; border-bottom: 1px solid #262a33; border-right: 0; background: #101216; padding: 0 }",
   "[data-area=lanes][hidden] { display: none }",
   "[data-lanes-surface] { position: relative; cursor: ew-resize; user-select: none; touch-action: none }",
@@ -502,13 +538,15 @@ export const ToolsView = View.make(
   {
     open: Props.State(Schema.Boolean),
     lanesShown: Props.State(Schema.Boolean),
+    detailTab: Props.State(Schema.String),
+    event: Props.Element,
     inspector: Props.Element,
     lanes: Props.Element,
     timeline: Props.Element,
     trace: Props.Element,
     stores: Props.Element,
   },
-  ({ open, lanesShown, inspector, lanes, timeline, trace, stores }) => (
+  ({ open, lanesShown, detailTab, event, inspector, lanes, timeline, trace, stores }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
       <style>{look}</style>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
@@ -532,8 +570,27 @@ export const ToolsView = View.make(
           <div data-area="events">{timeline}</div>
           <div data-area="trace">{trace}</div>
           <div data-area="detail">
+            <nav data-tabs="" aria-label="Detail">
+              <button
+                aria-pressed={Reactive.map(detailTab, (tab) => tab === "event")}
+                onClick={UiState.set(detailTab, "event")}
+              >
+                Event
+              </button>
+              <button
+                aria-pressed={Reactive.map(detailTab, (tab) => tab === "stores")}
+                onClick={UiState.set(detailTab, "stores")}
+              >
+                Stores
+              </button>
+            </nav>
+            <div data-tab="" hidden={Reactive.map(detailTab, (tab) => tab !== "event")}>
+              {event}
+            </div>
+            <div data-tab="" hidden={Reactive.map(detailTab, (tab) => tab !== "stores")}>
+              {stores}
+            </div>
             {inspector}
-            {stores}
           </div>
         </div>
       </div>
