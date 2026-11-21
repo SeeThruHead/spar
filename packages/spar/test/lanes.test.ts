@@ -10,6 +10,7 @@ import {
   seqAt,
   summaryOfMoment,
   ticksDrawn,
+  waitBefore,
 } from "../src/Devtools.ts"
 import type { Moment } from "../src/Timeline.ts"
 
@@ -45,6 +46,36 @@ describe("an event's row", () => {
     expect(summaryOfMoment({ ...moment(3, "ui", "Shell . draft"), detail: "x".repeat(100) })).toBe(
       `Shell . draft "${"x".repeat(78)}…`,
     )
+  })
+})
+
+const recordedSpan = (
+  spanId: string,
+  parentSpanId: string | null,
+  startedAt: number,
+  endedAt: number,
+) => ({
+  name: spanId,
+  traceId: "t",
+  spanId,
+  parentSpanId,
+  startedAt,
+  endedAt,
+  failed: false,
+  attributes: {},
+})
+
+describe("a wait between spans", () => {
+  const deliver = recordedSpan("deliver", null, 0, 380)
+  const first = recordedSpan("try 1", "deliver", 5, 62)
+  const second = recordedSpan("try 2", "deliver", 312, 368)
+  const all = [deliver, first, second].map((each) => ({ span: each, where: "page" as const }))
+
+  it("is named on the span that came after it, when it is long enough to be deliberate", () => {
+    expect(waitBefore(second, all)).toBe("after a 250 ms wait")
+    expect(waitBefore(first, all)).toBe("")
+    expect(waitBefore(deliver, all)).toBe("")
+    expect(waitBefore(recordedSpan("close", "deliver", 70, 71), all)).toBe("")
   })
 })
 

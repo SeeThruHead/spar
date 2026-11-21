@@ -1081,6 +1081,22 @@ const askedBefore = (
     ordered.map((each) => each.span),
   )
 
+const noticeableWait = 20
+
+export const waitBefore = (span: Spans.Recorded, all: ReadonlyArray<Sided>): string => {
+  const ended = all
+    .map((each) => each.span)
+    .filter((other) => other.parentSpanId === span.parentSpanId && other.spanId !== span.spanId)
+    .map(endOf)
+    .filter((end) => end <= span.startedAt)
+  const gap = Math.min(...ended.map((end) => span.startedAt - end))
+
+  return Number.isFinite(gap) && gap >= noticeableWait ? `after a ${gap.toFixed(0)} ms wait` : ""
+}
+
+const notesOf = (span: Spans.Recorded, all: ReadonlyArray<Sided>): string =>
+  [noteOf(span.attributes), waitBefore(span, all)].filter((note) => note !== "").join(" · ")
+
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
   const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
@@ -1096,7 +1112,7 @@ export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
     indent: px(depthOf(span, byId, 0) * 12),
     left: percent(span.startedAt - start, whole),
     width: percent(endOf(span) - span.startedAt, whole),
-    note: noteOf(span.attributes),
+    note: notesOf(span, ordered),
     waitedFrom: percent((askedBefore(span, ordered)?.startedAt ?? span.startedAt) - start, whole),
     waited: percent(
       span.startedAt - (askedBefore(span, ordered)?.startedAt ?? span.startedAt),
