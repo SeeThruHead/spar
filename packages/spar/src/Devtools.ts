@@ -463,8 +463,13 @@ export const Panel = compose(
   }),
 )(PanelView)
 
+const shortened = (text: string): string => (text.length > 80 ? `${text.slice(0, 79)}…` : text)
+
+const detailOfMoment = (moment: Timeline.Moment): string =>
+  moment.detail === null ? "" : shortened(Formatter.formatJson(moment.detail))
+
 const summaryOfMoment = (moment: Timeline.Moment): string =>
-  `${moment.kind} ${moment.name} ${Formatter.formatJson(moment.detail)}`
+  `${moment.name} ${detailOfMoment(moment)}`.trim()
 
 export const detailOfBranch = (branch: Branch): string =>
   branch.from === null
@@ -505,6 +510,7 @@ export const TimelinePanel = compose(
           MomentView,
           (moment, seq) => ({
             seq,
+            kind: Reactive.map(moment, (now) => now.kind),
             summary: Reactive.map(moment, summaryOfMoment),
             trace: Reactive.map(moment, (now) => now.traceId),
             current: Reactive.map(registry.viewing, (viewing) => String(viewing) === seq),

@@ -55,7 +55,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await log.getByText("filter").first().waitFor({ timeout: 5000 })
 
   const typed = log.locator("ol li", { hasText: 'filter "notes"' })
-  const first = (await typed.locator("code").first().textContent()) ?? ""
+  const first = ((await typed.locator("[data-what]").first().textContent()) ?? "").trim()
 
   await page.getByRole("searchbox").first().fill("")
   await typed.getByRole("button", { name: /^Jump to / }).click()
