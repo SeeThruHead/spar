@@ -3369,9 +3369,9 @@ and the backend (`docs/devtools-compared.md`).
 - **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
   as cases of their own. In Spar you read `status` and `value` together.
 - **Speed on a few list operations, depending on the run.** In the latest run of this repo's
-  benchmark Foldkit is ahead of Spar only at removing a row. In earlier runs it was also ahead at
-  swapping two rows and at changing one row among 10,000 timed to the next frame, so differences
-  of a few milliseconds here are within the noise. Spar uses less memory and ships less
+  benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
+  one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next
+  frame. Earlier runs ordered these differently, so a few milliseconds here are within the noise. Spar uses less memory and ships less
   JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
@@ -3428,10 +3428,11 @@ independent pieces load side by side.
 - A change in flight is a first-class thing: the screen holds what it showed, `isPending` says a
   change is on the way, and an optimistic value reverts by itself.
 - A superseded request can be cancelled, not only ignored.
-- It is small and quick to start. In this repo's benchmark the Solid 2 table ships 23.7 kB of
-  JavaScript (gzip) against Spar's 70.0 kB, starts in 4.5 ms against 9.3 ms, and changes one row
-  among 10,000 in 0.5 ms against 1.2 ms. Spar is ahead of it at updating, selecting, swapping and
-  removing rows among 1,000 (`docs/benchmarks.md`).
+- It is smaller, quicker to start and quicker at most table work. In this repo's benchmark the
+  Solid 2 table ships 23.7 kB of JavaScript (gzip) against Spar's 60.6 kB, starts in 6.5 ms
+  against 11.0 ms, changes one row among 10,000 in 0.8 ms against 1.0 ms, and selects, swaps and
+  removes rows among 1,000 faster. Spar is ahead of it only at updating every 10th row
+  (`docs/benchmarks.md`).
 - Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 34,
   among them slow scopes, effects that write their own source, and requests thrown away.
 
@@ -3904,10 +3905,8 @@ Built since, and smaller than they sound, but not done:
   everything code can do: a layer built by a function declaration, a component from a package, or
   a service reached only through `Effect.service` is not seen, and such a child still fails when
   it mounts. The Bun plugin checks one file at a time.
-- **The bundle is large and starts slower than Solid's.** The benchmark app loads 56.2 kB gzipped
-  at start (Solid 6.3 kB, React 69.6 kB), down from 68.6 kB once the router, the device journal
-  and diagnostic text for builds stopped shipping to apps that do not use them, and from 58.4 kB
-  once phases, reactions and the store's own journal were gone. About 35 kB is the floor
+- **The bundle is large and starts slower than Solid's.** In the published benchmark the app loads
+  60.6 kB gzipped at start (Solid 6.1 kB, React 68.0 kB). About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not
   any one slow function (`docs/benchmarks.md`). `bun run --cwd apps/bench startup` profiles it:
   on sthdev, Spar waits about 4.7 ms longer than Solid while its 200 kB bundle (minified) loads and
