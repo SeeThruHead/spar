@@ -14,7 +14,7 @@ Model. These follow from that shape, not from how well it is built:
 
 - **State and server data beside the component that uses them.** A Spar component asks for its
   data in its own Effect (`TheQuery.ask(input)`), and a store can ship with a view
-  (`Store.with`, `Query.beside`). In the Elm architecture a child's data is a field in the
+  (`SomeStore.with(Component)`, `SomeQuery.beside(Component)`). In the Elm architecture a child's data is a field in the
   Model, a Message for its answer and a branch in `update`, wired in by each parent. In the
   five-segment navigation written in Foldkit, the click's branch of `update` lists the five
   lookups, and the branch that handles an answer starts the sixth
