@@ -9,6 +9,7 @@ import {
   lanesOf,
   seqAt,
   backgroundOf,
+  isShortcut,
   fieldChanges,
   summaryOfMoment,
   ticksDrawn,
@@ -78,6 +79,49 @@ describe("a wait between spans", () => {
     expect(waitBefore(first, all)).toBe("")
     expect(waitBefore(deliver, all)).toBe("")
     expect(waitBefore(recordedSpan("close", "deliver", 70, 71), all)).toBe("")
+  })
+
+  it("counts from the nearest sibling that ended before it, and only siblings under the same parent", () => {
+    const later = recordedSpan("later", "deliver", 100, 110)
+    const siblings = (ends: ReadonlyArray<readonly [string, string | null, number]>) =>
+      [later, ...ends.map(([id, parent, end]) => recordedSpan(id, parent, end - 5, end))].map(
+        (each) => ({ span: each, where: "page" as const }),
+      )
+
+    expect(
+      waitBefore(
+        later,
+        siblings([
+          ["far", "deliver", 10],
+          ["near", "deliver", 60],
+        ]),
+      ),
+    ).toBe("after a 40 ms wait")
+    expect(waitBefore(later, siblings([["other", "elsewhere", 10]]))).toBe("")
+    expect(
+      waitBefore(
+        later,
+        siblings([
+          ["early", "deliver", 50],
+          ["touching", "deliver", 100],
+        ]),
+      ),
+    ).toBe("")
+    expect(waitBefore(later, siblings([["just", "deliver", 80]]))).toBe("after a 20 ms wait")
+    expect(waitBefore(later, siblings([["short", "deliver", 81]]))).toBe("")
+    expect(waitBefore(later, [{ span: later, where: "page" as const }])).toBe("")
+  })
+})
+
+describe("a devtools shortcut", () => {
+  it("needs Alt and Shift together", () => {
+    expect(
+      [
+        { altKey: true, shiftKey: true },
+        { altKey: true, shiftKey: false },
+        { altKey: false, shiftKey: true },
+      ].map(isShortcut),
+    ).toEqual([true, false, false])
   })
 })
 
