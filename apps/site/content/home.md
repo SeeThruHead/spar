@@ -30,10 +30,11 @@ and a late one is ignored.
 ## A store is an Effect over one state
 
 All app state lives in one place, and changes only through named commands. A store is a schema,
-pure actions and selectors over its part of that state. What takes time is a plain Effect: the
-reset below is one fiber, so pressing Reset again while it runs does nothing.
+pure actions and selectors over its part of that state. What takes time is a task of the store:
+the reset below is one Effect that names what it refuses while it runs, so pressing Add 1 or
+Reset again does nothing until it is done.
 
-<<< apps/site/src/StoreDemo.ts#withReset
+<<< apps/site/src/StoreDemo.ts#CounterStore
 
 [[demo:store]]
 

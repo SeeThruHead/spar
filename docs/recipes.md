@@ -58,6 +58,6 @@ Mount the real component and provide test layers for its services.
 ## A long action
 
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
-short: a store command, a UI state change, a navigation. Put slow work in an Effect on a service,
-run by a `FiberHandle` so a repeat is ignored while it runs, or on an outbox channel for what must
-reach the server. A form's submit already ignores a second submit while the first is running.
+short: a store command, a UI state change, a navigation. Put slow work in a task of the store
+(`Store.task`), whose `mode` and `refuses` say what a repeat or another command does while it
+runs, or on an outbox channel for what must reach the server. A form's submit already ignores a second submit while the first is running.

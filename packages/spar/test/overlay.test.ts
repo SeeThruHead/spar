@@ -173,7 +173,7 @@ describe("overlays", () => {
       yield* Effect.sync(() =>
         overlays()?.insertAdjacentHTML(
           "afterbegin",
-          '<div data-test-tools=""><aside data-spar-devtools=""></aside></div>',
+          '<div data-test-tools=""><aside data-spar-above-modals=""></aside></div>',
         ),
       )
       yield* openSettings

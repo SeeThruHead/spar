@@ -48,12 +48,12 @@ A refused command changes nothing. It shows in the log and the devtools as `refu
 task it met. The task's start and its finish are in the log with what they carried, so a log
 replays to the same state.
 
-| `mode`         | What happens when it is started again while it runs                    |
-| -------------- | ---------------------------------------------------------------------- |
-| `"switch"`     | The new run replaces the running one, which is interrupted             |
-| `"queue"`      | The new run waits for the one before it                                |
-| `"concurrent"` | Both run                                                               |
-| any mode       | List the task in its own `refuses` and a second start is refused       |
+| `mode`         | What happens when it is started again while it runs              |
+| -------------- | ---------------------------------------------------------------- |
+| `"switch"`     | The new run replaces the running one, which is interrupted       |
+| `"queue"`      | The new run waits for the one before it                          |
+| `"concurrent"` | Both run                                                         |
+| any mode       | List the task in its own `refuses` and a second start is refused |
 
 Work that must survive a reload and be retried, such as a message to the server, goes through an
 `Outbox.channel` instead, which keeps it on the device until it is sent.

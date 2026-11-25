@@ -591,7 +591,7 @@ export const ToolsView = View.make(
     trace,
     stores,
   }) => (
-    <aside aria-label="Spar devtools" data-spar-devtools="" style={dock}>
+    <aside aria-label="Spar devtools" data-spar-devtools="" data-spar-above-modals="" style={dock}>
       <style>{look}</style>
       <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
         Devtools

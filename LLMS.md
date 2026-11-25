@@ -103,8 +103,8 @@ in an enhancer and pass `props.shown` instead.
 | Show one thing or another                 | `<Show when={props.open}>...</Show>`                                                                                                    | A ternary inside JSX                                                                                           |
 | Load data from the server                 | A `Query.Tag`, and `withQuery(name, TheQuery, (props) => input)` where it is needed                                                     | Fetching in a component and passing the result down                                                            |
 | Use loaded data in an action              | An Effect that reads `TheQuery.read(input)` and then sends a command with the result                                                    | Props or arguments that carry server data                                                                      |
-| Stop a second run while one is going      | Run the work with `FiberHandle.run(handle, effect, { onlyIfMissing: true })`                                                            | Disabling the button and hoping nothing else starts it                                                         |
-| Run a flow with a wait in it              | One Effect: a command, `Effect.sleep` or the call, a command with the result                                                            | A lock, a queue, a flag in UI state                                                                            |
+| Stop a second run while one is going      | A `Store.task` that lists itself in `refuses`                                                                                           | Disabling the button and hoping nothing else starts it                                                         |
+| Run a flow with a wait in it              | A `Store.task`: `run` does the wait or the call, `finish` changes the state with what it returned                                       | Two commands (start, finish), a lock, a flag in the state or in UI state                                       |
 | Call your backend                         | `Backend.rpc(Group, url)` and call the client                                                                                           | `fetch`, axios, tRPC, a hand-rolled client                                                                     |
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                        | `fetch`, `FetchHttpClient.layer`                                                                               |
 | Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                              | Calling the server from a handler and hoping                                                                   |
@@ -188,15 +188,16 @@ because the store and its view sit in the same file.
 Read the "State, events that interleave, and server data" part below before writing any store
 with async work. The short version:
 
-- A store accepts every command; there are no guards. Work that takes time is an Effect on a
-  service (or an enhancer): it sends a command, does the work, and sends a command with the
-  result. Every command is in the log and the trace.
+- Work that takes time is a task of the store (`Store.task`): `run` is the Effect, `finish`
+  changes the state once with what it returned, `mode` says what a second start does, and
+  `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
+  state; never store a flag. Every start, finish and refusal is in the log and the trace.
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
   that needs it reads `TheQuery.read(input)` itself.
-- When only the newest run matters (a search box, a filter), run it with
-  `FiberHandle.run(handle, effect)`, which stops the one before; or load it with a Query.
-- When a second press must not start the work again (Pay, Save, Send), run it with
-  `FiberHandle.run(handle, effect, { onlyIfMissing: true })`, which ignores the repeat.
+- When only the newest run matters (a search box, a filter), give the task `mode: "switch"`,
+  which stops the one before; or load it with a Query.
+- When a second press must not start the work again (Pay, Save, Send), list the task in its own
+  `refuses`.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
@@ -837,11 +838,12 @@ by the build. A call the framework cannot see is a call missing from the trace.
 
 ### 18. Work that takes time is an Effect, and server data is a store
 
-Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
-command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
-`FiberHandle` that ignores or replaces it, a `Semaphore` that queues it). The rule is in that one
-Effect, so a button, a key and an agent get the same behaviour, and every command it sends is in
-the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
+Events interleave: anything can arrive while a multi-step flow is waiting. Slow work is a task of
+the store: one Effect that changes the state once, when it ends, so there is no in-between state
+to interleave with. The task says what a repeat does (`switch`, `queue`, `concurrent`) and which
+commands are refused while it runs. The rule is written once, on the task, so a button, a key and
+an agent get the same behaviour, a new command cannot forget it, and every start, finish and
+refusal is in the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
 and failed states, and any Effect reads it directly, so no prop carries server data.
 
 ### 19. The past can be walked and branched
@@ -1135,11 +1137,12 @@ step and fork the whole app.
 
 #### Work that takes time
 
-A store accepts every command; there are no guards. Work that takes time is an Effect on a
-service, and Effect decides what happens to a repeat: `FiberHandle.run(handle, effect, {
-onlyIfMissing: true })` ignores a second run while the first is going, plain `FiberHandle.run`
-replaces it, a `Semaphore` makes it wait, and an `Outbox.channel` keeps it on the device until it
-is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
+Work that takes time is a task of the store: `Store.task(payload, { result, run, finish, mode,
+refuses })` in the store's `tasks`. `run` is the Effect, `finish` changes the state once with what
+it returned, `mode` (`"switch"`, `"queue"`, `"concurrent"`) says what a second start does, and
+`refuses` names the commands and tasks refused while it runs. The store gains `tasks.<name>(payload)`
+to start it and `running.<name>`, a reactive boolean. What must survive a reload goes on an
+`Outbox.channel` (`apps/sidebar/src/ResetCounterStore.ts`, `docs/state-and-server-data.md`).
 
 #### A store beside its view
 
@@ -1716,43 +1719,69 @@ needs it.
 
 ### What takes time is an Effect
 
-A store is a Schema, pure actions and selectors over its part of the one state. It accepts every
-command at any time; there are no guards, phases or refusals. Work that takes time is a plain
-Effect on a service, and Effect's own tools decide what happens when events interleave.
+A store is a Schema, pure actions and selectors over its part of the one state. Work that takes
+time is a task of the store: an Effect that runs in the store, then changes the state once, when
+it finishes. A task says what happens when it is started again, and which commands the store
+refuses while it runs.
 
-A reset that takes two seconds is three steps: start, wait, finish. Written as one Effect and run
-by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothing, from a button,
-a key or an agent alike:
+The counter's reset waits two seconds, then sets the count to 0. While it runs, Add 1 and a second
+reset are refused, from a button, a key or an agent alike:
 
 ```ts
-const withReset = Effect.fnUntraced(function* () {
-  const store = yield* CounterStore
-  const running = yield* FiberHandle.make()
-  const reset = Effect.gen(function* () {
-    yield* store.commands.resetClicked()
-    yield* Effect.sleep("2 seconds")
-    yield* store.commands.resetCompleted()
-  })
-
-  return { onReset: Effect.asVoid(FiberHandle.run(running, reset, { onlyIfMissing: true })) }
-})
+export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
+  state: State,
+  initialState,
+  actions: {
+    incremented: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      count: state.count + 1,
+    })),
+    resetDurationChanged: Store.action(Schema.Finite, (state: State, seconds: number): State => ({
+      ...state,
+      resetDuration: Math.max(0, seconds),
+    })),
+  },
+  selectors: {
+    count: Store.selector(Schema.Finite, (state: State) => state.count),
+    resetDuration: Store.selector(Schema.Finite, (state: State) => state.resetDuration),
+  },
+  tasks: {
+    reset: Store.task(Schema.Void, {
+      result: Schema.Void,
+      run: (_: void, state: State) => Effect.sleep(Duration.seconds(state.resetDuration)),
+      finish: (state: State): State => ({ ...state, count: 0 }),
+      mode: "switch",
+      refuses: ["incremented", "reset"],
+    }),
+  },
+}) {}
 ```
 
-(`apps/site/src/StoreDemo.ts`)
+(`apps/sidebar/src/ResetCounterStore.ts`)
 
-The same tools cover the other cases:
+What this rules out:
 
-| What should happen to a repeat | How it is written                                                   |
-| ------------------------------ | ------------------------------------------------------------------- |
-| Ignored while the first runs   | `FiberHandle.run(handle, effect, { onlyIfMissing: true })`          |
-| Replaces the first             | `FiberHandle.run(handle, effect)`, which interrupts the earlier run |
-| Waits its turn                 | A `Semaphore` with one permit around the effect                     |
-| One per key                    | A `FiberMap` keyed by what the work is about                        |
-| Survives a reload and retries  | An `Outbox.channel`, which keeps it on the device until it is sent  |
+- **No half-finished reset.** The reset is one task, not a start command and a finish command, so
+  nothing can interleave between two steps, and nobody can send the finish early: there is no
+  finish command to send.
+- **No flag to forget.** `store.running.reset` is true while the task runs. It is worked out from
+  the task, not stored in the state, so it cannot disagree with what is running.
+- **No check to repeat.** What the reset refuses is written once, on the task. An action does not
+  check anything, so a new action cannot forget to.
 
-Every command is in the log and the trace with what it carried, so the order things happened in
-is never a guess. The counter in the showcase, `apps/sidebar/src/ResetCounter.tsx`, keeps its
-buttons enabled and its + key working; its reset is the Effect above.
+A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
+task it met. The task's start and its finish are in the log with what they carried, so a log
+replays to the same state.
+
+| `mode`         | What happens when it is started again while it runs              |
+| -------------- | ---------------------------------------------------------------- |
+| `"switch"`     | The new run replaces the running one, which is interrupted       |
+| `"queue"`      | The new run waits for the one before it                          |
+| `"concurrent"` | Both run                                                         |
+| any mode       | List the task in its own `refuses` and a second start is refused |
+
+Work that must survive a reload and be retried, such as a message to the server, goes through an
+`Outbox.channel` instead, which keeps it on the device until it is sent.
 
 ### Server data lives in a store
 
@@ -3240,9 +3269,9 @@ describe("rendering", () => {
 ### A long action
 
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
-short: a store command, a UI state change, a navigation. Put slow work in an Effect on a service,
-run by a `FiberHandle` so a repeat is ignored while it runs, or on an outbox channel for what must
-reach the server. A form's submit already ignores a second submit while the first is running.
+short: a store command, a UI state change, a navigation. Put slow work in a task of the store
+(`Store.task`), whose `mode` and `refuses` say what a repeat or another command does while it
+runs, or on an outbox channel for what must reach the server. A form's submit already ignores a second submit while the first is running.
 
 
 # Coming from React
@@ -3511,35 +3540,35 @@ page sets its model beside Spar's, from Treflex's own README and reference (`act
 `restart-and-records.md`). Both keep work out of components; they differ in where the work lives
 and how two pieces of work on the same thing relate.
 
-| Question                      | Treflex                                                                                                           | Spar                                                                                                      |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | In an Effect on a service; the store (`Store.Tag`) holds the state, a reducer per action                  |
-| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; an Effect sends commands as its work goes                     |
-| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the Effect's requirements, provided as layers; a test provides other layers            |
-| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other unless the Effect says so (a `Semaphore`); each command applies at once         |
-| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `FiberHandle.run` with `onlyIfMissing` ignores the repeat; plain `FiberHandle.run` stops the one running  |
-| Is it running?                | `inFlight(action, owner)`                                                                                         | A field in the state that the Effect sets at its start and end, so the view can read it                   |
-| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | Written as code in the Effect, before it sends the command                                                |
-| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | A saved store (`layerSaved`) comes back from the device; an outbox channel resends what was not confirmed |
-| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its fibers stop with its scope                                 |
-| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, UI state and routes, each with its trace; time travel and forks in the devtools |
+| Question                      | Treflex                                                                                                           | Spar                                                                                                           |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | In a task of the store (`Store.task`): one Effect that changes the state once, when it finishes                |
+| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; an Effect sends commands as its work goes                          |
+| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the Effect's requirements, provided as layers; a test provides other layers                 |
+| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | A task names the commands refused while it runs; everything else applies at once                               |
+| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | The task's `mode`: `switch` stops the one running, `queue` waits, `concurrent` runs both; or it refuses itself |
+| Is it running?                | `inFlight(action, owner)`                                                                                         | `store.running.<task>`, worked out from the task, not stored                                                   |
+| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | Refused while a task that names it runs, and logged as `refused`                                               |
+| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | A saved store (`layerSaved`) comes back from the device; an outbox channel resends what was not confirmed      |
+| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its fibers stop with its scope                                      |
+| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, UI state and routes, each with its trace; time travel and forks in the devtools      |
 
 ### What each makes impossible
 
 - **Treflex:** an entity changing under an action while that action waits (the hold), and work
   stopping because its view went away.
-- **Spar:** state that changes outside a reducer, work that runs twice (one Effect in a
-  `FiberHandle` ignores or replaces a repeat), and an older answer landing over a newer one
-  (queries numbering their requests).
+- **Spar:** state that changes outside a reducer, a half-finished task (it changes the state once,
+  at its end, and has no finish command anyone could send early), a running flag that disagrees
+  with what runs, and an older answer landing over a newer one (queries numbering their requests).
 
 ### Where they differ in spirit
 
 Treflex makes the action the unit: it holds its entity, runs step by step, and the runtime can
 pause, cancel, record and restore it between steps. Spar makes the state the unit: every change is
-one command applied at once, and async work is a plain Effect that sends commands as it goes.
-Treflex queues a second click behind the first; in Spar the Effect says what a second click does,
-with Effect's own tools: a `FiberHandle` that ignores it or replaces the first run, or a
-`Semaphore` that queues it.
+one command applied at once, and slow work is a task that changes the state once, when it ends.
+Treflex queues a second click behind the first; in Spar the task says what a second click does
+(`switch`, `queue` or `concurrent`) and which commands wait for nobody but are refused while it
+runs. Both put the rule in one place, so it cannot be forgotten by a new command.
 
 
 # Diagnostics
@@ -4383,18 +4412,17 @@ export const Notes = NotesStore.with(NotesPanel)
 A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.
 
 ```ts
-import { Schema } from "effect"
+import { Duration, Effect, Schema } from "effect"
 import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
-  resetting: Schema.Boolean,
   resetDuration: Schema.Finite,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { count: 0, resetting: false, resetDuration: 2 }
+const initialState: State = { count: 0, resetDuration: 2 }
 
 export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
   state: State,
@@ -4408,20 +4436,19 @@ export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/R
       ...state,
       resetDuration: Math.max(0, seconds),
     })),
-    resetClicked: Store.action(Schema.Void, (state: State): State => ({
-      ...state,
-      resetting: true,
-    })),
-    resetCompleted: Store.action(Schema.Void, (state: State): State => ({
-      ...state,
-      count: 0,
-      resetting: false,
-    })),
   },
   selectors: {
     count: Store.selector(Schema.Finite, (state: State) => state.count),
-    resetting: Store.selector(Schema.Boolean, (state: State) => state.resetting),
     resetDuration: Store.selector(Schema.Finite, (state: State) => state.resetDuration),
+  },
+  tasks: {
+    reset: Store.task(Schema.Void, {
+      result: Schema.Void,
+      run: (_: void, state: State) => Effect.sleep(Duration.seconds(state.resetDuration)),
+      finish: (state: State): State => ({ ...state, count: 0 }),
+      mode: "switch",
+      refuses: ["incremented", "reset"],
+    }),
   },
 }) {}
 ```
@@ -4431,7 +4458,7 @@ export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/R
 Its component, composed with `withStore`. The buttons are never disabled; the store decides.
 
 ```tsx
-import { Duration, Effect, FiberHandle, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Reactive, UiState, compose, withKey, withStore } from "spar"
 import { ResetCounterStore } from "./ResetCounterStore.ts"
 
@@ -4449,32 +4476,16 @@ const withDelay = Effect.fnUntraced(function* () {
   }
 })
 
-const withReset = Effect.fnUntraced(function* () {
-  const store = yield* ResetCounterStore
-  const running = yield* FiberHandle.make()
-  const resetAfterDelay = Effect.gen(function* () {
-    const seconds = yield* store.select.resetDuration.get
-
-    yield* store.commands.resetClicked()
-    yield* Effect.sleep(Duration.seconds(seconds))
-    yield* store.commands.resetCompleted()
-  })
-
-  return {
-    onReset: Effect.asVoid(FiberHandle.run(running, resetAfterDelay, { onlyIfMissing: true })),
-  }
-})
-
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
     count: store.select.count,
-    status: Reactive.map(store.select.resetting, (resetting) =>
+    status: Reactive.map(store.running.reset, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
     onIncrement: store.commands.incremented(),
+    onReset: store.tasks.reset(),
   })),
   withDelay,
-  withReset,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -4501,8 +4512,8 @@ const ResetCounterPanel = compose(
       />
     </label>
     <p class="hint">
-      The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect,
-      run by a FiberHandle.
+      The + key adds 1 too. While the reset runs, the store refuses Add 1 and a second reset: the
+      reset is one task of the store, and it names what it refuses.
     </p>
   </section>
 ))

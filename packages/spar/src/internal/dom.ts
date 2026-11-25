@@ -281,7 +281,7 @@ export const openModal = (
 ): (() => void) => {
   const layers = [...frame.overlays.children].filter(isHtml)
   const beneath = [frame.target, ...layers.slice(0, layers.indexOf(layer))].filter(
-    (node) => node.querySelector("[data-spar-devtools]") === null,
+    (node) => node.querySelector("[data-spar-above-modals]") === null,
   )
   const wasInert = beneath.map((node) => node.hasAttribute("inert"))
   const hadFocus = [document.activeElement].filter(isHtml)

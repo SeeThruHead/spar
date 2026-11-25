@@ -147,11 +147,12 @@ step and fork the whole app.
 
 ### Work that takes time
 
-A store accepts every command; there are no guards. Work that takes time is an Effect on a
-service, and Effect decides what happens to a repeat: `FiberHandle.run(handle, effect, {
-onlyIfMissing: true })` ignores a second run while the first is going, plain `FiberHandle.run`
-replaces it, a `Semaphore` makes it wait, and an `Outbox.channel` keeps it on the device until it
-is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
+Work that takes time is a task of the store: `Store.task(payload, { result, run, finish, mode,
+refuses })` in the store's `tasks`. `run` is the Effect, `finish` changes the state once with what
+it returned, `mode` (`"switch"`, `"queue"`, `"concurrent"`) says what a second start does, and
+`refuses` names the commands and tasks refused while it runs. The store gains `tasks.<name>(payload)`
+to start it and `running.<name>`, a reactive boolean. What must survive a reload goes on an
+`Outbox.channel` (`apps/sidebar/src/ResetCounterStore.ts`, `docs/state-and-server-data.md`).
 
 ### A store beside its view
 
