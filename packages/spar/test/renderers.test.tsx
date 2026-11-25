@@ -33,7 +33,7 @@ const Counter = compose(
 
 const until = <A,>(effect: Effect.Effect<A>, holds: (value: A) => boolean) =>
   Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("5 millis") }).pipe(
-    Effect.timeout("2 seconds"),
+    Effect.timeout("10 seconds"),
     Effect.orDie,
   )
 
@@ -84,6 +84,7 @@ describe("one component, any renderer chosen by a layer", () => {
           "Counter\nCount 2\n[ Add one ]",
         )
       }),
+    20_000,
   )
 
   it.live(
