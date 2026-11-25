@@ -1,4 +1,5 @@
 import {
+  Cause,
   Clock,
   Context,
   Duration,
@@ -16,6 +17,7 @@ import {
   Stream,
   Tracer,
 } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
@@ -28,10 +30,6 @@ import * as Timeline from "./Timeline.ts"
 import * as UiState from "./UiState.ts"
 import type { Mountable } from "./View.ts"
 import { within } from "./internal/viewParts.ts"
-
-export const Status = Schema.Literals(["waiting", "loading", "loaded", "failed"])
-
-export type Status = typeof Status.Type
 
 export type Entry<A, E> = {
   readonly status: "loading" | "loaded" | "failed"
@@ -53,12 +51,33 @@ export type State<A, E> = {
 export type Input<I> = [I] extends [void] ? void : I | Reactive<I> | Reactive<Option.Option<I>>
 
 export type Handle<A, E> = {
-  readonly status: Reactive<Status>
-  readonly value: Reactive<A | null>
-  readonly error: Reactive<E | null>
-  readonly loading: Reactive<boolean>
-  readonly latest: Reactive<A | null>
+  readonly result: Reactive<AsyncResult.AsyncResult<A, E>>
   readonly refetch: Effect.Effect<void>
+}
+
+const settledOf = <A, E>(entry: Entry<A, E>, kept: A | null): AsyncResult.AsyncResult<A, E> => {
+  const timestamp = entry.loadedAt ?? 0
+  const shown = entry.value ?? kept
+  const previous = Option.map(Option.fromNullishOr(shown), (value) =>
+    AsyncResult.success<A, E>(value, { timestamp }),
+  )
+
+  if (entry.status === "failed" && entry.error !== null) {
+    return AsyncResult.failure(Cause.fail(entry.error), { previousSuccess: previous })
+  }
+
+  return Option.getOrElse(previous, () => AsyncResult.initial<A, E>())
+}
+
+export const resultOf = <A, E>(
+  entry: Entry<A, E> | undefined,
+  kept: A | null,
+): AsyncResult.AsyncResult<A, E> => {
+  if (entry === undefined) return AsyncResult.initial()
+
+  const settled = settledOf(entry, kept)
+
+  return entry.status === "loading" ? AsyncResult.waiting(settled) : settled
 }
 
 type Asked = { readonly key: string; readonly input: Schema.Json }
@@ -181,9 +200,6 @@ const forkedIn = <A, E>(
   key: string,
   effect: Effect.Effect<A, E>,
 ): Effect.Effect<void> => Effect.asVoid(Effect.exit(FiberMap.run(fibers, key, effect)))
-
-const statusOf = <A, E>(entry: Entry<A, E> | undefined): Status =>
-  entry === undefined ? "waiting" : entry.status
 
 export const Tag =
   <Self>() =>
@@ -539,20 +555,18 @@ export const Tag =
       )
 
       const value = map(held, (entryNow) => entryNow?.value ?? null)
-
-      sourced(value, `${key} . value`)
-
       const firstValue = yield* value.get
       const kept = Cell.make<A | null>(firstValue)
 
       yield* observed(value, (now) => kept.write(now ?? kept.read()))
 
+      const withKept = yield* zip(held, fromCell(kept))
+      const result = map(withKept, ([entryNow, last]) => resultOf(entryNow, last))
+
+      sourced(result, `${key} . result`)
+
       return {
-        status: map(held, statusOf),
-        value,
-        error: map(held, (entryNow) => entryNow?.error ?? null),
-        loading: map(held, (entryNow) => entryNow?.status === "loading"),
-        latest: fromCell(kept),
+        result,
         refetch: Effect.flatMap(wanted.get, (asked) =>
           Effect.forEach(
             Option.toArray(asked),
