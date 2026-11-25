@@ -1,4 +1,5 @@
 import { Effect, Option, Schema, pipe } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import {
   Events,
   Markup,
@@ -74,6 +75,18 @@ const NavGroup = compose(
 
 const docFields = { params: Props.Reactive(DocParams) }
 
+const shownIn = <A, E>(result: AsyncResult.AsyncResult<A, E>): A | null =>
+  Option.getOrNull(AsyncResult.value(result))
+
+const statusIn = <A, E>(result: AsyncResult.AsyncResult<A, E>): string =>
+  result.waiting
+    ? "loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "waiting",
+        onFailure: () => "failed",
+        onSuccess: () => "loaded",
+      })
+
 export const titleOf = (page: string | undefined): string =>
   page === undefined ? "Spar" : `${page} · Spar`
 
@@ -81,18 +94,19 @@ const DocPage = compose(
   withProps(docFields),
   Effect.fnUntraced(function* ({ params }: Schema.Struct<typeof docFields>["Type"]) {
     const page = yield* PageQuery.ask(Reactive.map(params, (now) => now.slug))
+    const latest = Reactive.map(page.result, shownIn)
     const current = Reactive.map(params, (now) => now.slug)
-    const state = yield* Reactive.zip(page.status, current)
+    const state = yield* Reactive.zip(Reactive.map(page.result, statusIn), current)
 
-    yield* Events.title(Reactive.map(page.latest, (shown) => titleOf(shown?.title)))
+    yield* Events.title(Reactive.map(latest, (shown) => titleOf(shown?.title)))
 
     return {
       groups: yield* Effect.forEach(groups, (group) =>
         View.child(NavGroup, { title: group.title, entries: group.entries, current }),
       ),
-      body: Reactive.map(page.latest, (shown) => Markup.trusted(shown?.html ?? "")),
+      body: Reactive.map(latest, (shown) => Markup.trusted(shown?.html ?? "")),
       headings: yield* pipe(
-        Reactive.map(page.latest, (shown) => shown?.headings ?? []),
+        Reactive.map(latest, (shown) => shown?.headings ?? []),
         Reactive.mapBy(
           (heading: Heading) => heading.id,
           HeadingLinkView,
@@ -104,7 +118,7 @@ const DocPage = compose(
         ),
       ),
       problem: Reactive.map(state, ([status, slug]) => said(status, slug)),
-      busy: Reactive.map(page.loading, String),
+      busy: Reactive.map(page.result, (result) => String(result.waiting)),
     }
   }),
   withStore(Router.Router, (router) => ({ onLink: router.followLinks })),
@@ -118,9 +132,9 @@ const Home = compose(
     yield* Events.title(Reactive.succeed(titleOf(undefined)))
 
     return {
-      before: Reactive.map(page.value, (shown) => partOf(shown, 0)),
-      between: Reactive.map(page.value, (shown) => partOf(shown, 1)),
-      after: Reactive.map(page.value, (shown) => partOf(shown, 2)),
+      before: Reactive.map(page.result, (result) => partOf(shownIn(result), 0)),
+      between: Reactive.map(page.result, (result) => partOf(shownIn(result), 1)),
+      after: Reactive.map(page.result, (result) => partOf(shownIn(result), 2)),
       loads: yield* View.child(Loads, {}),
       store: yield* View.child(StoreDemo, {}),
       start: router.link(docRoute, { slug: "getting-started" }),
@@ -146,8 +160,8 @@ export const Site = compose(
     const router = yield* Router.Router
     const text = yield* UiState.make("search", Schema.String, "")
     const hits = yield* SearchQuery.ask(Reactive.map(text, wanted))
-    const found = Reactive.map(hits.latest, (all) => all ?? [])
-    const state = yield* Reactive.zip(hits.status, found)
+    const found = Reactive.map(hits.result, (result) => shownIn(result) ?? [])
+    const state = yield* Reactive.zip(Reactive.map(hits.result, statusIn), found)
 
     return {
       home: router.link(home, {}),

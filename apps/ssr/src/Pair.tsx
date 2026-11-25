@@ -1,10 +1,16 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Reactive, compose, withEffectProps, withHandlers, withProps } from "spar"
 import { SupplierQuery } from "./Catalogue.ts"
 
 const withSupplier = withEffectProps(() =>
   Effect.map(SupplierQuery.ask("dairy"), (handle) => ({
-    name: Reactive.map(handle.value, (found) => found?.name ?? "waiting"),
+    name: Reactive.map(handle.result, (result) =>
+      Option.match(AsyncResult.value(result), {
+        onNone: () => "waiting",
+        onSome: (found) => found.name,
+      }),
+    ),
   })),
 )
 

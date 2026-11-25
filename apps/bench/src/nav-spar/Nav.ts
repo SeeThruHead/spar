@@ -1,4 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Props, Query, Reactive, Router, compose, withProps } from "spar"
 import { lookup, target } from "../nav-shared/lookup.ts"
 import { HomeView, NothingView, ReportView, SegmentView, ShellView } from "./NavView.tsx"
@@ -64,19 +65,23 @@ const reportsRoute = Router.route("/org/:org/team/:team/member/:member/reports/*
 
 const reportRoute = Router.route("/org/:org/team/:team/member/:member/reports/:report", Report)
 
-const labelOf = (found: Found | null): string => found?.label ?? ""
+const foundIn = (result: AsyncResult.AsyncResult<Found, never>): Found | null =>
+  Option.getOrNull(AsyncResult.value(result))
+
+const labelOf = (result: AsyncResult.AsyncResult<Found, never>): string =>
+  foundIn(result)?.label ?? ""
 
 const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
   Effect.fnUntraced(function* ({ params }) {
     const report = yield* ReportQuery.ask(Reactive.map(params, (now) => now.report))
     const author = yield* AuthorQuery.ask(
-      Reactive.map(report.value, (found) => Option.fromNullishOr(found?.authorId)),
+      Reactive.map(report.result, (result) => Option.fromNullishOr(foundIn(result)?.authorId)),
     )
 
     return {
-      label: Reactive.map(report.value, labelOf),
-      author: Reactive.map(author.value, labelOf),
+      label: Reactive.map(report.result, labelOf),
+      author: Reactive.map(author.result, labelOf),
     }
   }),
 )(ReportView)
@@ -88,7 +93,7 @@ const Reports = compose(
 
     return {
       kind: "reports",
-      label: Reactive.map(reports.value, labelOf),
+      label: Reactive.map(reports.result, labelOf),
       inner: yield* Router.outlet({
         routes: [Router.live(reportRoute, ReportPage)],
         otherwise: NothingView,
@@ -104,7 +109,7 @@ const MemberSegment = compose(
 
     return {
       kind: "member",
-      label: Reactive.map(member.value, labelOf),
+      label: Reactive.map(member.result, labelOf),
       inner: yield* Router.outlet({
         routes: [Router.live(reportsRoute, Reports)],
         otherwise: NothingView,
@@ -120,7 +125,7 @@ const TeamSegment = compose(
 
     return {
       kind: "team",
-      label: Reactive.map(team.value, labelOf),
+      label: Reactive.map(team.result, labelOf),
       inner: yield* Router.outlet({
         routes: [Router.live(memberRoute, MemberSegment)],
         otherwise: NothingView,
@@ -136,7 +141,7 @@ const OrgSegment = compose(
 
     return {
       kind: "org",
-      label: Reactive.map(org.value, labelOf),
+      label: Reactive.map(org.result, labelOf),
       inner: yield* Router.outlet({
         routes: [Router.live(teamRoute, TeamSegment)],
         otherwise: NothingView,

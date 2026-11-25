@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Query, Reactive } from "spar"
 
 class Users extends Query.Tag<Users>()("forbidden/Users", {
@@ -19,8 +20,8 @@ export const chained = Effect.gen(function* () {
   const users = yield* Users.ask()
 
   return yield* Stock.ask(
-    Reactive.map(users.value, (loaded) =>
-      loaded === null ? Option.none<void>() : Option.some<void>(undefined),
+    Reactive.map(users.result, (loaded) =>
+      AsyncResult.isSuccess(loaded) ? Option.some<void>(undefined) : Option.none<void>(),
     ),
   )
 })
