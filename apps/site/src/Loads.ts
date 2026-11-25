@@ -86,7 +86,7 @@ const LoadRow = compose(
 
 const endOf = (found: Timed | null): number => found?.endedAt ?? 0
 
-const statusIn = (result: AsyncResult.AsyncResult<Timed, never>): string =>
+const statusIn = (result: AsyncResult.AsyncResult<Timed>): string =>
   result.waiting
     ? "loading"
     : AsyncResult.match(result, {
@@ -111,15 +111,16 @@ export const Loads = compose(
   Effect.fnUntraced(function* () {
     const run = yield* UiState.make("run", Schema.NullOr(Run), null)
     const asked = Reactive.map(run, Option.fromNullOr)
-    const profile = shownOf(yield* ProfileQuery.ask(asked))
-    const orders = shownOf(yield* OrdersQuery.ask(asked))
+    const profile = yield* Effect.map(ProfileQuery.ask(asked), shownOf)
+    const orders = yield* Effect.map(OrdersQuery.ask(asked), shownOf)
     const whenProfiled = yield* Reactive.zip(profile.value, run)
-    const suggestions = shownOf(
-      yield* SuggestionsQuery.ask(
+    const suggestions = yield* Effect.map(
+      SuggestionsQuery.ask(
         Reactive.map(whenProfiled, ([found, now]) =>
           found === null ? Option.none<Run>() : Option.fromNullOr(now),
         ),
       ),
+      shownOf,
     )
     const first = yield* Reactive.zip(profile.value, orders.value)
     const last = yield* Reactive.zip(suggestions.value, run)

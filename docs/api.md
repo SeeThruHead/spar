@@ -336,9 +336,11 @@ in the log, the devtools and the traces like any other.
 | `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
-means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
-`loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
-input, for paging without a blank) and `refetch`, all reactive. It asks again
+means no argument). The handle has `result` and `refetch`. `result` is a reactive
+`AsyncResult` from `effect/reactivity`: `Initial` while the input is none or nothing has loaded,
+`Success` with the value, `Failure` with the typed error (and the last success, if any), each with
+`waiting: true` while a request runs. While a new input loads, `result` stays the last `Success`,
+marked `waiting`, so paging never blanks. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,

@@ -200,8 +200,10 @@ with async work. The short version:
   `refuses`.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
-- A query's `value` is null while a new input loads. To keep the last rows on screen while the
-  next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
+- A query's handle is `{ result, refetch }`, `result` being Effect's `AsyncResult`. Read it with
+  `AsyncResult.match(result, { onInitial, onFailure, onSuccess })`, `AsyncResult.value(result)`
+  or `result.waiting`; never keep a loading flag of your own. While the next page or filter loads,
+  `result` stays the last `Success`, marked `waiting`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.

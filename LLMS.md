@@ -200,8 +200,10 @@ with async work. The short version:
   `refuses`.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
-- A query's `value` is null while a new input loads. To keep the last rows on screen while the
-  next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
+- A query's handle is `{ result, refetch }`, `result` being Effect's `AsyncResult`. Read it with
+  `AsyncResult.match(result, { onInitial, onFailure, onSuccess })`, `AsyncResult.value(result)`
+  or `result.waiting`; never keep a loading flag of your own. While the next page or filter loads,
+  `result` stays the last `Success`, marked `waiting`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
@@ -297,7 +299,13 @@ export const Orders = compose(
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
   <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+    {Reactive.map(props.orders.result, (result) =>
+      AsyncResult.match(result, {
+        onInitial: () => "Loading orders",
+        onFailure: () => "The orders could not be loaded",
+        onSuccess: ({ value, waiting }) => `${value.length} orders${waiting ? ", updating" : ""}`,
+      }),
+    )}
   </p>
 ))
 ```
@@ -316,8 +324,8 @@ That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and
 
 What Spar does with it:
 
-1. `ask` (which `withQuery` calls) returns at once with a handle: `status`, `value`, `error`,
-   `loading`, each a reactive value, and `refetch`. No enhancer waits for data.
+1. `ask` (which `withQuery` calls) returns at once with a handle: `result`, a reactive Effect
+   `AsyncResult`, and `refetch`. No enhancer waits for data.
 2. Because nothing waits, the parent goes straight on to draw its children, and they draw theirs.
    Every query in the tree is reached in one pass, and every query with an input starts then,
    together.
@@ -334,20 +342,20 @@ const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
   withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
   withQuery("author", AuthorQuery, (props) =>
-    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
+    Reactive.map(props.report.result, (result) => Option.fromNullishOr(foundIn(result)?.authorId)),
   ),
 )((props) => (
   <section class="segment" aria-label="Report">
     <h1>
-      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+      <output aria-label="Report name">{Reactive.map(props.report.result, labelOf)}</output>
     </h1>
     <p>
-      <output aria-label="Report status">{props.report.status}</output>
+      <output aria-label="Report status">{Reactive.map(props.report.result, statusOf)}</output>
     </p>
     <p>
       Written by{" "}
-      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
-      <output aria-label="Author status">{props.author.status}</output>
+      <output aria-label="Author name">{Reactive.map(props.author.result, labelOf)}</output>{" "}
+      <output aria-label="Author status">{Reactive.map(props.author.result, statusOf)}</output>
     </p>
   </section>
 ))
@@ -479,7 +487,7 @@ loaded this way, as above.
 
 ### Pending and failure, per segment
 
-Each segment shows its own query's `status`, so one slow segment does not blank the others. For
+Each segment shows its own query's `result`, so one slow segment does not blank the others. For
 a component whose own Effect can wait or fail, `View.pending(placeholder)` and
 `View.recover(failure, view)` wrap that component alone. A query takes `retry`, a schedule,
 and stays `loading` until the schedule gives up.
@@ -1454,9 +1462,11 @@ in the log, the devtools and the traces like any other.
 | `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
-means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
-`loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
-input, for paging without a blank) and `refetch`, all reactive. It asks again
+means no argument). The handle has `result` and `refetch`. `result` is a reactive
+`AsyncResult` from `effect/reactivity`: `Initial` while the input is none or nothing has loaded,
+`Success` with the value, `Failure` with the typed error (and the last success, if any), each with
+`waiting: true` while a request runs. While a new input loads, `result` stays the last `Success`,
+marked `waiting`, so paging never blanks. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
@@ -1812,7 +1822,13 @@ export const Orders = compose(
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
   <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+    {Reactive.map(props.orders.result, (result) =>
+      AsyncResult.match(result, {
+        onInitial: () => "Loading orders",
+        onFailure: () => "The orders could not be loaded",
+        onSuccess: ({ value, waiting }) => `${value.length} orders${waiting ? ", updating" : ""}`,
+      }),
+    )}
   </p>
 ))
 ```
@@ -1832,8 +1848,9 @@ That file mounts `Parent` and checks it shows `loaded: 3 orders`.
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
 
-- **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
-  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and no enhancer
+- **`ask` is a declaration.** It returns at once with a handle: `result`, a reactive Effect
+  `AsyncResult` (`Initial`, `Success` or `Failure`, each with a `waiting` flag), and `refetch`.
+  It does not wait for data, and no enhancer
   does, so every query in the tree being mounted is declared in the same
   pass and they all start together. Nesting components does not make a waterfall.
 - **The query runs in its store, not in the component.** The store is provided at the root
@@ -1850,7 +1867,7 @@ What makes that enough:
 const askedTogether = Effect.gen(function* () {
   const users = yield* Users.ask()
   const stock = yield* Stock.ask()
-  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const firstUser = Reactive.map(valueOf(users), (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
   const orders = yield* Orders.ask(firstUser)
 
   return { users, stock, orders }
@@ -1869,9 +1886,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
         expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
 
         yield* answer("stock", 40)
-        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* valueOf(declared.stock).get).toBe(40)
         expect(yield* whats).toEqual(["users", "stock"])
-        expect(yield* declared.orders.status.get).toBe("waiting")
+        expect(yield* statusOf(declared.orders).get).toBe("waiting")
 
         yield* answer("users", [ada, grace])
         yield* Effect.yieldNow
@@ -1917,23 +1934,25 @@ describe("the natural way: a value from one place feeds a query declared in anot
     }),
   )
 
-  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
-    Effect.gen(function* () {
-      const { built, answer } = yield* opened
-      const page = yield* SubscriptionRef.make(1)
-      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+  it.effect(
+    "while another input loads, the last value loaded is still the result, marked waiting",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const page = yield* SubscriptionRef.make(1)
+        const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
 
-      yield* Effect.yieldNow
-      expect(yield* orders.latest.get).toBeNull()
-      yield* answer("orders 1", ["tea"])
-      yield* SubscriptionRef.set(page, 2)
-      yield* Effect.yieldNow
-      yield* Effect.yieldNow
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+        yield* answer("orders 1", ["tea"])
+        yield* SubscriptionRef.set(page, 2)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
-      yield* answer("orders 2", ["ink"])
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
-    }),
+        yield* answer("orders 2", ["ink"])
+        expect(yield* readings(orders)).toEqual(["loaded", ["ink"], null, false])
+      }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
@@ -1951,10 +1970,10 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 1", "orders 2"])
-      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+      expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
       yield* answer("orders 2", ["ink"])
-      expect(yield* orders.value.get).toEqual(["ink"])
+      expect(yield* valueOf(orders).get).toEqual(["ink"])
 
       yield* SubscriptionRef.set(selected, 1)
       yield* Effect.yieldNow
@@ -1974,9 +1993,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 7"])
-      expect(yield* first.status.get).toBe("loading")
+      expect(yield* statusOf(first).get).toBe("loading")
       yield* answer("orders 7", ["pen"])
-      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+      expect([yield* valueOf(first).get, yield* valueOf(second).get]).toEqual([["pen"], ["pen"]])
     }),
   )
 
@@ -2085,8 +2104,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
           const orders = yield* Orders.ask(userId)
 
           return {
-            status: orders.status,
-            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+            status: statusOf(orders),
+            count: Reactive.map(valueOf(orders), (loaded) => loaded?.length ?? 0),
           }
         }),
       )(OrdersView)
@@ -2201,7 +2220,7 @@ describe("server data in a store", () => {
         5000,
       ])
       yield* answer("users", [ada, grace])
-      expect(yield* later.value.get).toEqual([ada, grace])
+      expect(yield* valueOf(later).get).toEqual([ada, grace])
     }),
   )
 
@@ -2541,7 +2560,7 @@ describe("server data in a store", () => {
       yield* refuse("stock", "busy")
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* answer("stock", 9)
       expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
     }),
@@ -2608,9 +2627,9 @@ describe("server data in a store", () => {
       const [key] = Object.keys((yield* users.state.get).entries)
 
       yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
@@ -2629,7 +2648,7 @@ describe("server data in a store", () => {
       expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
 
       yield* answer("users", [grace])
-      expect(yield* shown.value.get).toEqual([grace])
+      expect(yield* valueOf(shown).get).toEqual([grace])
     }),
   )
 
@@ -2641,8 +2660,8 @@ describe("server data in a store", () => {
             const stock = yield* Stock.ask()
 
             return {
-              status: stock.status,
-              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+              status: statusOf(stock),
+              count: Reactive.map(valueOf(stock), (loaded) => loaded ?? 0),
             }
           }),
         )(OrdersView),
@@ -2663,10 +2682,40 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states are plain data with a Schema", () => {
+  it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
+    const entry = (
+      status: "loading" | "loaded" | "failed",
+      value: string | null,
+      error: string | null,
+    ) => ({
+      status,
+      value,
+      error,
+      loadedAt: 1,
+      request: 1,
+      input: null,
+      traceId: "",
+      spanId: "",
+      unusedSince: null,
+    })
+
     expect(
-      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
-    ).toEqual([true, true, true, true, false])
+      [
+        Query.resultOf(undefined, null),
+        Query.resultOf(entry("loading", null, null), null),
+        Query.resultOf(entry("loading", null, null), "kept"),
+        Query.resultOf(entry("loaded", "tea", null), null),
+        Query.resultOf(entry("failed", null, "busy"), null),
+        Query.resultOf(entry("failed", "tea", "busy"), null),
+      ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
+    ).toEqual([
+      ["waiting", null, null],
+      ["loading", null, null],
+      ["loading", "kept", null],
+      ["loaded", "tea", null],
+      ["failed", null, "busy"],
+      ["failed", "tea", "busy"],
+    ])
   })
 })
 ```
@@ -2688,20 +2737,20 @@ Each of these is an entry in the log and a span in the trace.
 | React Query                                | Spar                                                                                                                                                                                                        |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                      |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                               |
+| `status`, `data`, `error`                  | The handle's `result`, an `AsyncResult` from `effect/reactivity`: read it with `AsyncResult.match`, `AsyncResult.value` or `result.waiting`                                                                 |
 | Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                           |
 | `staleTime`                                | `staleAfter`                                                                                                                                                                                                |
 | `refetch()`                                | The handle's `refetch`                                                                                                                                                                                      |
 | Deduping identical requests                | One request for each input at a time. A second while loading is not sent                                                                                                                                    |
 | A late answer overwriting a newer one      | Ignored: an answer carries the number of the request it answers                                                                                                                                             |
 | `invalidateQueries` after a mutation       | `TheQuery.invalidate` after the save, in the service method that saves                                                                                                                                      |
-| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                              |
+| Keeps old data while loading               | Yes: while a refetch or a new input loads, `result` is the last `Success` with `waiting: true`, so the last rows stay on screen and `waiting` says they are being replaced                                  |
 | `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                           |
 | Optimistic update                          | `TheQuery.patch(input, change)` shows the change at once; an `Outbox.channel` sends it and ends with `TheQuery.invalidate`; `Outbox.givenUp(channel)` runs `TheQuery.invalidate` if the send fails for good |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                          |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                       |
+| Keeping the last page while the next loads | Nothing to do: `result` keeps the last page, marked `waiting`                                                                                                                                               |
 | Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                           |
+| Retries                                    | `retry`, a schedule; `result` stays `waiting` until it gives up                                                                                                                                             |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
 
 #### A list read a page at a time
@@ -2751,7 +2800,8 @@ at the end.
 the end. `loadMore` does nothing while the last page is still loading or when there is no more.
 `failed` says a page failed. Going back to the list later finds its pages in the cache, by each
 page's `staleAfter`. For numbered pages where only one shows at a time, pass the page number as
-the input of an ordinary `ask` and show `latest` while the next one loads.
+the input of an ordinary `ask`: its `result` keeps the page on screen, marked `waiting`, while the
+next one loads.
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.
@@ -2803,9 +2853,10 @@ plain "API Cache" example does the same by hand with `AsyncData` fields in the M
 | A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
 | Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An Effect calls `TheQuery.read(input)`                                                   |
 
-Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
-holding old data" apart as states of their own, where Spar leaves you to read `status` and
-`value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
+Both tell "refreshing with old data" and "failed but still holding old data" apart: Foldkit with
+`AsyncData`'s `Refreshing` and `Stale`, Spar with Effect's `AsyncResult` (a `Success` or a
+`Failure` with `waiting`, and a `Failure` that keeps its `previousSuccess`). Foldkit's query API
+is marked experimental. Where Spar is ahead: nothing is lifted or
 folded by hand, a stale time is declared, a dependent query needs no code, and every request and
 answer is in the log.
 
@@ -3395,8 +3446,6 @@ and the backend (`docs/devtools-compared.md`).
   Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
-- **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
-  as cases of their own. In Spar you read `status` and `value` together.
 - **Speed on a few list operations, depending on the run.** In the latest run of this repo's
   benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
   one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next
@@ -3438,13 +3487,13 @@ follows is what Solid says it does, not what was seen it do, except where the be
 |                                   | Solid 2.0                                                                                           | Spar                                                                                                                                                               |
 | --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Declaring it                      | Any computation that returns a promise: `createMemo(() => fetchUser(id()))`                         | A query class with Schemas, then `yield* TheQuery.ask(input)` in the component                                                                                     |
-| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `status`                                                                                        |
+| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `result`                                                                                        |
 | One piece that needs another      | A computation reads the other's value, so it runs when that value is ready                          | The second query's input is made from the first one's value; it is `waiting` until then                                                                            |
-| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `status` is `loading`; `latest` keeps the last loaded value                                                                                                        |
+| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `result` keeps the last value, marked `waiting`                                                                                                                    |
 | A request that is superseded      | The earlier run is cleaned up, and an AbortController registered in it can cancel the request       | The earlier answer is ignored when it lands, because it is not for the newest request. The request is not cancelled                                                |
 | A cache by input, a stale time    | Not in the core: a computation holds the value for its current inputs                               | Yes: entries keyed by the encoded input, `staleAfter`, refetch on focus and reconnect                                                                              |
 | A change shown before it is saved | `action` with `createOptimisticStore`; the optimistic value reverts by itself when the work settles | `TheQuery.patch(input, f)` beside an `Outbox.channel` send; the send survives a reload and is retried, and on `Outbox.givenUp` the query loads what the server has |
-| Failure                           | `<Errored>`, or an effect's `error` option                                                          | The handle's `error`, typed by the query's failure Schema; `retry` takes a schedule                                                                                |
+| Failure                           | `<Errored>`, or an effect's `error` option                                                          | A `Failure` in the handle's `result`, typed by the query's failure Schema; `retry` takes a schedule                                                                |
 | Asking again                      | `refresh(user)`, with `affects(user)` to show it as pending                                         | The handle's `refetch`, or `TheQuery.invalidate` from any Effect                                                                                                   |
 
 **The same idea in both.** Data that arrives later is a reactive value. What depends on it is
@@ -4602,18 +4651,19 @@ export const exportCsv = Effect.fn("People.exportCsv")(function* () {
 The people table, composed, its rows in a For.
 
 ```tsx
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { For, Reactive, compose, withHandlers, withQuery, withStore } from "spar"
-import type { Query } from "spar"
 import { PeopleStore, UsersQuery, exportCsv } from "./People.ts"
 
-const statusOf = (status: Query.Status): string =>
-  ({
-    waiting: "Waiting",
-    loading: "Loading",
-    loaded: "Loaded",
-    failed: "Could not load",
-  })[status]
+const statusOf = <A, E>(result: AsyncResult.AsyncResult<A, E>): string =>
+  result.waiting
+    ? "Loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "Waiting",
+        onFailure: () => "Could not load",
+        onSuccess: () => "Loaded",
+      })
 
 const withExport = Effect.fnUntraced(function* () {
   const services = yield* Effect.context<PeopleStore | UsersQuery>()
@@ -4624,7 +4674,9 @@ const withExport = Effect.fnUntraced(function* () {
 const PeoplePanel = compose(
   withQuery("users", UsersQuery, () => undefined),
   withHandlers((props) => ({
-    rows: Reactive.map(props.users.value, (loaded) => loaded ?? []),
+    rows: Reactive.map(props.users.result, (result) =>
+      Option.getOrElse(AsyncResult.value(result), () => []),
+    ),
   })),
   withStore(PeopleStore, (people) => ({
     selected: people.select.selected,
@@ -4639,7 +4691,7 @@ const PeoplePanel = compose(
   <section class="people" aria-label="People">
     <h2>People</h2>
     <p>
-      <output aria-label="People status">{Reactive.map(props.users.status, statusOf)}</output>,{" "}
+      <output aria-label="People status">{Reactive.map(props.users.result, statusOf)}</output>,{" "}
       <output aria-label="People selected">{props.count}</output>
     </p>
     <table>
@@ -4703,6 +4755,7 @@ Tests of the export: the file, what it says with nobody selected, one trace for 
 ```ts
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Ref } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
 import { State, Timeline } from "spar"
@@ -4743,7 +4796,7 @@ describe("people: server data in a store, used by another store's action", () =>
       const users = yield* Effect.provide(UsersQuery.ask(), built)
 
       yield* TestClock.adjust("40 millis")
-      expect(yield* users.value.get).toEqual(people)
+      expect(Option.getOrNull(AsyncResult.value(yield* users.result.get))).toEqual(people)
 
       yield* store.commands.toggled(123)
       yield* store.commands.toggled(124)
@@ -4815,6 +4868,7 @@ import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { errorIn, statusIn, statusOf, valueIn, valueOf } from "./results.ts"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
@@ -4955,7 +5009,12 @@ const opened = Effect.gen(function* () {
 })
 
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
-  Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
+  Effect.map(handle.result.get, (result) => [
+    statusIn(result),
+    valueIn(result),
+    errorIn(result),
+    result.waiting,
+  ])
 
 const feedSays = (label: string) =>
   document.querySelector(`[aria-label="Feed ${label}"]`)?.textContent
@@ -4976,7 +5035,7 @@ const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new 
 const askedTogether = Effect.gen(function* () {
   const users = yield* Users.ask()
   const stock = yield* Stock.ask()
-  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const firstUser = Reactive.map(valueOf(users), (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
   const orders = yield* Orders.ask(firstUser)
 
   return { users, stock, orders }
@@ -4995,9 +5054,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
         expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
 
         yield* answer("stock", 40)
-        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* valueOf(declared.stock).get).toBe(40)
         expect(yield* whats).toEqual(["users", "stock"])
-        expect(yield* declared.orders.status.get).toBe("waiting")
+        expect(yield* statusOf(declared.orders).get).toBe("waiting")
 
         yield* answer("users", [ada, grace])
         yield* Effect.yieldNow
@@ -5043,23 +5102,25 @@ describe("the natural way: a value from one place feeds a query declared in anot
     }),
   )
 
-  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
-    Effect.gen(function* () {
-      const { built, answer } = yield* opened
-      const page = yield* SubscriptionRef.make(1)
-      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+  it.effect(
+    "while another input loads, the last value loaded is still the result, marked waiting",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const page = yield* SubscriptionRef.make(1)
+        const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
 
-      yield* Effect.yieldNow
-      expect(yield* orders.latest.get).toBeNull()
-      yield* answer("orders 1", ["tea"])
-      yield* SubscriptionRef.set(page, 2)
-      yield* Effect.yieldNow
-      yield* Effect.yieldNow
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+        yield* answer("orders 1", ["tea"])
+        yield* SubscriptionRef.set(page, 2)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
-      yield* answer("orders 2", ["ink"])
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
-    }),
+        yield* answer("orders 2", ["ink"])
+        expect(yield* readings(orders)).toEqual(["loaded", ["ink"], null, false])
+      }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
@@ -5077,10 +5138,10 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 1", "orders 2"])
-      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+      expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
       yield* answer("orders 2", ["ink"])
-      expect(yield* orders.value.get).toEqual(["ink"])
+      expect(yield* valueOf(orders).get).toEqual(["ink"])
 
       yield* SubscriptionRef.set(selected, 1)
       yield* Effect.yieldNow
@@ -5100,9 +5161,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 7"])
-      expect(yield* first.status.get).toBe("loading")
+      expect(yield* statusOf(first).get).toBe("loading")
       yield* answer("orders 7", ["pen"])
-      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+      expect([yield* valueOf(first).get, yield* valueOf(second).get]).toEqual([["pen"], ["pen"]])
     }),
   )
 
@@ -5211,8 +5272,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
           const orders = yield* Orders.ask(userId)
 
           return {
-            status: orders.status,
-            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+            status: statusOf(orders),
+            count: Reactive.map(valueOf(orders), (loaded) => loaded?.length ?? 0),
           }
         }),
       )(OrdersView)
@@ -5327,7 +5388,7 @@ describe("server data in a store", () => {
         5000,
       ])
       yield* answer("users", [ada, grace])
-      expect(yield* later.value.get).toEqual([ada, grace])
+      expect(yield* valueOf(later).get).toEqual([ada, grace])
     }),
   )
 
@@ -5667,7 +5728,7 @@ describe("server data in a store", () => {
       yield* refuse("stock", "busy")
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* answer("stock", 9)
       expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
     }),
@@ -5734,9 +5795,9 @@ describe("server data in a store", () => {
       const [key] = Object.keys((yield* users.state.get).entries)
 
       yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
@@ -5755,7 +5816,7 @@ describe("server data in a store", () => {
       expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
 
       yield* answer("users", [grace])
-      expect(yield* shown.value.get).toEqual([grace])
+      expect(yield* valueOf(shown).get).toEqual([grace])
     }),
   )
 
@@ -5767,8 +5828,8 @@ describe("server data in a store", () => {
             const stock = yield* Stock.ask()
 
             return {
-              status: stock.status,
-              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+              status: statusOf(stock),
+              count: Reactive.map(valueOf(stock), (loaded) => loaded ?? 0),
             }
           }),
         )(OrdersView),
@@ -5789,10 +5850,40 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states are plain data with a Schema", () => {
+  it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
+    const entry = (
+      status: "loading" | "loaded" | "failed",
+      value: string | null,
+      error: string | null,
+    ) => ({
+      status,
+      value,
+      error,
+      loadedAt: 1,
+      request: 1,
+      input: null,
+      traceId: "",
+      spanId: "",
+      unusedSince: null,
+    })
+
     expect(
-      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
-    ).toEqual([true, true, true, true, false])
+      [
+        Query.resultOf(undefined, null),
+        Query.resultOf(entry("loading", null, null), null),
+        Query.resultOf(entry("loading", null, null), "kept"),
+        Query.resultOf(entry("loaded", "tea", null), null),
+        Query.resultOf(entry("failed", null, "busy"), null),
+        Query.resultOf(entry("failed", "tea", "busy"), null),
+      ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
+    ).toEqual([
+      ["waiting", null, null],
+      ["loading", null, null],
+      ["loading", "kept", null],
+      ["loaded", "tea", null],
+      ["failed", null, "busy"],
+      ["failed", "tea", "busy"],
+    ])
   })
 })
 ```
@@ -5890,6 +5981,7 @@ Its components: each segment composed from small enhancers of its own, children 
 
 ```tsx
 import { Effect, Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Props, Reactive, Router, compose, withProps, withQuery } from "spar"
 import type { Query, View } from "spar"
 import type { Found, ServerUnreachable } from "./api.ts"
@@ -5911,7 +6003,20 @@ import {
 } from "./Deep.ts"
 import { DeepMissingView, SegmentView } from "./DeepView.tsx"
 
-const labelOf = (found: Found | null): string => found?.label ?? ""
+type Answer = AsyncResult.AsyncResult<Found, ServerUnreachable>
+
+const foundIn = (result: Answer): Found | null => Option.getOrNull(AsyncResult.value(result))
+
+const labelOf = (result: Answer): string => foundIn(result)?.label ?? ""
+
+const statusOf = (result: Answer): string =>
+  result.waiting
+    ? "loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "waiting",
+        onFailure: () => "failed",
+        onSuccess: () => "loaded",
+      })
 
 type Asked<R> = {
   readonly ask: (
@@ -5924,8 +6029,8 @@ const withSegment =
   (props: { readonly params: Reactive.Reactive<Params> }) =>
     Effect.map(query.ask(Reactive.map(props.params, pick)), (handle) => ({
       kind,
-      label: Reactive.map(handle.value, labelOf),
-      status: handle.status,
+      label: Reactive.map(handle.result, labelOf),
+      status: Reactive.map(handle.result, statusOf),
     }))
 
 const withInner =
@@ -5943,20 +6048,20 @@ const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
   withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
   withQuery("author", AuthorQuery, (props) =>
-    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
+    Reactive.map(props.report.result, (result) => Option.fromNullishOr(foundIn(result)?.authorId)),
   ),
 )((props) => (
   <section class="segment" aria-label="Report">
     <h1>
-      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+      <output aria-label="Report name">{Reactive.map(props.report.result, labelOf)}</output>
     </h1>
     <p>
-      <output aria-label="Report status">{props.report.status}</output>
+      <output aria-label="Report status">{Reactive.map(props.report.result, statusOf)}</output>
     </p>
     <p>
       Written by{" "}
-      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
-      <output aria-label="Author status">{props.author.status}</output>
+      <output aria-label="Author name">{Reactive.map(props.author.result, labelOf)}</output>{" "}
+      <output aria-label="Author status">{Reactive.map(props.author.result, statusOf)}</output>
     </p>
   </section>
 ))
@@ -5991,7 +6096,8 @@ export const OrgSegment = compose(
 A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit, both written as JSX tags.
 
 ```tsx
-import { Effect, Option, Schedule, Schema, pipe } from "effect"
+import { Cause, Effect, Option, Schedule, Schema, pipe } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Query, Reactive, Router, View, compose, withProps, withQuery, withStore } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
@@ -6020,22 +6126,25 @@ export class RecordQuery extends Query.Tag<RecordQuery>()("sidebar/Record", {
 
 const recordText = (
   name: string,
-  record: Started | null,
-  problem: NoRecord | ServerUnreachable | null,
-): string => {
-  if (record !== null) return `The server started this agent as ${record.key}.`
-  if (problem !== null) return problem.message
-
-  return `Asking the server about ${name}.`
-}
+  record: AsyncResult.AsyncResult<Started, NoRecord | ServerUnreachable>,
+): string =>
+  AsyncResult.match(record, {
+    onInitial: () => `Asking the server about ${name}.`,
+    onFailure: ({ cause }) =>
+      Option.match(Cause.findErrorOption(cause), {
+        onNone: () => `Asking the server about ${name}.`,
+        onSome: (problem) => problem.message,
+      }),
+    onSuccess: ({ value }) => `The server started this agent as ${value.key}.`,
+  })
 
 const withText = (props: {
   readonly name: string
   readonly record: Query.Handle<Started, NoRecord | ServerUnreachable>
 }) =>
-  Effect.map(Reactive.zip(props.record.value, props.record.error), (answer) => ({
-    text: Reactive.map(answer, ([found, problem]) => recordText(props.name, found, problem)),
-  }))
+  Effect.succeed({
+    text: Reactive.map(props.record.result, (record) => recordText(props.name, record)),
+  })
 
 const ServerRecordView = compose(
   withProps({ name: Schema.String }),

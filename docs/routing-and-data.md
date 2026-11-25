@@ -19,8 +19,8 @@ That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and
 
 What Spar does with it:
 
-1. `ask` (which `withQuery` calls) returns at once with a handle: `status`, `value`, `error`,
-   `loading`, each a reactive value, and `refetch`. No enhancer waits for data.
+1. `ask` (which `withQuery` calls) returns at once with a handle: `result`, a reactive Effect
+   `AsyncResult`, and `refetch`. No enhancer waits for data.
 2. Because nothing waits, the parent goes straight on to draw its children, and they draw theirs.
    Every query in the tree is reached in one pass, and every query with an input starts then,
    together.
@@ -105,7 +105,7 @@ loaded this way, as above.
 
 ## Pending and failure, per segment
 
-Each segment shows its own query's `status`, so one slow segment does not blank the others. For
+Each segment shows its own query's `result`, so one slow segment does not blank the others. For
 a component whose own Effect can wait or fail, `View.pending(placeholder)` and
 `View.recover(failure, view)` wrap that component alone. A query takes `retry`, a schedule,
 and stays `loading` until the schedule gives up.

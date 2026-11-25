@@ -159,6 +159,22 @@ const opened = Effect.gen(function* () {
   }
 })
 
+const heldEntry = (
+  status: "loading" | "loaded" | "failed",
+  value: string | null,
+  error: string | null,
+) => ({
+  status,
+  value,
+  error,
+  loadedAt: 1,
+  request: 1,
+  input: null,
+  traceId: "",
+  spanId: "",
+  unusedSince: null,
+})
+
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
   Effect.map(handle.result.get, (result) => [
     statusIn(result),
@@ -1002,30 +1018,14 @@ describe("server data in a store", () => {
   )
 
   it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
-    const entry = (
-      status: "loading" | "loaded" | "failed",
-      value: string | null,
-      error: string | null,
-    ) => ({
-      status,
-      value,
-      error,
-      loadedAt: 1,
-      request: 1,
-      input: null,
-      traceId: "",
-      spanId: "",
-      unusedSince: null,
-    })
-
     expect(
       [
         Query.resultOf(undefined, null),
-        Query.resultOf(entry("loading", null, null), null),
-        Query.resultOf(entry("loading", null, null), "kept"),
-        Query.resultOf(entry("loaded", "tea", null), null),
-        Query.resultOf(entry("failed", null, "busy"), null),
-        Query.resultOf(entry("failed", "tea", "busy"), null),
+        Query.resultOf(heldEntry("loading", null, null), null),
+        Query.resultOf(heldEntry("loading", null, null), "kept"),
+        Query.resultOf(heldEntry("loaded", "tea", null), null),
+        Query.resultOf(heldEntry("failed", null, "busy"), null),
+        Query.resultOf(heldEntry("failed", "tea", "busy"), null),
       ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
     ).toEqual([
       ["waiting", null, null],

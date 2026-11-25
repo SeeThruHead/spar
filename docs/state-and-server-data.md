@@ -80,8 +80,9 @@ That file mounts `Parent` and checks it shows `loaded: 3 orders`.
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
 
-- **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
-  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and no enhancer
+- **`ask` is a declaration.** It returns at once with a handle: `result`, a reactive Effect
+  `AsyncResult` (`Initial`, `Success` or `Failure`, each with a `waiting` flag), and `refetch`.
+  It does not wait for data, and no enhancer
   does, so every query in the tree being mounted is declared in the same
   pass and they all start together. Nesting components does not make a waterfall.
 - **The query runs in its store, not in the component.** The store is provided at the root
@@ -111,20 +112,20 @@ Each of these is an entry in the log and a span in the trace.
 | React Query                                | Spar                                                                                                                                                                                                        |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                      |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                               |
+| `status`, `data`, `error`                  | The handle's `result`, an `AsyncResult` from `effect/reactivity`: read it with `AsyncResult.match`, `AsyncResult.value` or `result.waiting`                                                                 |
 | Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                           |
 | `staleTime`                                | `staleAfter`                                                                                                                                                                                                |
 | `refetch()`                                | The handle's `refetch`                                                                                                                                                                                      |
 | Deduping identical requests                | One request for each input at a time. A second while loading is not sent                                                                                                                                    |
 | A late answer overwriting a newer one      | Ignored: an answer carries the number of the request it answers                                                                                                                                             |
 | `invalidateQueries` after a mutation       | `TheQuery.invalidate` after the save, in the service method that saves                                                                                                                                      |
-| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                              |
+| Keeps old data while loading               | Yes: while a refetch or a new input loads, `result` is the last `Success` with `waiting: true`, so the last rows stay on screen and `waiting` says they are being replaced                                  |
 | `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                           |
 | Optimistic update                          | `TheQuery.patch(input, change)` shows the change at once; an `Outbox.channel` sends it and ends with `TheQuery.invalidate`; `Outbox.givenUp(channel)` runs `TheQuery.invalidate` if the send fails for good |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                          |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                       |
+| Keeping the last page while the next loads | Nothing to do: `result` keeps the last page, marked `waiting`                                                                                                                                               |
 | Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                           |
+| Retries                                    | `retry`, a schedule; `result` stays `waiting` until it gives up                                                                                                                                             |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
 
 ### A list read a page at a time
@@ -143,7 +144,8 @@ at the end.
 the end. `loadMore` does nothing while the last page is still loading or when there is no more.
 `failed` says a page failed. Going back to the list later finds its pages in the cache, by each
 page's `staleAfter`. For numbered pages where only one shows at a time, pass the page number as
-the input of an ordinary `ask` and show `latest` while the next one loads.
+the input of an ordinary `ask`: its `result` keeps the page on screen, marked `waiting`, while the
+next one loads.
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.
@@ -182,8 +184,9 @@ plain "API Cache" example does the same by hand with `AsyncData` fields in the M
 | A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
 | Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An Effect calls `TheQuery.read(input)`                                                   |
 
-Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
-holding old data" apart as states of their own, where Spar leaves you to read `status` and
-`value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
+Both tell "refreshing with old data" and "failed but still holding old data" apart: Foldkit with
+`AsyncData`'s `Refreshing` and `Stale`, Spar with Effect's `AsyncResult` (a `Success` or a
+`Failure` with `waiting`, and a `Failure` that keeps its `previousSuccess`). Foldkit's query API
+is marked experimental. Where Spar is ahead: nothing is lifted or
 folded by hand, a stale time is declared, a dependent query needs no code, and every request and
 answer is in the log.

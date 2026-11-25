@@ -65,11 +65,10 @@ const reportsRoute = Router.route("/org/:org/team/:team/member/:member/reports/*
 
 const reportRoute = Router.route("/org/:org/team/:team/member/:member/reports/:report", Report)
 
-const foundIn = (result: AsyncResult.AsyncResult<Found, never>): Found | null =>
+const foundIn = (result: AsyncResult.AsyncResult<Found>): Found | null =>
   Option.getOrNull(AsyncResult.value(result))
 
-const labelOf = (result: AsyncResult.AsyncResult<Found, never>): string =>
-  foundIn(result)?.label ?? ""
+const labelOf = (result: AsyncResult.AsyncResult<Found>): string => foundIn(result)?.label ?? ""
 
 const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
