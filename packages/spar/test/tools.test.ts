@@ -246,6 +246,8 @@ const shortcut = (code: string) =>
 
 const toggle = () => screen.getByRole("button", { name: "Devtools" })
 
+const changedText = () => screen.getByLabelText("What the event changed").textContent ?? ""
+
 const lanesButton = () => screen.getByRole("button", { name: "Lanes", hidden: true })
 
 describe("devtools an app did not ask for", () => {
@@ -271,6 +273,7 @@ describe("devtools an app did not ask for", () => {
 
         yield* Testing.click("button", "Jump to 1")
         yield* shows("0", "hi", "At 1")
+        yield* Testing.eventually(() => expect(changedText()).toMatch(/Desk \. draft.*"hi"/))
         expect(
           [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
             (item) => item.getAttribute("aria-current"),
@@ -293,6 +296,9 @@ describe("devtools an app did not ask for", () => {
         expect(traceShown()).toBe(first)
         yield* Testing.click("button", "Back to now")
         yield* shows("1", "later", "Now")
+        yield* Testing.eventually(() =>
+          expect(changedText()).toMatch(/Desk \. draft\s+"hi" → "later"/),
+        )
         yield* Testing.click("button", "Earlier")
         yield* shows("1", "later", "At 3")
         yield* Testing.click("button", "Later")

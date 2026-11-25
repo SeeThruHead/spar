@@ -71,6 +71,16 @@ const shows = (expected: string, where: string) =>
   Testing.eventually(() => expect([count(), position()]).toEqual([expected, where]))
 
 describe("devtools", () => {
+  it.live("says so when the action shown changed nothing in the store", () =>
+    Effect.gen(function* () {
+      const tally = yield* Tally
+
+      yield* Testing.mount(Screen)
+      yield* tally.commands.added({ by: 0 })
+      yield* said("Nothing in this store changed.")
+    }).pipe(Effect.provide(layer)),
+  )
+
   it.live("lists each action and steps the screen back and forward through them", () =>
     Effect.gen(function* () {
       const tally = yield* Tally
