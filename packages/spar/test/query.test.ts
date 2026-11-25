@@ -20,6 +20,7 @@ import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, State, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { resultOf } from "../src/internal/queryResult.ts"
 import { errorIn, statusIn, statusOf, valueIn, valueOf } from "./results.ts"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
@@ -1021,12 +1022,12 @@ describe("server data in a store", () => {
   it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
     expect(
       [
-        Query.resultOf(undefined, null),
-        Query.resultOf(heldEntry("loading", null, null), null),
-        Query.resultOf(heldEntry("loading", null, null), "kept"),
-        Query.resultOf(heldEntry("loaded", "tea", null), null),
-        Query.resultOf(heldEntry("failed", null, "busy"), null),
-        Query.resultOf(heldEntry("failed", "tea", "busy"), null),
+        resultOf(undefined, null),
+        resultOf(heldEntry("loading", null, null), null),
+        resultOf(heldEntry("loading", null, null), "kept"),
+        resultOf(heldEntry("loaded", "tea", null), null),
+        resultOf(heldEntry("failed", null, "busy"), null),
+        resultOf(heldEntry("failed", "tea", "busy"), null),
       ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
     ).toEqual([
       ["waiting", null, null],
@@ -1037,11 +1038,8 @@ describe("server data in a store", () => {
       ["failed", "tea", "busy"],
     ])
 
-    const loaded = Query.resultOf(heldEntry("loaded", "tea", null), null)
-    const neverLoaded = Query.resultOf(
-      { ...heldEntry("loading", null, null), loadedAt: null },
-      "kept",
-    )
+    const loaded = resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = resultOf({ ...heldEntry("loading", null, null), loadedAt: null }, "kept")
 
     expect([
       AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",

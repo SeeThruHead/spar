@@ -37,6 +37,7 @@ const Picker = compose(
         SubscriptionRef.set(note, describeBox(box)),
       ),
       onFocusMissing: [Handle.focus(missing), SubscriptionRef.set(note, "gave up")],
+      onFocusQuietly: Handle.focusInPlace(trigger),
     }
   }),
 )(PickerView)
@@ -61,6 +62,19 @@ describe("handles", () => {
       yield* eventually(() =>
         expect(scrolled.mock.calls).toEqual([[{ block: "nearest", inline: "nearest" }]]),
       )
+    }),
+  )
+
+  it.live("focusing in place moves focus without scrolling the page to it", () =>
+    Effect.gen(function* () {
+      yield* mount(Picker)
+
+      const trigger = yield* find("button", "Pick a colour")
+      const focused = vi.spyOn(trigger, "focus")
+
+      yield* click("Focus the picker without scrolling")
+      yield* eventually(() => expect(document.activeElement).toBe(trigger))
+      expect(focused.mock.calls).toEqual([[{ preventScroll: true }]])
     }),
   )
 

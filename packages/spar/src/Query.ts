@@ -1,5 +1,4 @@
 import {
-  Cause,
   Clock,
   Context,
   Duration,
@@ -17,8 +16,9 @@ import {
   Stream,
   Tracer,
 } from "effect"
-import { AsyncResult } from "effect/reactivity"
+import type { AsyncResult } from "effect/reactivity"
 import { sourceOf, sourced } from "./internal/inspect.ts"
+import { resultOf } from "./internal/queryResult.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
 import * as Cell from "./internal/cell.ts"
@@ -53,31 +53,6 @@ export type Input<I> = [I] extends [void] ? void : I | Reactive<I> | Reactive<Op
 export type Handle<A, E> = {
   readonly result: Reactive<AsyncResult.AsyncResult<A, E>>
   readonly refetch: Effect.Effect<void>
-}
-
-const settledOf = <A, E>(entry: Entry<A, E>, kept: A | null): AsyncResult.AsyncResult<A, E> => {
-  const timestamp = entry.loadedAt ?? 0
-  const shown = entry.value ?? kept
-  const previous = Option.map(Option.fromNullishOr(shown), (value) =>
-    AsyncResult.success<A, E>(value, { timestamp }),
-  )
-
-  if (entry.error !== null) {
-    return AsyncResult.failure(Cause.fail(entry.error), { previousSuccess: previous })
-  }
-
-  return Option.getOrElse(previous, () => AsyncResult.initial<A, E>())
-}
-
-export const resultOf = <A, E>(
-  entry: Entry<A, E> | undefined,
-  kept: A | null,
-): AsyncResult.AsyncResult<A, E> => {
-  if (entry === undefined) return AsyncResult.initial()
-
-  const settled = settledOf(entry, kept)
-
-  return entry.status === "loading" ? AsyncResult.waiting(settled) : settled
 }
 
 type Asked = { readonly key: string; readonly input: Schema.Json }

@@ -1276,7 +1276,8 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 ### Handle
 
 `Handle.make` in a component's Effect, `ref={handle}` on an element, then `Handle.focus(handle)`,
-`Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
+`Handle.focusInPlace(handle)` (focus without scrolling the page, as the router does after going
+back), `Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
 
 ### Form
 
@@ -2687,12 +2688,12 @@ describe("server data in a store", () => {
   it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
     expect(
       [
-        Query.resultOf(undefined, null),
-        Query.resultOf(heldEntry("loading", null, null), null),
-        Query.resultOf(heldEntry("loading", null, null), "kept"),
-        Query.resultOf(heldEntry("loaded", "tea", null), null),
-        Query.resultOf(heldEntry("failed", null, "busy"), null),
-        Query.resultOf(heldEntry("failed", "tea", "busy"), null),
+        resultOf(undefined, null),
+        resultOf(heldEntry("loading", null, null), null),
+        resultOf(heldEntry("loading", null, null), "kept"),
+        resultOf(heldEntry("loaded", "tea", null), null),
+        resultOf(heldEntry("failed", null, "busy"), null),
+        resultOf(heldEntry("failed", "tea", "busy"), null),
       ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
     ).toEqual([
       ["waiting", null, null],
@@ -2703,11 +2704,8 @@ describe("server data in a store", () => {
       ["failed", "tea", "busy"],
     ])
 
-    const loaded = Query.resultOf(heldEntry("loaded", "tea", null), null)
-    const neverLoaded = Query.resultOf(
-      { ...heldEntry("loading", null, null), loadedAt: null },
-      "kept",
-    )
+    const loaded = resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = resultOf({ ...heldEntry("loading", null, null), loadedAt: null }, "kept")
 
     expect([
       AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
@@ -4866,9 +4864,10 @@ import {
 import { SecureRandom } from "effect/crypto"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { resultOf } from "../src/internal/queryResult.ts"
 import { errorIn, statusIn, statusOf, valueIn, valueOf } from "./results.ts"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
@@ -5870,12 +5869,12 @@ describe("server data in a store", () => {
   it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
     expect(
       [
-        Query.resultOf(undefined, null),
-        Query.resultOf(heldEntry("loading", null, null), null),
-        Query.resultOf(heldEntry("loading", null, null), "kept"),
-        Query.resultOf(heldEntry("loaded", "tea", null), null),
-        Query.resultOf(heldEntry("failed", null, "busy"), null),
-        Query.resultOf(heldEntry("failed", "tea", "busy"), null),
+        resultOf(undefined, null),
+        resultOf(heldEntry("loading", null, null), null),
+        resultOf(heldEntry("loading", null, null), "kept"),
+        resultOf(heldEntry("loaded", "tea", null), null),
+        resultOf(heldEntry("failed", null, "busy"), null),
+        resultOf(heldEntry("failed", "tea", "busy"), null),
       ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
     ).toEqual([
       ["waiting", null, null],
@@ -5886,17 +5885,64 @@ describe("server data in a store", () => {
       ["failed", "tea", "busy"],
     ])
 
-    const loaded = Query.resultOf(heldEntry("loaded", "tea", null), null)
-    const neverLoaded = Query.resultOf(
-      { ...heldEntry("loading", null, null), loadedAt: null },
-      "kept",
-    )
+    const loaded = resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = resultOf({ ...heldEntry("loading", null, null), loadedAt: null }, "kept")
 
     expect([
       AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
       AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
     ]).toEqual([1, 0])
   })
+})
+
+class Plain extends Query.Tag<Plain>()("test/Plain", {
+  input: Schema.Int,
+  success: Schema.String,
+  failure: Schema.String,
+  load: (n: number) => Effect.succeed(String(n)),
+}) {}
+
+const malformed: ReadonlyArray<readonly [string, Schema.Json]> = [
+  ["requested", { key: "1" }],
+  ["loaded", { key: "1", request: 1, value: 7, at: 1 }],
+  ["failed", { key: "1", request: 1 }],
+  ["patched", { key: "1" }],
+  ["released", { key: "1" }],
+  ["held", {}],
+  ["dropped", { key: "1" }],
+  ["streamed", { entries: { 1: { status: "bogus" } } }],
+  ["loadedAhead", {}],
+  ["taken", {}],
+]
+
+describe("a query's commands, replayed from a log or the devtools", () => {
+  it.effect("refuse a payload their Schema does not accept, and change nothing", () =>
+    Effect.gen(function* () {
+      const inspected = yield* Ref.make<ReadonlyArray<Store.Inspected>>([])
+      const inspector = {
+        keepStates: 0,
+        register: (store: Store.Inspected) => Ref.update(inspected, (all) => [...all, store]),
+      }
+
+      yield* Effect.gen(function* () {
+        const [store] = yield* Ref.get(inspected)
+        const refused = yield* Effect.forEach(malformed, ([action, payload]) =>
+          Effect.map(
+            Effect.flip(Option.getOrThrow(Option.fromNullishOr(store)).run(action, payload)),
+            (error) => [action, error._tag],
+          ),
+        )
+
+        expect(refused).toEqual(malformed.map(([action]) => [action, "SchemaError"]))
+        expect(yield* Option.getOrThrow(Option.fromNullishOr(store)).encoded).toEqual({
+          entries: {},
+        })
+      }).pipe(
+        Effect.provide(Layer.provideMerge(Plain.live, State.layer)),
+        Effect.provideService(Store.Inspector, inspector),
+      )
+    }),
+  )
 })
 ```
 

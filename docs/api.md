@@ -202,7 +202,8 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 ## Handle
 
 `Handle.make` in a component's Effect, `ref={handle}` on an element, then `Handle.focus(handle)`,
-`Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
+`Handle.focusInPlace(handle)` (focus without scrolling the page, as the router does after going
+back), `Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
 
 ## Form
 
