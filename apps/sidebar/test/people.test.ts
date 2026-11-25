@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Ref } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
 import { State, Timeline } from "spar"
@@ -40,7 +41,7 @@ describe("people: server data in a store, used by another store's action", () =>
       const users = yield* Effect.provide(UsersQuery.ask(), built)
 
       yield* TestClock.adjust("40 millis")
-      expect(yield* users.value.get).toEqual(people)
+      expect(Option.getOrNull(AsyncResult.value(yield* users.result.get))).toEqual(people)
 
       yield* store.commands.toggled(123)
       yield* store.commands.toggled(124)

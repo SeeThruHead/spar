@@ -1,4 +1,5 @@
-import { Effect, Option, Schedule, Schema, pipe } from "effect"
+import { Cause, Effect, Option, Schedule, Schema, pipe } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Query, Reactive, Router, View, compose, withProps, withQuery, withStore } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
@@ -27,22 +28,25 @@ export class RecordQuery extends Query.Tag<RecordQuery>()("sidebar/Record", {
 
 const recordText = (
   name: string,
-  record: Started | null,
-  problem: NoRecord | ServerUnreachable | null,
-): string => {
-  if (record !== null) return `The server started this agent as ${record.key}.`
-  if (problem !== null) return problem.message
-
-  return `Asking the server about ${name}.`
-}
+  record: AsyncResult.AsyncResult<Started, NoRecord | ServerUnreachable>,
+): string =>
+  AsyncResult.match(record, {
+    onInitial: () => `Asking the server about ${name}.`,
+    onFailure: ({ cause }) =>
+      Option.match(Cause.findErrorOption(cause), {
+        onNone: () => `Asking the server about ${name}.`,
+        onSome: (problem) => problem.message,
+      }),
+    onSuccess: ({ value }) => `The server started this agent as ${value.key}.`,
+  })
 
 const withText = (props: {
   readonly name: string
   readonly record: Query.Handle<Started, NoRecord | ServerUnreachable>
 }) =>
-  Effect.map(Reactive.zip(props.record.value, props.record.error), (answer) => ({
-    text: Reactive.map(answer, ([found, problem]) => recordText(props.name, found, problem)),
-  }))
+  Effect.succeed({
+    text: Reactive.map(props.record.result, (record) => recordText(props.name, record)),
+  })
 
 const ServerRecordView = compose(
   withProps({ name: Schema.String }),
