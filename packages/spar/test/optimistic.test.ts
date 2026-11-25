@@ -3,6 +3,7 @@ import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema, Stream } from 
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import { Outbox, Query, State } from "spar"
+import { valueOf } from "./results.ts"
 
 class Warehouse extends Context.Service<
   Warehouse,
@@ -115,13 +116,13 @@ describe("a change shown at once and sent through the outbox", () => {
       const warehouse = yield* Warehouse
       const stock = yield* Stock.ask()
 
-      yield* until(stock.value.get, (value) => value === 3)
+      yield* until(valueOf(stock).get, (value) => value === 3)
       yield* restocks.restock(9)
-      yield* until(stock.value.get, (value) => value === 9)
+      yield* until(valueOf(stock).get, (value) => value === 9)
       expect([yield* Ref.get(warehouse.stock), yield* Ref.get(warehouse.asked)]).toEqual([3, 1])
 
       yield* Deferred.succeed(warehouse.open, undefined)
-      yield* until(stock.value.get, (value) => value === 10)
+      yield* until(valueOf(stock).get, (value) => value === 10)
       expect(yield* Ref.get(warehouse.asked)).toBe(2)
     }).pipe(Effect.scoped, Effect.provide(layer)),
   )
@@ -135,12 +136,12 @@ describe("a change shown at once and sent through the outbox", () => {
         const outbox = yield* Outbox.Outbox
         const stock = yield* Stock.ask()
 
-        yield* until(stock.value.get, (value) => value === 3)
+        yield* until(valueOf(stock).get, (value) => value === 3)
         yield* restocks.restock(9)
         yield* until(outbox.dead.get, (dead) => dead.length === 1)
-        yield* until(stock.value.get, (value) => value === 3)
+        yield* until(valueOf(stock).get, (value) => value === 3)
         yield* Effect.sleep("50 millis")
-        expect(yield* stock.value.get).toBe(3)
+        expect(yield* valueOf(stock).get).toBe(3)
 
         const reloaded = yield* Ref.get(warehouse.asked)
 

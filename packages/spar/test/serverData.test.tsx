@@ -1,5 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import { Context, Effect, Layer, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import {
   For,
   Props,
@@ -69,7 +70,13 @@ export const Orders = compose(
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
   <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+    {Reactive.map(props.orders.result, (result) =>
+      AsyncResult.match(result, {
+        onInitial: () => "Loading orders",
+        onFailure: () => "The orders could not be loaded",
+        onSuccess: ({ value, waiting }) => `${value.length} orders${waiting ? ", updating" : ""}`,
+      }),
+    )}
   </p>
 ))
 
@@ -121,7 +128,7 @@ describe("State and server data, as the docs show it", () => {
   it.live("a store's value passed down as a prop is the input of the child's query", () =>
     Effect.gen(function* () {
       yield* Testing.mount(Parent)
-      yield* Testing.findText("loaded: 3 orders")
+      yield* Testing.findText("3 orders")
     }).pipe(Effect.provide(layer), Effect.scoped),
   )
 

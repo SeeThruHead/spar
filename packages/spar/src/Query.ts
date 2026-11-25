@@ -62,7 +62,7 @@ const settledOf = <A, E>(entry: Entry<A, E>, kept: A | null): AsyncResult.AsyncR
     AsyncResult.success<A, E>(value, { timestamp }),
   )
 
-  if (entry.status === "failed" && entry.error !== null) {
+  if (entry.error !== null) {
     return AsyncResult.failure(Cause.fail(entry.error), { previousSuccess: previous })
   }
 
