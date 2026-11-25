@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { State as OneState, Store } from "spar"
 
 const State = Schema.Struct({ count: Schema.Finite, notes: Schema.Array(Schema.String) })
@@ -30,6 +30,18 @@ class Ledger extends Store.Tag<Ledger>()("test/Ledger", {
 const layer = Ledger.layer.pipe(Layer.provideMerge(OneState.layer))
 
 describe("Store", () => {
+  it("a log read back from text refuses an entry missing its action, payload or place", () => {
+    const read = Schema.decodeUnknownExit(Store.LogText)
+
+    expect(
+      [
+        '[{"id":"a","action":"added","payload":{"by":1},"seq":1}]',
+        '[{"id":"a"}]',
+        '[{"id":"a","action":"added","payload":{"by":1}}]',
+      ].map((text) => Exit.isSuccess(read(text))),
+    ).toEqual([true, false, false])
+  })
+
   it.effect("a command changes the state its selectors show", () =>
     Effect.gen(function* () {
       const ledger = yield* Ledger
