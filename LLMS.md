@@ -1577,7 +1577,9 @@ What the tools show, docked at the corner of the page:
 - **Everything that happened.** One log of store commands, UI state changes, route changes and
   data arriving and backend calls, in order, each with its trace id. Jump to any moment, step
   earlier and later, or go back to now; the whole app, stores and UI state together, shows that
-  moment, and stepping opens the trace of the moment stepped to.
+  moment, and stepping opens the trace of the moment stepped to. From the keyboard, with Alt and
+  Shift held: ← and → step, End goes back to now, L shows or hides the lanes, and D opens or
+  closes the panel. None of these is a key an app is likely to want.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
   page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
@@ -2683,30 +2685,14 @@ describe("server data in a store", () => {
   )
 
   it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
-    const entry = (
-      status: "loading" | "loaded" | "failed",
-      value: string | null,
-      error: string | null,
-    ) => ({
-      status,
-      value,
-      error,
-      loadedAt: 1,
-      request: 1,
-      input: null,
-      traceId: "",
-      spanId: "",
-      unusedSince: null,
-    })
-
     expect(
       [
         Query.resultOf(undefined, null),
-        Query.resultOf(entry("loading", null, null), null),
-        Query.resultOf(entry("loading", null, null), "kept"),
-        Query.resultOf(entry("loaded", "tea", null), null),
-        Query.resultOf(entry("failed", null, "busy"), null),
-        Query.resultOf(entry("failed", "tea", "busy"), null),
+        Query.resultOf(heldEntry("loading", null, null), null),
+        Query.resultOf(heldEntry("loading", null, null), "kept"),
+        Query.resultOf(heldEntry("loaded", "tea", null), null),
+        Query.resultOf(heldEntry("failed", null, "busy"), null),
+        Query.resultOf(heldEntry("failed", "tea", "busy"), null),
       ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
     ).toEqual([
       ["waiting", null, null],
@@ -5008,6 +4994,22 @@ const opened = Effect.gen(function* () {
   }
 })
 
+const heldEntry = (
+  status: "loading" | "loaded" | "failed",
+  value: string | null,
+  error: string | null,
+) => ({
+  status,
+  value,
+  error,
+  loadedAt: 1,
+  request: 1,
+  input: null,
+  traceId: "",
+  spanId: "",
+  unusedSince: null,
+})
+
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
   Effect.map(handle.result.get, (result) => [
     statusIn(result),
@@ -5851,30 +5853,14 @@ describe("server data in a store", () => {
   )
 
   it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
-    const entry = (
-      status: "loading" | "loaded" | "failed",
-      value: string | null,
-      error: string | null,
-    ) => ({
-      status,
-      value,
-      error,
-      loadedAt: 1,
-      request: 1,
-      input: null,
-      traceId: "",
-      spanId: "",
-      unusedSince: null,
-    })
-
     expect(
       [
         Query.resultOf(undefined, null),
-        Query.resultOf(entry("loading", null, null), null),
-        Query.resultOf(entry("loading", null, null), "kept"),
-        Query.resultOf(entry("loaded", "tea", null), null),
-        Query.resultOf(entry("failed", null, "busy"), null),
-        Query.resultOf(entry("failed", "tea", "busy"), null),
+        Query.resultOf(heldEntry("loading", null, null), null),
+        Query.resultOf(heldEntry("loading", null, null), "kept"),
+        Query.resultOf(heldEntry("loaded", "tea", null), null),
+        Query.resultOf(heldEntry("failed", null, "busy"), null),
+        Query.resultOf(heldEntry("failed", "tea", "busy"), null),
       ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
     ).toEqual([
       ["waiting", null, null],

@@ -241,6 +241,13 @@ describe("the lanes", () => {
   )
 })
 
+const shortcut = (code: string) =>
+  fireEvent.keyDown(document, { code, altKey: true, shiftKey: true })
+
+const toggle = () => screen.getByRole("button", { name: "Devtools" })
+
+const lanesButton = () => screen.getByRole("button", { name: "Lanes", hidden: true })
+
 describe("devtools an app did not ask for", () => {
   it.live("once installed, an app that never mentions them gets the tools and the one log", () =>
     withTools(
@@ -291,6 +298,29 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.click("button", "Later")
         yield* shows("1", "later", "Now")
         expect(screen.getByLabelText("test/Tally position").textContent).toBe("live")
+
+        fireEvent.keyDown(document, { code: "ArrowLeft" })
+        shortcut("KeyX")
+        yield* shows("1", "later", "Now")
+        shortcut("ArrowLeft")
+        yield* shows("1", "later", "At 3")
+        shortcut("ArrowRight")
+        yield* shows("1", "later", "Now")
+        shortcut("ArrowLeft")
+        shortcut("End")
+        yield* shows("1", "later", "Now")
+
+        const wasOpen = toggle().getAttribute("aria-expanded")
+        const lanesWere = lanesButton().getAttribute("aria-pressed")
+
+        shortcut("KeyD")
+        shortcut("KeyL")
+        yield* Testing.eventually(() =>
+          expect([
+            toggle().getAttribute("aria-expanded"),
+            lanesButton().getAttribute("aria-pressed"),
+          ]).toEqual([String(wasOpen !== "true"), String(lanesWere !== "true")]),
+        )
       }),
     ),
   )

@@ -802,6 +802,15 @@ export const TravelPanel = compose(
       yield* Effect.forEach(traces, (traceId) => run(onTrace(traceId)), { discard: true })
     })
 
+    yield* Events.onDocument("keydown", (event) => {
+      if (!isShortcut(event)) return []
+      if (event.code === "ArrowLeft") return [stepped(-1)]
+      if (event.code === "ArrowRight") return [stepped(1)]
+      if (event.code === "End") return [registry.travelTo(null)]
+
+      return []
+    })
+
     return {
       position: Reactive.map(registry.viewing, (viewing) =>
         viewing === null ? "Now" : `At ${viewing}`,
@@ -1288,6 +1297,11 @@ export const TracePanel = compose(
   }),
 )(TraceView)
 
+export const isShortcut = (event: {
+  readonly altKey: boolean
+  readonly shiftKey: boolean
+}): boolean => event.altKey && event.shiftKey
+
 export const Tools = compose(
   Effect.fnUntraced(function* () {
     const tracing = yield* UiState.make("tracing", Schema.String, "")
@@ -1301,8 +1315,18 @@ export const Tools = compose(
       UiState.set(detailTab, "span"),
     ]
 
+    const open = yield* UiState.make("open", Schema.Boolean, false)
+
+    yield* Events.onDocument("keydown", (event) => {
+      if (!isShortcut(event)) return []
+      if (event.code === "KeyD") return [UiState.update(open, (shown) => !shown)]
+      if (event.code === "KeyL") return [UiState.update(lanesShown, (shown) => !shown)]
+
+      return []
+    })
+
     return {
-      open: yield* UiState.make("open", Schema.Boolean, false),
+      open,
       lanesShown,
       detailTab,
       spanAbout,

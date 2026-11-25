@@ -263,7 +263,7 @@ export const TravelView = View.make(
   },
   ({ position, live, branches, onBack, onForward, onLive, onFork }) => (
     <div role="group" aria-label="Time travel" data-travel="">
-      <button onClick={onBack} title="Step to the event before">
+      <button onClick={onBack} title="Step to the event before (Alt+Shift+←)">
         Earlier
       </button>
       <output
@@ -272,10 +272,14 @@ export const TravelView = View.make(
       >
         {position}
       </output>
-      <button onClick={onForward} title="Step to the event after">
+      <button onClick={onForward} title="Step to the event after (Alt+Shift+→)">
         Later
       </button>
-      <button onClick={onLive} disabled={live} title="Leave the past and follow what happens now">
+      <button
+        onClick={onLive}
+        disabled={live}
+        title="Leave the past and follow what happens now (Alt+Shift+End)"
+      >
         Back to now
       </button>
       <button onClick={onFork} title="Start a branch from the event you are looking at">
@@ -593,7 +597,12 @@ export const ToolsView = View.make(
   }) => (
     <aside aria-label="Spar devtools" data-spar-devtools="" data-spar-above-modals="" style={dock}>
       <style>{look}</style>
-      <button aria-expanded={open} style={toggle} onClick={UiState.update(open, (shown) => !shown)}>
+      <button
+        aria-expanded={open}
+        style={toggle}
+        title="Open or close the devtools (Alt+Shift+D)"
+        onClick={UiState.update(open, (shown) => !shown)}
+      >
         Devtools
       </button>
       <div hidden={Reactive.map(open, (shown) => !shown)} data-spar-devtools-sheet="">
@@ -604,7 +613,7 @@ export const ToolsView = View.make(
             <span data-grow="" />
             <button
               aria-pressed={lanesShown}
-              title="Show or hide the lanes: one row per slot, a tick per event; drag across them to scrub"
+              title="Show or hide the lanes (Alt+Shift+L): one row per slot, a tick per event; drag across them to scrub"
               onClick={UiState.update(lanesShown, (shown) => !shown)}
             >
               Lanes

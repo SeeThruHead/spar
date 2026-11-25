@@ -420,7 +420,9 @@ What the tools show, docked at the corner of the page:
 - **Everything that happened.** One log of store commands, UI state changes, route changes and
   data arriving and backend calls, in order, each with its trace id. Jump to any moment, step
   earlier and later, or go back to now; the whole app, stores and UI state together, shows that
-  moment, and stepping opens the trace of the moment stepped to.
+  moment, and stepping opens the trace of the moment stepped to. From the keyboard, with Alt and
+  Shift held: ← and → step, End goes back to now, L shows or hides the lanes, and D opens or
+  closes the panel. None of these is a key an app is likely to want.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
   page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
