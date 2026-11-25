@@ -1,8 +1,8 @@
-import { Context, Effect, Layer, Option, Record, Schema, Struct } from "effect"
+import { Context, Effect, Fiber, Layer, Option, Record, Schema, Semaphore, Struct } from "effect"
 import type { Scope } from "effect"
 import * as Cell from "./cell.ts"
 import { UnknownAction } from "./journal.ts"
-import type { Action, Actions, Entry, Selector, Selectors } from "./journal.ts"
+import type { Action, Actions, Entry, Mode, Selector, Selectors, Task, Tasks } from "./journal.ts"
 import { sourced } from "./inspect.ts"
 import { fromCell, map, zip } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
@@ -79,24 +79,103 @@ export function action<Payload, Encoded, State>(
   }
 }
 
+type TaskOptions<Payload, Result, ResultEncoded, State, Refuses extends string> = {
+  readonly result: Schema.Codec<Result, ResultEncoded>
+  readonly run: (payload: Payload, state: State) => Effect.Effect<Result>
+  readonly finish: (state: State, result: Result) => State
+  readonly mode: Mode
+  readonly refuses?: ReadonlyArray<Refuses>
+}
+
+export function task<
+  Payload,
+  Encoded,
+  Result,
+  ResultEncoded,
+  State,
+  const Refuses extends string = never,
+>(
+  schema: Schema.Codec<Payload, Encoded>,
+  options: TaskOptions<Payload, Result, ResultEncoded, State, Refuses>,
+): Typed<State, Task<State, Payload, Refuses>>
+export function task<
+  Payload,
+  Encoded,
+  Result,
+  ResultEncoded,
+  State,
+  const Refuses extends string = never,
+>(
+  schema: Schema.Codec<Payload, Encoded>,
+  options: TaskOptions<Payload, Result, ResultEncoded, State, Refuses>,
+): Task<State, Payload, Refuses> | SPAR_REDUCER_STATE_UNTYPED {
+  const json = Schema.toCodecJson(schema)
+  const decode = Schema.decodeUnknownEffect(json)
+  const results = Schema.toCodecJson(options.result)
+  const encodeResult = Schema.encodeEffect(results)
+  const decodeResult = Schema.decodeUnknownEffect(results)
+
+  return {
+    encode: Schema.encodeUnknownEffect(json),
+    decode,
+    work: (payload, state) =>
+      Effect.orDie(
+        Effect.flatMap(
+          Effect.flatMap(decode(payload), (decoded) => options.run(decoded, state)),
+          encodeResult,
+        ),
+      ),
+    finished: (result) =>
+      Effect.map(
+        decodeResult(result),
+        (decoded) => (state: State) => options.finish(state, decoded),
+      ),
+    mode: options.mode,
+    refuses: options.refuses ?? [],
+  }
+}
+
 export const selector = <A, State>(
   schema: Schema.Codec<A, unknown>,
   select: (state: State) => NoInfer<A>,
 ): Selector<State, A> => ({ schema, select })
 
-export type Definition<State, A extends Actions<State>, S extends Selectors<State>> = {
+type NoTasks = Readonly<Record<string, never>>
+
+type Refusable<A, T> = {
+  readonly [Name in keyof T]: T[Name] & {
+    readonly refuses: ReadonlyArray<(keyof A | keyof T) & string>
+  }
+}
+
+export type Definition<
+  State,
+  A extends Actions<State>,
+  S extends Selectors<State>,
+  T extends Tasks<State> = NoTasks,
+> = {
   readonly state: Schema.Codec<State, unknown>
   readonly initialState: State
   readonly actions: A
   readonly selectors: S
+  readonly tasks?: T & Refusable<A, T>
 }
 
-export type Shape<State, A extends Actions<State>, S extends Selectors<State>> = {
+export type Shape<
+  State,
+  A extends Actions<State>,
+  S extends Selectors<State>,
+  T extends Tasks<State> = NoTasks,
+> = {
   readonly state: Reactive<State>
   readonly select: { readonly [Name in keyof S]: Struct.Apply<ToReactive<State>, S[Name]> }
   readonly commands: {
     readonly [Name in keyof A & string]: (payload: PayloadOf<A[Name]>) => Effect.Effect<void>
   }
+  readonly tasks: {
+    readonly [Name in keyof T & string]: (payload: PayloadOf<T[Name]>) => Effect.Effect<void>
+  }
+  readonly running: { readonly [Name in keyof T & string]: Reactive<boolean> }
 }
 
 type Borrowed<State> = {
@@ -118,17 +197,55 @@ const seededFrom = <State>(
     () => otherwise,
   )
 
+const finishedName = (name: string): string => `${name} finished`
+
+const moved = (count: Cell.Cell<number>, by: 1 | -1): Effect.Effect<void> =>
+  Effect.sync(() => count.write(count.read() + by))
+
+const tasksOf = <T extends object>(given: T | undefined): T => given ?? Object.create(null)
+
+type Starter = (work: Effect.Effect<void>) => Effect.Effect<void>
+
+const forked = (scope: Scope.Scope, work: Effect.Effect<void>) =>
+  Effect.forkIn(work, scope, { startImmediately: true })
+
+const switched = (scope: Scope.Scope): Starter => {
+  const current = Cell.make<Option.Option<Fiber.Fiber<void>>>(Option.none())
+
+  return (work) =>
+    Effect.flatMap(forked(scope, work), (fiber) => {
+      const previous = current.read()
+      current.write(Option.some(fiber))
+
+      return Effect.forEach(Option.toArray(previous), Fiber.interrupt, { discard: true })
+    })
+}
+
+const queued = (scope: Scope.Scope): Starter => {
+  const turn = Semaphore.makeUnsafe(1)
+
+  return (work) => Effect.asVoid(forked(scope, Semaphore.withPermit(turn, work)))
+}
+
+const runnerFor = (mode: Mode, scope: Scope.Scope): Starter => {
+  if (mode === "switch") return switched(scope)
+  if (mode === "queue") return queued(scope)
+
+  return (work) => Effect.asVoid(forked(scope, work))
+}
+
 export const made = Effect.fnUntraced(function* <
   State,
   A extends Actions<State>,
   S extends Selectors<State>,
+  T extends Tasks<State>,
   E,
   R,
 >(
   key: string,
-  definition: Definition<State, A, S>,
+  definition: Definition<State, A, S, T>,
   start: Effect.Effect<State, E, R>,
-): Effect.fn.Return<Shape<State, A, S>, E, R | Scope.Scope> {
+): Effect.fn.Return<Shape<State, A, S, T>, E, R | Scope.Scope> {
   const state = yield* State.current
   const seed = yield* Seed
   const started = yield* start
@@ -178,23 +295,76 @@ export const made = Effect.fnUntraced(function* <
     Effect.flatMap(Effect.orDie(handled.reducer(payload)), (reduce) =>
       applied(name, reduce, payload),
     )
-  const commands = Record.map(named, (handled, name) => {
-    const options = {
+  const jobs: Readonly<Record<keyof T & string, Task<State, unknown>>> = tasksOf(definition.tasks)
+  const scope = yield* Effect.scope
+  const held = Record.map(jobs, (job) => ({
+    job,
+    begin: runnerFor(job.mode, scope),
+    count: Cell.make(0),
+  }))
+  const running = Record.map(held, ({ count }) => map(fromCell(count), (busy) => busy > 0))
+  const busyWith = (name: string) =>
+    Record.toEntries(held)
+      .filter(([, { job, count }]) => job.refuses.includes(name) && count.read() > 0)
+      .map(([job]) => job)
+  const refusing = (name: string, go: Effect.Effect<void>) =>
+    Effect.suspend(() => {
+      const busy = busyWith(name)
+
+      return busy.length === 0
+        ? go
+        : Effect.provideService(
+            Timeline.note("refused", `${key}/${name}`, () => ({ while: busy })),
+            Timeline.Recorder,
+            recorder,
+          )
+    })
+  const traced = (name: string, effect: Effect.Effect<void>) =>
+    Effect.withSpan(effect, `${key}/${name}`, {
       captureStackTrace: false,
       attributes: { "spar.store": key, "spar.action": name },
-    }
-
-    return (input: unknown) =>
-      Effect.suspend(() =>
-        Effect.withSpan(
+    })
+  const commands = Record.map(
+    named,
+    (handled, name) => (input: unknown) =>
+      traced(
+        name,
+        refusing(
+          name,
           Effect.flatMap(Effect.orDie(handled.encode(input)), (payload) =>
             run(name, handled, payload),
           ),
-          `${key}/${name}`,
-          options,
         ),
-      )
-  })
+      ),
+  )
+  const worked = (name: string, job: Task<State, unknown>, payload: Schema.Json) =>
+    Effect.flatMap(slot.value.get, (now) =>
+      Effect.flatMap(job.work(payload, now), (result) =>
+        Effect.flatMap(Effect.orDie(job.finished(result)), (reduce) =>
+          applied(finishedName(name), reduce, result),
+        ),
+      ),
+    )
+  const tasks = Record.map(
+    held,
+    ({ job, begin, count }, name) =>
+      (input: unknown) =>
+        traced(
+          name,
+          refusing(
+            name,
+            Effect.flatMap(Effect.orDie(job.encode(input)), (payload) =>
+              Effect.andThen(
+                Effect.andThen(
+                  moved(count, 1),
+                  applied(name, (now) => now, payload),
+                ),
+                begin(Effect.ensuring(worked(name, job, payload), moved(count, -1))),
+              ),
+            ),
+          ),
+        ),
+  )
   const nameOf = new Map(
     Record.toEntries(definition.selectors).map(([name, chosen]) => [chosen, name] as const),
   )
@@ -213,9 +383,18 @@ export const made = Effect.fnUntraced(function* <
 
   tree.keepAtLeast(inspector.keepStates)
   const encodeState = Schema.encodeEffect(Schema.toCodecJson(definition.state))
+  type Reducing = { readonly reducer: Action<State, unknown>["reducer"] }
+  const unchanged: Reducing = { reducer: () => Effect.succeed((now: State) => now) }
+  const logged: Readonly<Record<string, Reducing>> = {
+    ...named,
+    ...Record.map(jobs, () => unchanged),
+    ...Object.fromEntries(
+      Record.toEntries(jobs).map(([name, job]) => [finishedName(name), { reducer: job.finished }]),
+    ),
+  }
   const handlerOf = (name: string) =>
     Effect.mapError(
-      Effect.fromNullishOr(Record.get(named, name).pipe(Option.getOrUndefined)),
+      Effect.fromNullishOr(Record.get(logged, name).pipe(Option.getOrUndefined)),
       () => new UnknownAction({ action: name }),
     )
   const live = map(state.log, (written) =>
@@ -290,7 +469,7 @@ export const made = Effect.fnUntraced(function* <
       ),
   })
 
-  return { state: slot.value, select, commands }
+  return { state: slot.value, select, commands, tasks, running }
 })
 
 export const Tag =
@@ -300,11 +479,12 @@ export const Tag =
     State,
     const A extends Actions<State>,
     const S extends Selectors<State>,
+    const T extends Tasks<State> = NoTasks,
   >(
     key: Key,
-    definition: Definition<State, A, S>,
+    definition: Definition<State, A, S, T>,
   ) => {
-    const service = Context.Service<Self, Shape<State, A, S>>()(key)
+    const service = Context.Service<Self, Shape<State, A, S, T>>()(key)
 
     return class extends service {
       static readonly definition = definition

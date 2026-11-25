@@ -1,4 +1,4 @@
-import { Duration, Effect, FiberHandle, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Reactive, UiState, compose, withKey, withStore } from "spar"
 import { ResetCounterStore } from "./ResetCounterStore.ts"
 
@@ -16,32 +16,16 @@ const withDelay = Effect.fnUntraced(function* () {
   }
 })
 
-const withReset = Effect.fnUntraced(function* () {
-  const store = yield* ResetCounterStore
-  const running = yield* FiberHandle.make()
-  const resetAfterDelay = Effect.gen(function* () {
-    const seconds = yield* store.select.resetDuration.get
-
-    yield* store.commands.resetClicked()
-    yield* Effect.sleep(Duration.seconds(seconds))
-    yield* store.commands.resetCompleted()
-  })
-
-  return {
-    onReset: Effect.asVoid(FiberHandle.run(running, resetAfterDelay, { onlyIfMissing: true })),
-  }
-})
-
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
     count: store.select.count,
-    status: Reactive.map(store.select.resetting, (resetting) =>
+    status: Reactive.map(store.running.reset, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
     onIncrement: store.commands.incremented(),
+    onReset: store.tasks.reset(),
   })),
   withDelay,
-  withReset,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -68,8 +52,8 @@ const ResetCounterPanel = compose(
       />
     </label>
     <p class="hint">
-      The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect,
-      run by a FiberHandle.
+      The + key adds 1 too. While the reset runs, the store refuses Add 1 and a second reset: the
+      reset is one task of the store, and it names what it refuses.
     </p>
   </section>
 ))

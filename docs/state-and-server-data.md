@@ -24,29 +24,39 @@ needs it.
 
 ## What takes time is an Effect
 
-A store is a Schema, pure actions and selectors over its part of the one state. It accepts every
-command at any time; there are no guards, phases or refusals. Work that takes time is a plain
-Effect on a service, and Effect's own tools decide what happens when events interleave.
+A store is a Schema, pure actions and selectors over its part of the one state. Work that takes
+time is a task of the store: an Effect that runs in the store, then changes the state once, when
+it finishes. A task says what happens when it is started again, and which commands the store
+refuses while it runs.
 
-A reset that takes two seconds is three steps: start, wait, finish. Written as one Effect and run
-by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothing, from a button,
-a key or an agent alike:
+The counter's reset waits two seconds, then sets the count to 0. While it runs, Add 1 and a second
+reset are refused, from a button, a key or an agent alike:
 
-<<< apps/site/src/StoreDemo.ts#withReset
+<<< apps/sidebar/src/ResetCounterStore.ts#ResetCounterStore
 
-The same tools cover the other cases:
+What this rules out:
 
-| What should happen to a repeat | How it is written                                                   |
-| ------------------------------ | ------------------------------------------------------------------- |
-| Ignored while the first runs   | `FiberHandle.run(handle, effect, { onlyIfMissing: true })`          |
-| Replaces the first             | `FiberHandle.run(handle, effect)`, which interrupts the earlier run |
-| Waits its turn                 | A `Semaphore` with one permit around the effect                     |
-| One per key                    | A `FiberMap` keyed by what the work is about                        |
-| Survives a reload and retries  | An `Outbox.channel`, which keeps it on the device until it is sent  |
+- **No half-finished reset.** The reset is one task, not a start command and a finish command, so
+  nothing can interleave between two steps, and nobody can send the finish early: there is no
+  finish command to send.
+- **No flag to forget.** `store.running.reset` is true while the task runs. It is worked out from
+  the task, not stored in the state, so it cannot disagree with what is running.
+- **No check to repeat.** What the reset refuses is written once, on the task. An action does not
+  check anything, so a new action cannot forget to.
 
-Every command is in the log and the trace with what it carried, so the order things happened in
-is never a guess. The counter in the showcase, `apps/sidebar/src/ResetCounter.tsx`, keeps its
-buttons enabled and its + key working; its reset is the Effect above.
+A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
+task it met. The task's start and its finish are in the log with what they carried, so a log
+replays to the same state.
+
+| `mode`         | What happens when it is started again while it runs                    |
+| -------------- | ---------------------------------------------------------------------- |
+| `"switch"`     | The new run replaces the running one, which is interrupted             |
+| `"queue"`      | The new run waits for the one before it                                |
+| `"concurrent"` | Both run                                                               |
+| any mode       | List the task in its own `refuses` and a second start is refused       |
+
+Work that must survive a reload and be retried, such as a message to the server, goes through an
+`Outbox.channel` instead, which keeps it on the device until it is sent.
 
 ## Server data lives in a store
 

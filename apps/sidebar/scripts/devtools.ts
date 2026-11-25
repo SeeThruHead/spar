@@ -152,12 +152,16 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await counter.getByRole("button", { name: "Reset after a delay" }).click()
   await counter.getByRole("button", { name: "Reset after a delay" }).click()
   await page.keyboard.press("+")
-  await counter.getByLabel("Count", { exact: true }).filter({ hasText: "3" }).waitFor()
+  await log.locator("ol li[data-kind=refused]").nth(1).waitFor()
 
   const duringReset = (await counter.getByLabel("Count", { exact: true }).textContent()) ?? ""
-  const resetsStarted = await log.locator("ol li", { hasText: "resetClicked" }).count()
+  const resetRows = log.locator("ol li[data-kind=command]", {
+    has: page.locator("code", { hasText: /\/reset$/ }),
+  })
+  const resetsStarted = await resetRows.count()
+  const refusals = await log.locator("ol li[data-kind=refused]").count()
 
-  await log.locator("ol li", { hasText: "resetClicked" }).first().scrollIntoViewIfNeeded()
+  await resetRows.first().scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${root}artifacts/devtools-reset.png` })
   await counter
     .getByLabel("Counter status")
@@ -202,10 +206,13 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
     ...(["requested", "loaded"].every((word) => loadedBy.some((line) => line.includes(word)))
       ? []
       : [`the users query was logged as: ${loadedBy.join(" | ")}`]),
-    ...(duringReset === "3" ? [] : [`during the reset the count was "${duringReset}"`]),
+    ...(duringReset === "2" ? [] : [`during the reset the count was "${duringReset}"`]),
     ...(resetsStarted === 1
       ? []
-      : [`a second reset was not ignored: ${resetsStarted} resets started`]),
+      : [`a second reset was not refused: ${resetsStarted} resets started`]),
+    ...(refusals === 2
+      ? []
+      : [`the second reset and the + key should be refused, ${refusals} refusals were logged`]),
     ...(afterReset === "0" ? [] : [`after the reset the count was "${afterReset}"`]),
     ...(rewoundNotes === "1 note"
       ? []
