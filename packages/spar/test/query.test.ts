@@ -15,6 +15,7 @@ import {
   Tracer,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
+import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
@@ -1035,5 +1036,16 @@ describe("server data in a store", () => {
       ["failed", null, "busy"],
       ["failed", "tea", "busy"],
     ])
+
+    const loaded = Query.resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = Query.resultOf(
+      { ...heldEntry("loading", null, null), loadedAt: null },
+      "kept",
+    )
+
+    expect([
+      AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
+      AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
+    ]).toEqual([1, 0])
   })
 })
