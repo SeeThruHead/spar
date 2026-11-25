@@ -60,4 +60,7 @@ Mount the real component and provide test layers for its services.
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
 short: a store command, a UI state change, a navigation. Put slow work in a task of the store
 (`Store.task`), whose `mode` and `refuses` say what a repeat or another command does while it
-runs, or on an outbox channel for what must reach the server. A form's submit already ignores a second submit while the first is running.
+runs, or on an outbox channel for what must reach the server. A click or a submit whose handler
+is still running ignores a second press of the same element, so a double click on Export or Pay
+runs the work once. A handler that finishes at once, such as a store command, counts every click,
+and typing is never dropped.

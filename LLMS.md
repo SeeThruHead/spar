@@ -2702,6 +2702,17 @@ describe("server data in a store", () => {
       ["failed", null, "busy"],
       ["failed", "tea", "busy"],
     ])
+
+    const loaded = Query.resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = Query.resultOf(
+      { ...heldEntry("loading", null, null), loadedAt: null },
+      "kept",
+    )
+
+    expect([
+      AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
+      AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
+    ]).toEqual([1, 0])
   })
 })
 ```
@@ -3308,7 +3319,10 @@ describe("rendering", () => {
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
 short: a store command, a UI state change, a navigation. Put slow work in a task of the store
 (`Store.task`), whose `mode` and `refuses` say what a repeat or another command does while it
-runs, or on an outbox channel for what must reach the server. A form's submit already ignores a second submit while the first is running.
+runs, or on an outbox channel for what must reach the server. A click or a submit whose handler
+is still running ignores a second press of the same element, so a double click on Export or Pay
+runs the work once. A handler that finishes at once, such as a store command, counts every click,
+and typing is never dropped.
 
 
 # Coming from React
@@ -4850,6 +4864,7 @@ import {
   Tracer,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
+import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
@@ -5870,6 +5885,17 @@ describe("server data in a store", () => {
       ["failed", null, "busy"],
       ["failed", "tea", "busy"],
     ])
+
+    const loaded = Query.resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = Query.resultOf(
+      { ...heldEntry("loading", null, null), loadedAt: null },
+      "kept",
+    )
+
+    expect([
+      AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
+      AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
+    ]).toEqual([1, 0])
   })
 })
 ```
