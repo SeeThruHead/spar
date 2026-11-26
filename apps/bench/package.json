@@ -17,6 +17,7 @@
     "one-row-dev": "bun scripts/one-row-dev.ts",
     "cpu": "vite build --config vite.spar.config.ts --minify false --outDir ../../dist-readable/spar && bun scripts/cpu.ts",
     "startup": "bun run build && bun scripts/startup-profile.ts",
+    "profile": "bun run build && vite build --config vite.spar.config.ts --minify false --sourcemap --outDir ../../dist-readable/spar && vite build --config vite.effect-ui.config.ts --minify false --sourcemap --outDir ../../dist-readable/effect-ui && vite build --config vite.solid.config.ts --minify false --sourcemap --outDir ../../dist-readable/solid && bun scripts/profile.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
