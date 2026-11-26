@@ -103,6 +103,12 @@ const facts = (table: string): ReadonlyArray<string> =>
       .join(" "),
   )
 
+const outlineBox = (): ReadonlyArray<string> => {
+  const { left, top, width, height } = screen.getByLabelText("Highlighted component").style
+
+  return [left, top, width, height]
+}
+
 const asked = Cell.make<ReadonlyArray<string>>([])
 
 const answered = (address: string): Response => {
@@ -111,7 +117,7 @@ const answered = (address: string): Response => {
 
   asked.write([
     ...asked.read(),
-    address.slice(address.indexOf("/@spar"), address.lastIndexOf("/") + 1),
+    `${address.slice(address.indexOf("/@spar"), address.lastIndexOf("/") + 1)}${address.slice(address.lastIndexOf("?"))}`,
   ])
 
   return first
@@ -184,6 +190,33 @@ const listed = (): ReadonlyArray<string | null | undefined> =>
 const rowsScrubbed = (): number =>
   document.querySelectorAll('[data-moment][data-scrubbed="yes"]').length
 
+const eventFacts = (): ReadonlyArray<string | number | null | undefined> => {
+  const cells = [...screen.getByLabelText("About the event").querySelectorAll("td")].map(
+    (cell) => cell.textContent ?? "",
+  )
+
+  return [
+    screen.getByLabelText("Event").querySelector("h2")?.textContent,
+    cells[0],
+    cells[1]?.length,
+    cells[2]?.length,
+    screen.getByLabelText("What the event carried").textContent,
+  ]
+}
+
+const branchesListed = (): ReadonlyArray<string> =>
+  [...screen.getByLabelText("Branches").querySelectorAll("button")].map((button) =>
+    [button.textContent, button.title, button.getAttribute("aria-pressed")].join(" | "),
+  )
+
+const liveness = (): string | null =>
+  screen.getByLabelText("Timeline position").getAttribute("data-live")
+
+const laneTracks = (): ReadonlyArray<string> =>
+  [...document.querySelectorAll<HTMLElement>("[data-lane-track]")].map((track) =>
+    track.style.background.slice(0, "linear-gradient".length),
+  )
+
 const lanesSurface = (): Element => {
   const found = document.querySelector("[data-lanes-surface]")
   if (found === null) throw new Error("no lanes")
@@ -217,6 +250,34 @@ describe("the lanes", () => {
         yield* Testing.click("button", "Back to now")
       }).pipe(Effect.scoped),
     ),
+  )
+
+  it.live(
+    "a fork from an earlier event is listed beside the main line, and switching goes back",
+    () =>
+      withTools(
+        Effect.gen(function* () {
+          yield* mounted
+          yield* Testing.click("button", "Devtools")
+          yield* Testing.fill("textbox", "Draft", "hi")
+          yield* Testing.click("button", "Add")
+          yield* Testing.eventually(() => expect(listed()).toHaveLength(2))
+          yield* Testing.click("button", "Jump to 1")
+          yield* Testing.click("button", "Fork from here")
+          yield* Testing.eventually(() => expect(branchesListed()).toHaveLength(2))
+          expect(branchesListed()).toEqual([
+            "Main | 2 moments | false",
+            "Fork 1 | 1 moments, forked at 1 | true",
+          ])
+          yield* Testing.click("button", "Main")
+          yield* Testing.eventually(() =>
+            expect(branchesListed()).toEqual([
+              "Main | 2 moments | true",
+              "Fork 1 | 1 moments, forked at 1 | false",
+            ]),
+          )
+        }).pipe(Effect.scoped),
+      ),
   )
 
   it.live("hide and show from the bar", () =>
@@ -271,8 +332,14 @@ describe("devtools an app did not ask for", () => {
           expect(screen.getByLabelText("Trace shown").textContent).toBe("2 spans"),
         )
 
+        expect(liveness()).toBe("yes")
+        expect(laneTracks()).toEqual(["linear-gradient", "linear-gradient"])
         yield* Testing.click("button", "Jump to 1")
         yield* shows("0", "hi", "At 1")
+        yield* Testing.eventually(() =>
+          expect(eventFacts()).toEqual(["#1 Desk . draft", "ui", 32, 16, '"hi"']),
+        )
+        expect(liveness()).toBe("no")
         yield* Testing.eventually(() => expect(changedText()).toMatch(/Desk \. draft.*"hi"/))
         expect(
           [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
@@ -313,6 +380,10 @@ describe("devtools an app did not ask for", () => {
         shortcut("ArrowRight")
         yield* shows("1", "later", "Now")
         shortcut("ArrowLeft")
+        yield* shows("1", "later", "At 3")
+        shortcut("KeyX")
+        shortcut("ArrowLeft")
+        yield* shows("1", "hi", "At 2")
         shortcut("End")
         yield* shows("1", "later", "Now")
 
@@ -327,6 +398,17 @@ describe("devtools an app did not ask for", () => {
             lanesButton().getAttribute("aria-pressed"),
           ]).toEqual([String(wasOpen !== "true"), String(lanesWere !== "true")]),
         )
+
+        fireEvent.keyDown(document, { code: "KeyD" })
+        fireEvent.keyDown(document, { code: "KeyL" })
+        shortcut("KeyX")
+        shortcut("KeyD")
+        yield* Testing.eventually(() =>
+          expect([
+            toggle().getAttribute("aria-expanded"),
+            lanesButton().getAttribute("aria-pressed"),
+          ]).toEqual([String(wasOpen === "true"), String(lanesWere !== "true")]),
+        )
       }),
     ),
   )
@@ -337,6 +419,12 @@ describe("devtools an app did not ask for", () => {
         yield* mounted
         yield* Testing.click("button", "Devtools")
         expect(screen.getByLabelText("Picked component").textContent).toBe("Nothing picked yet")
+        expect(
+          ["Where it is", "Services", "Failures it recovers from"].map(
+            (label) => screen.getByLabelText(label).textContent,
+          ),
+        ).toEqual(["", "", ""])
+        expect([facts("Props"), facts("UI state")]).toEqual([[], []])
 
         const draft = yield* Testing.find("textbox", "Draft")
         const tools = yield* Testing.find("button", "Devtools")
@@ -351,6 +439,7 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.eventually(() =>
           expect(screen.getByLabelText("Highlighted component").textContent).toBe("DeskView"),
         )
+        expect(outlineBox()).toEqual(["0px", "0px", "0px", "0px"])
         yield* Effect.sync(() => fireEvent.click(veil, { clientX: 10, clientY: 10 }))
         yield* Testing.gone("button", "Pick a component on the page")
         yield* Testing.eventually(() => expect(facts("Props")).toContain('draft ""'))
@@ -482,12 +571,18 @@ describe("devtools an app did not ask for", () => {
           ),
         )
         expect(asked.read()).toEqual([
-          "/@spar/backend/0/spans/",
-          "/@spar/backend/1/spans/",
-          "/@spar/backend/2/spans/",
+          "/@spar/backend/0/spans/?ask=1",
+          "/@spar/backend/1/spans/?ask=1",
+          "/@spar/backend/2/spans/?ask=1",
         ])
         yield* Testing.click("button", "Refresh trace")
-        yield* Testing.eventually(() => expect(asked.read()).toHaveLength(6))
+        yield* Testing.eventually(() =>
+          expect(asked.read().slice(3)).toEqual([
+            "/@spar/backend/0/spans/?ask=2",
+            "/@spar/backend/1/spans/?ask=2",
+            "/@spar/backend/2/spans/?ask=2",
+          ]),
+        )
         yield* Testing.click("button", "Backend")
         yield* Testing.eventually(() =>
           expect(spans().every((line) => line.startsWith("backend "))).toBe(true),

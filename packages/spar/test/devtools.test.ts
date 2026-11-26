@@ -70,7 +70,21 @@ const said = (expected: string) => Testing.eventually(() => expect(changed()).to
 const shows = (expected: string, where: string) =>
   Testing.eventually(() => expect([count(), position()]).toEqual([expected, where]))
 
+const toLoad = (): string => {
+  const box = screen.getByLabelText("test/Tally log to load")
+
+  return box instanceof HTMLTextAreaElement ? box.value : "not a text area"
+}
+
 describe("devtools", () => {
+  it.live("a store's panel starts with nothing exported, nothing to load and no problem", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Screen)
+      yield* Testing.eventually(() => expect(position()).toBe("live"))
+      expect([exported(), toLoad(), problem()]).toEqual(["", "", ""])
+    }).pipe(Effect.provide(layer)),
+  )
+
   it.live("says so when the action shown changed nothing in the store", () =>
     Effect.gen(function* () {
       const tally = yield* Tally
