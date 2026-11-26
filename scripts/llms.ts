@@ -101,6 +101,7 @@ const body = [
   await part("Coming from React", "docs/from-react.md"),
   await part("Coming from Foldkit", "docs/from-foldkit.md"),
   await part("Spar beside an Elm-architecture framework", "docs/beside-elm-architecture.md"),
+  await part("Spar beside Effect UI", "docs/beside-effect-ui.md"),
   await part("Spar beside Solid 2.0", "docs/beside-solid-2.md"),
   await part("Spar beside Treflex", "docs/beside-treflex.md"),
   await part("Diagnostics", "docs/diagnostics.md"),

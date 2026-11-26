@@ -4,8 +4,8 @@ Foldkit is moving under the Effect organization and its frontend is being rebuil
 primitives inside Effect. This page records, as plainly as possible, what differs between that
 architecture and Spar's. Foldkit's side is read from the installed package (0.170.0) and from the
 two apps in this repo that are written in it (`apps/bench/src/foldkit` and
-`apps/bench/src/nav-foldkit`). Nothing is known here about the rebuilt version: as of 19 Nov
-2026 there is no public code or RFC for it, in Foldkit's repo or under the Effect organization.
+`apps/bench/src/nav-foldkit`). The rebuilt version is now public as Effect UI, and has its own
+page: "Spar beside Effect UI".
 
 ## What Spar does that the Elm architecture does not, by its structure
 
@@ -49,8 +49,8 @@ and the backend (`docs/devtools-compared.md`).
   JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
-- **It will not be tied to the DOM.** The stated plan is primitives that work across rendering
-  environments. Spar draws to the DOM and to an HTML string, nothing else.
+- **It is not tied to the DOM.** Effect UI, its successor, has a terminal host on OpenTUI. Spar
+  draws to the DOM, to an HTML string and to a small terminal renderer, chosen by a Layer.
 
 ## What Spar builds that Effect already ships or is likely to
 

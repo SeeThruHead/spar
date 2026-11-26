@@ -34,6 +34,7 @@ export const groups: ReadonlyArray<Group> = [
       { slug: "from-react", title: "Coming from React" },
       { slug: "from-foldkit", title: "Coming from Foldkit" },
       { slug: "beside-elm-architecture", title: "Beside the Elm architecture" },
+      { slug: "beside-effect-ui", title: "Beside Effect UI" },
       { slug: "beside-solid-2", title: "Beside Solid 2.0" },
       { slug: "beside-treflex", title: "Beside Treflex" },
       { slug: "devtools-compared", title: "Devtools compared" },
