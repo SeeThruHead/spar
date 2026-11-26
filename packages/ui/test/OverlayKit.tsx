@@ -10,9 +10,11 @@ export const OverlayKitView = View.make(
     popover: Props.Element,
     size: Props.Element,
     colour: Props.Element,
+    fruit: Props.Element,
     chosen: Props.Reactive(Schema.String),
+    picked: Props.Reactive(Schema.String),
   },
-  ({ remove, archive, popover, size, colour, chosen }) => (
+  ({ remove, archive, popover, size, colour, fruit, chosen, picked }) => (
     <main>
       <button type="button" {...remove.trigger}>
         Delete
@@ -26,6 +28,8 @@ export const OverlayKitView = View.make(
       {size}
       {colour}
       <output aria-label="Chosen size">{chosen}</output>
+      {fruit}
+      <output aria-label="Picked fruit">{picked}</output>
     </main>
   ),
 )

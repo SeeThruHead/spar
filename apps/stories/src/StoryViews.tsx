@@ -160,6 +160,48 @@ export const PopoverStoryView = View.make(
   ),
 )
 
+export const DatePickerStoryView = View.make(
+  "DatePickerStoryView",
+  { picker: Props.Element, day: Props.Reactive(Schema.String) },
+  ({ picker, day }) => (
+    <section>
+      <h1>Date picker</h1>
+      {picker}
+      <p>
+        Picked: <output aria-label="Picked start">{day}</output>
+      </p>
+    </section>
+  ),
+)
+
+export const CalendarStoryView = View.make(
+  "CalendarStoryView",
+  { calendar: Props.Element, day: Props.Reactive(Schema.String) },
+  ({ calendar, day }) => (
+    <section>
+      <h1>Calendar</h1>
+      {calendar}
+      <p>
+        Picked: <output aria-label="Picked day">{day}</output>
+      </p>
+    </section>
+  ),
+)
+
+export const ComboboxStoryView = View.make(
+  "ComboboxStoryView",
+  { combobox: Props.Element, picked: Props.Reactive(Schema.String) },
+  ({ combobox, picked }) => (
+    <section>
+      <h1>Combobox</h1>
+      {combobox}
+      <p>
+        Picked: <output aria-label="Picked fruit">{picked}</output>
+      </p>
+    </section>
+  ),
+)
+
 export const ListboxStoryView = View.make(
   "ListboxStoryView",
   { listbox: Props.Element, chosen: Props.Reactive(Schema.String) },

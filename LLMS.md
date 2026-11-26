@@ -1796,6 +1796,18 @@ text under `TextField`, `Select` and `Checkbox`, has the role `alert`.
 - `Listbox` (`label`, `name`, `choices`, `value`, `onChange`): a select drawn by the kit, for when
   the native control will not do. Arrow keys, Home, End, typing a first letter, Enter or Space to
   choose, and a hidden input so it posts with a form. `Select` stays the native control.
+- `Combobox` (`label`, `name`, `choices`, `value`, `onChange`): a text box whose typing narrows
+  the choices shown below it. Focus stays in the box: the arrow keys mark an option (named by
+  `aria-activedescendant`), Enter or a click takes it, Escape closes the list. A hidden input
+  posts the chosen value.
+- `Calendar` (`label`, `value`, `onChange`): a month as a grid of days, weeks starting on
+  Sunday. Days are `YYYY-MM-DD` strings. One day takes Tab; the arrow keys move a day or a week,
+  Home and End go to the ends of the week, Page Up and Page Down change the month, and crossing
+  a month's edge turns the page. Enter, Space or a press picks the day. With no value it opens on
+  today, read from Effect's `Clock`. `autoFocus` puts focus on that day when it mounts.
+- `DatePicker` (`label`, `name`, `value`, `onChange`): a button naming the picked day that opens
+  a `Calendar` beside it, focused on that day. A pick closes it and gives focus back; so do
+  Escape and a press elsewhere. A hidden input posts the day.
 
 `Events.cancel(event)` is an action that stops what the browser would do with an event, for a
 handler that only sometimes takes a key over.

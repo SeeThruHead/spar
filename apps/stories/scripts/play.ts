@@ -47,6 +47,12 @@ const shows = (page: Page, label: string, text: string): Promise<void> =>
 const focusIsOn = (page: Page, name: string): Promise<unknown> =>
   page.waitForFunction((expected) => document.activeElement?.textContent?.trim() === expected, name)
 
+const dayHasFocus = (page: Page, name: string): Promise<unknown> =>
+  page.waitForFunction(
+    (expected) => document.activeElement?.getAttribute("aria-label") === expected,
+    name,
+  )
+
 const staysOnScreen = async (page: Page, role: "tooltip" | "dialog" | "listbox"): Promise<void> => {
   const box = await page.getByRole(role).boundingBox()
   const view = page.viewportSize()
@@ -197,6 +203,68 @@ const stories: ReadonlyArray<Story> = [
       await page.getByRole("combobox", { name: "Size" }).click()
       await page.getByRole("listbox", { name: "Size" }).waitFor()
       await staysOnScreen(page, "listbox")
+    },
+  },
+  {
+    path: "/combobox",
+    title: "Combobox",
+    play: async (page) => {
+      const fruit = page.getByRole("combobox", { name: "Fruit" })
+      const typed = async (text: string) => {
+        await fruit.focus()
+        await page.keyboard.press("ControlOrMeta+a")
+        await page.keyboard.type(text)
+      }
+
+      await typed("an")
+      await page.getByRole("listbox", { name: "Fruit" }).waitFor()
+      await page.keyboard.press("ArrowDown")
+      await page.getByRole("option", { name: "Mango", selected: true }).waitFor()
+      await page.keyboard.press("Enter")
+      await page.getByRole("listbox").waitFor({ state: "detached" })
+      await shows(page, "Picked fruit", "mango")
+      await typed("ap")
+      await page.getByRole("option", { name: "Apple" }).click()
+      await shows(page, "Picked fruit", "apple")
+      await typed("o")
+      await page.getByRole("listbox", { name: "Fruit" }).waitFor()
+      await staysOnScreen(page, "listbox")
+    },
+  },
+  {
+    path: "/calendar",
+    title: "Calendar",
+    play: async (page) => {
+      await page.getByRole("button", { name: "Thursday, November 26, 2026" }).focus()
+      await page.keyboard.press("ArrowRight")
+      await dayHasFocus(page, "Friday, November 27, 2026")
+      await page.keyboard.press("PageDown")
+      await page.getByRole("grid", { name: "December 2026" }).waitFor()
+      await dayHasFocus(page, "Sunday, December 27, 2026")
+      await page.keyboard.press("Enter")
+      await shows(page, "Picked day", "2026-12-27")
+      await page.getByRole("button", { name: "Previous month" }).click()
+      await page.getByRole("button", { name: "Monday, November 2, 2026" }).click()
+      await shows(page, "Picked day", "2026-11-02")
+    },
+  },
+  {
+    path: "/date-picker",
+    title: "Date picker",
+    play: async (page) => {
+      await page.getByRole("button", { name: "Start: Thursday, November 26, 2026" }).click()
+      await page.getByRole("dialog", { name: "Start" }).waitFor()
+      await dayHasFocus(page, "Thursday, November 26, 2026")
+      await staysOnScreen(page, "dialog")
+      await page.keyboard.press("ArrowDown")
+      await dayHasFocus(page, "Thursday, December 3, 2026")
+      await page.keyboard.press("Enter")
+      await page.getByRole("dialog").waitFor({ state: "detached" })
+      await shows(page, "Picked start", "2026-12-03")
+      await page.getByRole("button", { name: "Start: Thursday, December 3, 2026" }).click()
+      await page.keyboard.press("Escape")
+      await page.getByRole("dialog").waitFor({ state: "detached" })
+      await shows(page, "Picked start", "2026-12-03")
     },
   },
 ]

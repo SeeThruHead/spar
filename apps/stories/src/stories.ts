@@ -1,7 +1,22 @@
 import { Effect, Schema, pipe } from "effect"
 import { Form, Reactive, Store, UiState, View, compose } from "spar"
-import { Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
+  Calendar,
+  Combobox,
+  DatePicker,
+  Dialog,
+  Listbox,
+  Menu,
+  Popover,
+  Select,
+  Tabs,
+  Toast,
+  Tooltip,
+} from "@spar/ui"
+import {
+  CalendarStoryView,
+  ComboboxStoryView,
+  DatePickerStoryView,
   ControlsView,
   DialogStoryView,
   ListboxStoryView,
@@ -157,6 +172,60 @@ export const PopoverStory = compose(
     }
   }),
 )(PopoverStoryView)
+
+export const DatePickerStory = compose(
+  Effect.fnUntraced(function* () {
+    const day = yield* UiState.make("start", Schema.String, "2026-11-26")
+
+    return {
+      day,
+      picker: yield* View.child(DatePicker, {
+        label: "Start",
+        name: "start",
+        value: day,
+        onChange: (picked) => UiState.set(day, picked),
+      }),
+    }
+  }),
+)(DatePickerStoryView)
+
+export const CalendarStory = compose(
+  Effect.fnUntraced(function* () {
+    const day = yield* UiState.make("day", Schema.String, "2026-11-26")
+
+    return {
+      day,
+      calendar: yield* View.child(Calendar, {
+        label: "Due date",
+        value: day,
+        autoFocus: false,
+        onChange: (picked) => UiState.set(day, picked),
+      }),
+    }
+  }),
+)(CalendarStoryView)
+
+export const ComboboxStory = compose(
+  Effect.fnUntraced(function* () {
+    const fruit = yield* UiState.make("fruit", Schema.String, "")
+
+    return {
+      picked: fruit,
+      combobox: yield* View.child(Combobox, {
+        label: "Fruit",
+        name: "fruit",
+        choices: [
+          { value: "apple", label: "Apple" },
+          { value: "banana", label: "Banana" },
+          { value: "mango", label: "Mango" },
+          { value: "orange", label: "Orange" },
+        ],
+        value: fruit,
+        onChange: (value) => UiState.set(fruit, value),
+      }),
+    }
+  }),
+)(ComboboxStoryView)
 
 export const ListboxStory = compose(
   Effect.fnUntraced(function* () {
