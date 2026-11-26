@@ -32,6 +32,11 @@ export const atRun = {
     what: "A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.",
     fix: "A text input's value can only be UI state or a form field (anything else is a type error), so this comes from writing that UI state from something slow. Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.",
   },
+  SPAR_REFUSALS_PILED_UP: {
+    kind: "run",
+    what: "A command was refused three times while one task of its store ran. Something kept asking for what the store would not do, usually a button that still looks pressable.",
+    fix: 'Show that the work is under way and stop offering the command while it runs: read store.running.<task> to disable or hide what sends it. If the command should work while the task runs, take it out of the task\'s refuses. If pressing again should start over, give the task mode: "switch" and leave it out of its own refuses.',
+  },
   SPAR_DUPLICATE_KEY: {
     kind: "run",
     what: "A keyed list has rows that share a key.",

@@ -223,8 +223,9 @@ with async work. The short version:
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
-- Spar reports two timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
-  `SPAR_TYPING_REPLACED`). After a
+- Spar reports three timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
+  `SPAR_TYPING_REPLACED`, and `SPAR_REFUSALS_PILED_UP` when a command is refused three times
+  while one task runs: disable what sends it with `store.running.<task>`). After a
   change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
 - A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
   yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.
@@ -1860,7 +1861,9 @@ the work a task and read `store.running.<task>` instead.
 
 A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
 task it met. The task's start and its finish are in the log with what they carried, so a log
-replays to the same state.
+replays to the same state. When one run of a task refuses commands three times, Spar also notes
+`SPAR_REFUSALS_PILED_UP` against that task (once per run): the screen kept offering something
+the store would not do, so disable it while `store.running.<task>` is true.
 
 | `mode`         | What happens when it is started again while it runs              |
 | -------------- | ---------------------------------------------------------------- |
@@ -4050,6 +4053,14 @@ Reported by: The running app: an error's message, or an entry in the log.
 A field the user typed in was given a different value by something that began before their last keystroke, so what they typed since was replaced.
 
 Fix: A text input's value can only be UI state or a form field (anything else is a type error), so this comes from writing that UI state from something slow. Do not copy a saved or loaded value back into a field that is being edited. Keep what is typed as its own state (a form field or UI state) and keep the server's copy beside it: show the field as saved when the answer matches what was sent, and never write the answer into the draft. If the answer must win, apply it only when the field's text is still what was sent.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_REFUSALS_PILED_UP
+
+A command was refused three times while one task of its store ran. Something kept asking for what the store would not do, usually a button that still looks pressable.
+
+Fix: Show that the work is under way and stop offering the command while it runs: read store.running.<task> to disable or hide what sends it. If the command should work while the task runs, take it out of the task's refuses. If pressing again should start over, give the task mode: "switch" and leave it out of its own refuses.
 
 Reported by: The running app: an error's message, or an entry in the log.
 

@@ -136,6 +136,14 @@ Fix: A text input's value can only be UI state or a form field (anything else is
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_REFUSALS_PILED_UP
+
+A command was refused three times while one task of its store ran. Something kept asking for what the store would not do, usually a button that still looks pressable.
+
+Fix: Show that the work is under way and stop offering the command while it runs: read store.running.<task> to disable or hide what sends it. If the command should work while the task runs, take it out of the task's refuses. If pressing again should start over, give the task mode: "switch" and leave it out of its own refuses.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_DUPLICATE_KEY
 
 A keyed list has rows that share a key.

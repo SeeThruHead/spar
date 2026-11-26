@@ -67,6 +67,22 @@ class Together extends Store.Tag<Together>()("test/Together", {
   tasks: { add: added("concurrent") },
 }) {}
 
+class Overlapping extends Store.Tag<Overlapping>()("test/Overlapping", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: {
+    add: Store.task(Schema.Finite, {
+      result: Schema.Finite,
+      run: (by: number) => Effect.as(Effect.sleep(Duration.seconds(1)), by),
+      finish: (state: State, by: number): State => ({ ...state, count: state.count + by }),
+      mode: "concurrent",
+      refuses: ["incremented"],
+    }),
+  },
+}) {}
+
 class Pricing extends Context.Service<
   Pricing,
   { readonly priceOf: (count: number) => Effect.Effect<number> }
@@ -153,6 +169,81 @@ describe("a store's task", () => {
           ])
         }).pipe(Effect.provide(Held.layer.pipe(Layer.provideMerge(OneState.layer)))),
       ),
+  )
+
+  it.effect(
+    "notices the third refusal while one run holds, once, and counts again from the next run",
+    () =>
+      watched((notes) =>
+        Effect.gen(function* () {
+          const counter = yield* Held
+          const noticedSoFar = Effect.map(Ref.get(notes), (all) =>
+            all
+              .filter((noted) => noted.kind === "noticed")
+              .map((noted) => ({ name: noted.name, detail: noted.detail })),
+          )
+          const refusedTimes = (times: number) =>
+            Effect.forEach(Array.from({ length: times }), () => counter.commands.incremented(), {
+              discard: true,
+            })
+
+          yield* counter.tasks.reset()
+          yield* refusedTimes(2)
+
+          expect(yield* noticedSoFar).toEqual([])
+
+          yield* counter.tasks.reset()
+          yield* refusedTimes(2)
+          yield* TestClock.adjust(Duration.seconds(2))
+          yield* counter.tasks.reset()
+          yield* refusedTimes(2)
+
+          const first = {
+            name: "test/Held/reset",
+            detail: {
+              code: "SPAR_REFUSALS_PILED_UP",
+              said: "reset was refused 3 times while reset ran.",
+            },
+          }
+
+          expect(yield* noticedSoFar).toMatchObject([first])
+
+          yield* refusedTimes(1)
+
+          expect(yield* noticedSoFar).toMatchObject([
+            first,
+            {
+              name: "test/Held/reset",
+              detail: {
+                code: "SPAR_REFUSALS_PILED_UP",
+                said: "incremented was refused 3 times while reset ran.",
+              },
+            },
+          ])
+        }).pipe(Effect.provide(Held.layer.pipe(Layer.provideMerge(OneState.layer)))),
+      ),
+  )
+
+  it.effect("keeps counting refusals while overlapping runs hold, until the last one ends", () =>
+    watched((notes) =>
+      Effect.gen(function* () {
+        const adder = yield* Overlapping
+        const refusedOnce = adder.commands.incremented()
+
+        yield* adder.tasks.add(1)
+        yield* refusedOnce
+        yield* refusedOnce
+        yield* TestClock.adjust(Duration.millis(500))
+        yield* adder.tasks.add(1)
+        yield* TestClock.adjust(Duration.millis(500))
+
+        expect(yield* adder.select.count.get).toBe(1)
+
+        yield* refusedOnce
+
+        expect(yield* kinds(notes, "noticed")).toEqual(["test/Overlapping/add"])
+      }).pipe(Effect.provide(Overlapping.layer.pipe(Layer.provideMerge(OneState.layer)))),
+    ),
   )
 
   it.effect("in switch mode a second start replaces the first, which never finishes", () =>

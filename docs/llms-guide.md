@@ -223,8 +223,9 @@ with async work. The short version:
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
-- Spar reports two timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
-  `SPAR_TYPING_REPLACED`). After a
+- Spar reports three timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
+  `SPAR_TYPING_REPLACED`, and `SPAR_REFUSALS_PILED_UP` when a command is refused three times
+  while one task runs: disable what sends it with `store.running.<task>`). After a
   change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
 - A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
   yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.

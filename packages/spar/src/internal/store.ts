@@ -4,6 +4,7 @@ import * as Cell from "./cell.ts"
 import { UnknownAction } from "./journal.ts"
 import type { Action, Actions, Entry, Mode, Selector, Selectors, Task, Tasks } from "./journal.ts"
 import { sourced } from "./inspect.ts"
+import { noticed } from "./notice.ts"
 import { fromCell, map, zip } from "./reactive.ts"
 import type { Reactive } from "./reactive.ts"
 import { Seed } from "./server.ts"
@@ -204,8 +205,18 @@ const seededFrom = <State>(
 
 const finishedName = (name: string): string => `${name} finished`
 
-const moved = (count: Cell.Cell<number>, by: 1 | -1): Effect.Effect<void> =>
-  Effect.sync(() => count.write(count.read() + by))
+const piledUpAt = 3
+
+type Holding = { readonly count: Cell.Cell<number>; readonly refused: Cell.Cell<number> }
+
+const runBegun = ({ count }: Holding): Effect.Effect<void> =>
+  Effect.sync(() => count.write(count.read() + 1))
+
+const runEnded = ({ count, refused }: Holding): Effect.Effect<void> =>
+  Effect.sync(() => {
+    count.write(count.read() - 1)
+    if (count.read() === 0) refused.write(0)
+  })
 
 const tasksOf = <T extends object>(given: T | undefined): T => given ?? Object.create(null)
 
@@ -311,23 +322,38 @@ export const made = Effect.fnUntraced(function* <
     job,
     begin: runnerFor(job.mode, scope),
     count: Cell.make(0),
+    refused: Cell.make(0),
   }))
   const running = Record.map(held, ({ count }) => map(fromCell(count), (busy) => busy > 0))
   const busyWith = (name: string) =>
-    Record.toEntries(held)
-      .filter(([, { job, count }]) => job.refuses.includes(name) && count.read() > 0)
-      .map(([job]) => job)
+    Record.toEntries(held).filter(
+      ([, { job, count }]) => job.refuses.includes(name) && count.read() > 0,
+    )
+  const pileUp = (name: string, holder: string, { refused }: Holding) =>
+    Effect.suspend(() => {
+      refused.write(refused.read() + 1)
+      if (refused.read() !== piledUpAt) return Effect.void
+
+      return noticed(
+        "SPAR_REFUSALS_PILED_UP",
+        `${key}/${holder}`,
+        `${name} was refused ${piledUpAt} times while ${holder} ran.`,
+      )
+    })
+  const refused = (name: string, busy: ReturnType<typeof busyWith>) =>
+    Effect.andThen(
+      Timeline.note("refused", `${key}/${name}`, () => ({ while: busy.map(([holder]) => holder) })),
+      Effect.forEach(busy, ([holder, holding]) => pileUp(name, holder, holding), {
+        discard: true,
+      }),
+    )
   const refusing = (name: string, go: Effect.Effect<void>) =>
     Effect.suspend(() => {
       const busy = busyWith(name)
 
       return busy.length === 0
         ? go
-        : Effect.provideService(
-            Timeline.note("refused", `${key}/${name}`, () => ({ while: busy })),
-            Timeline.Recorder,
-            recorder,
-          )
+        : Effect.provideService(refused(name, busy), Timeline.Recorder, recorder)
     })
   const traced = (name: string, effect: Effect.Effect<void>) =>
     Effect.withSpan(effect, `${key}/${name}`, {
@@ -361,7 +387,7 @@ export const made = Effect.fnUntraced(function* <
     )
   const tasks = Record.map(
     held,
-    ({ job, begin, count }, name) =>
+    ({ job, begin, ...holding }, name) =>
       (input: unknown) =>
         Effect.suspend(() =>
           traced(
@@ -371,10 +397,10 @@ export const made = Effect.fnUntraced(function* <
               Effect.flatMap(Effect.orDie(job.encode(input)), (payload) =>
                 Effect.andThen(
                   Effect.andThen(
-                    moved(count, 1),
+                    runBegun(holding),
                     applied(name, (now) => now, payload),
                   ),
-                  begin(Effect.ensuring(worked(name, job, payload), moved(count, -1))),
+                  begin(Effect.ensuring(worked(name, job, payload), runEnded(holding))),
                 ),
               ),
             ),
