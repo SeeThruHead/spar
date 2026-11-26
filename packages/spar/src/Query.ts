@@ -22,7 +22,15 @@ import { resultOf } from "./internal/queryResult.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
 import * as Cell from "./internal/cell.ts"
-import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
+import {
+  fromCell,
+  fromStream,
+  isReactive,
+  map,
+  observed,
+  succeed,
+  zip,
+} from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Events from "./Events.ts"
 import * as Store from "./internal/store.ts"
@@ -72,6 +80,10 @@ const stands = <A, E>(
 ): boolean => onServer || isFresh(entry, now, staleAfter)
 
 const defaultStaleAfter: Duration.Input = "500 millis"
+
+export type Spoken = Exclude<Duration.Input, number | bigint>
+
+const untraced = { traceId: "", spanId: "" }
 
 const withAhead = (keys: ReadonlyArray<string>): { readonly ahead?: ReadonlyArray<string> } =>
   keys.length === 0 ? {} : { ahead: [...new Set(keys)] }
@@ -189,9 +201,17 @@ export const Tag =
       readonly retry?: Schedule.Schedule<unknown, E>
       readonly dropAfter?: Duration.Input
       readonly keepAtMost?: number
+      readonly refetchEvery?: Spoken
+      readonly debounce?: Spoken
     },
   ) => {
     const dropAfter = Duration.fromInputUnsafe(options.dropAfter ?? "5 minutes")
+    const refetchEvery = Option.map(Option.fromUndefinedOr(options.refetchEvery), (every) =>
+      Duration.fromInputUnsafe(every),
+    )
+    const debounce = Option.map(Option.fromUndefinedOr(options.debounce), (quiet) =>
+      Duration.fromInputUnsafe(quiet),
+    )
     const keepAtMost = options.keepAtMost ?? 100
     const staleAfter = Duration.toMillis(
       Duration.fromInputUnsafe(options.staleAfter ?? defaultStaleAfter),
@@ -325,6 +345,7 @@ export const Tag =
     type Runner = {
       readonly loads: FiberMap.FiberMap<string>
       readonly drops: FiberMap.FiberMap<string>
+      readonly polls: FiberMap.FiberMap<string>
       readonly context: Context.Context<R>
       readonly tracer: Tracer.Tracer
     }
@@ -371,6 +392,7 @@ export const Tag =
       const runner = yield* runnerOf(store)
 
       yield* store.commands.released({ key: name, at })
+      yield* FiberMap.remove(runner.polls, name)
       yield* forkedIn(
         runner.drops,
         name,
@@ -388,13 +410,41 @@ export const Tag =
         { discard: true },
       )
     })
+    const pollOnce = (store: Held, name: string, visible: Reactive<boolean>) =>
+      Effect.flatMap(Effect.all([visible.get, store.state.get]), ([shown, now]) => {
+        if (!shown) return Effect.void
+
+        return Effect.forEach(
+          Option.toArray(Option.fromUndefinedOr(now.entries[name])),
+          (held) => begun(store, { key: name, input: held.input }, null, untraced),
+          { discard: true },
+        )
+      })
+    const polled = (store: Held, name: string, visible: Reactive<boolean>) =>
+      Effect.forEach(
+        Option.toArray(refetchEvery),
+        (every) =>
+          Effect.flatMap(runnerOf(store), (runner) =>
+            FiberMap.run(
+              runner.polls,
+              name,
+              Effect.withTracer(
+                Effect.forever(Effect.andThen(Effect.sleep(every), pollOnce(store, name, visible))),
+                runner.tracer,
+              ),
+              { onlyIfMissing: true },
+            ),
+          ),
+        { discard: true },
+      )
     const running = Effect.fnUntraced(function* (store: Held) {
       const loads = yield* FiberMap.make<string>()
       const drops = yield* FiberMap.make<string>()
+      const polls = yield* FiberMap.make<string>()
       const context = yield* Effect.context<R>()
       const tracer = yield* Effect.tracer
 
-      runners.set(store, { loads, drops, context, tracer })
+      runners.set(store, { loads, drops, polls, context, tracer })
 
       return store
     })
@@ -456,11 +506,20 @@ export const Tag =
           links: linksTo(hit),
         },
       )
+    const settledInput = (asked: Reactive<Option.Option<Asked>>) =>
+      Option.match(debounce, {
+        onNone: () => Effect.succeed(asked),
+        onSome: (quiet) =>
+          Effect.flatMap(asked.get, (first) =>
+            fromStream(first, Stream.debounce(asked.changes, quiet)),
+          ),
+      })
     const asking = Effect.fnUntraced(function* (input: unknown) {
       const store = yield* Effect.service(base)
-      const wanted = map(optionalOf(input), askedFor)
+      const wanted = yield* settledInput(map(optionalOf(input), askedFor))
       const after = Option.getOrNull(sourceOf(input))
       const context = yield* Effect.context<Self>()
+      const visible = yield* Events.visible
 
       const first = yield* wanted.get
       const users = usersOf(store)
@@ -470,9 +529,12 @@ export const Tag =
           Option.toArray(asked),
           (target) =>
             Effect.flatMap(store.state.get, (now) =>
-              isBack(counted(users, target.key, 1), now.entries[target.key])
-                ? store.commands.held({ key: target.key })
-                : Effect.void,
+              Effect.andThen(
+                isBack(counted(users, target.key, 1), now.entries[target.key])
+                  ? store.commands.held({ key: target.key })
+                  : Effect.void,
+                polled(store, target.key, visible),
+              ),
             ),
           { discard: true },
         )
@@ -510,7 +572,6 @@ export const Tag =
 
       const expected = yield* Expected
       const allSent = map(expected, (still) => !still)
-      const visible = yield* Events.visible
       const online = yield* Events.online
 
       yield* Effect.forkScoped(
