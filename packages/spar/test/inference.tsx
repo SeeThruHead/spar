@@ -108,3 +108,33 @@ export const Ten = compose(
   withUiState("open", Schema.Boolean, false),
   withHandlers((props) => ({ i: props.h, shown: props.open })),
 )((props) => <p hidden={Reactive.map(props.shown, (open) => open)}>{props.i}</p>)
+
+const withLabel = Effect.fnUntraced(function* () {
+  const label = yield* UiState.make("label", Schema.String, "")
+
+  return { label }
+})
+
+export const Labelled = compose(
+  withProps({}),
+  withLabel,
+  withHandlers((props) => ({ shown: Reactive.map(props.label, (now) => now.trim()) })),
+)((props) => <p>{props.shown}</p>)
+
+export const Grid = compose(
+  withHandlers(() => ({
+    rows: [{ month: "2026-01", cells: [{ key: "a", text: "1" }] }],
+  })),
+)((props) => (
+  <table>
+    <For each={props.rows} by={(row) => row.month}>
+      {(row) => (
+        <tr>
+          <For each={Reactive.map(row, (now) => now.cells)} by={(cell) => cell.key}>
+            {(cell) => <td>{Reactive.map(cell, (now) => now.text)}</td>}
+          </For>
+        </tr>
+      )}
+    </For>
+  </table>
+))

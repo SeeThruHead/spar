@@ -67,8 +67,16 @@ A group of enhancers is `compose(...)` without a view. `compose` takes up to 10 
 some with `compose(...)` beyond that.
 
 If TypeScript says `'props' is of type 'unknown'` or that a property you added does not exist,
-an untyped inline function among the enhancers is the cause (the build says so too, with
-`SPAR_ENHANCER_UNTYPED`): wrap it in `withEffectProps` or `withHandlers`.
+one of three things is the cause, and the build names each:
+
+- An untyped inline function among the enhancers (`SPAR_ENHANCER_UNTYPED`): wrap it in
+  `withEffectProps` or `withHandlers`.
+- An enhancer made with `withEffectProps` or `withHandlers` outside `compose` whose parameter
+  has no type (`SPAR_ENHANCER_UNTYPED`): give `props` its type there, or write it inline in
+  `compose`.
+- A first enhancer that takes no props, such as `Effect.fnUntraced(function* () { ... })`
+  (`SPAR_FIRST_ENHANCER_PROPSLESS`): start with `withProps(...)`, `withProps({})` when the
+  component takes no props, and put it second.
 
 Three other errors to avoid:
 
@@ -3941,9 +3949,17 @@ Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
 #### SPAR_ENHANCER_UNTYPED
 
-An enhancer written inline as a function with an untyped parameter, followed by more enhancers. TypeScript works such a function out last, so every enhancer after it sees its props as unknown.
+An enhancer whose props parameter has no type: written inline as a function before more enhancers, or made with withEffectProps, withHandlers or withEffect outside compose. Inside compose TypeScript works such a function out last, and outside compose nothing tells it the props, so its props, and those of every enhancer after it, are unknown.
 
-Fix: Wrap it: withEffectProps((props) => effect) for props made by an Effect, withHandlers((props) => values) for plain values. Or give its parameter a type, or move it to a named function with a typed parameter.
+Fix: Inside compose, wrap it: withEffectProps((props) => effect) for props made by an Effect, withHandlers((props) => values) for plain values. Outside compose, give its parameter a type: withEffectProps(Effect.fnUntraced(function* (props: { readonly filter: Reactive.Reactive<Filter> }) { ... })), or write it inline in compose.
+
+Reported by: The build (the Vite or Bun plugin), with the file, line and column.
+
+#### SPAR_FIRST_ENHANCER_PROPSLESS
+
+compose starts with an enhancer that takes no props, followed by more enhancers. Nothing then tells TypeScript the props, so every enhancer after it sees them as unknown ('props' is of type 'unknown', TS18046).
+
+Fix: Start compose with withProps(...), withProps({}) when the component takes no props, and put the enhancer after it.
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
@@ -6549,7 +6565,7 @@ The shell: the router's outlet and the second place the notes unit is mounted, e
 
 ```tsx
 import { Effect } from "effect"
-import { Handle, Router, View, compose, withEffect, withStore } from "spar"
+import { Handle, Router, View, compose, withEffect, withProps, withStore } from "spar"
 import { Toast } from "@spar/ui"
 import { AgentPage } from "./AgentPage.tsx"
 import { deepExample, orgRoute, reportRoute } from "./Deep.ts"
@@ -6582,8 +6598,9 @@ const withPage = () =>
   )
 
 export const Shell = compose(
+  withProps({}),
   withMain,
-  withEffect((props: { readonly main: Handle.Handle }) => Router.focusOnChange(props.main)),
+  withEffect((props) => Router.focusOnChange(props.main)),
   withStore(Router.Router, (router) => ({ deep: router.link(reportRoute, deepExample) })),
   withPage,
 )((props) => (

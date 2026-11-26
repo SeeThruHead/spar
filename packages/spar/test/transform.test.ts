@@ -76,13 +76,64 @@ describe("an enhancer written inline before other enhancers", () => {
     expect(rules("const D = compose(withProps({}), g, (props) => Effect.succeed({}))(V)")).toEqual(
       [],
     )
-    expect(rules("const D = compose(() => Effect.succeed({}), g)(V)")).toEqual([])
+    expect(rules("const D = compose(withProps({}), () => Effect.succeed({}), g)(V)")).toEqual([])
     expect(
       rules(
         "const D = compose(withProps({}), Effect.fn(function* (props: P) { return {} }), g)(V)",
       ),
     ).toEqual([])
     expect(rules("const D = compose(withProps({}), Effect.map(x, f), g)(V)")).toEqual([])
+  })
+
+  it("is refused outside compose when its parameter has no type, and let through when typed", () => {
+    expect(
+      rules("const withView = withEffectProps(Effect.fnUntraced(function* (props) { return {} }))"),
+    ).toEqual(["enhancers-typed-or-wrapped"])
+    expect(rules("const withLoud = withHandlers((props) => ({ loud: props.name }))")).toEqual([
+      "enhancers-typed-or-wrapped",
+    ])
+    expect(
+      rules(
+        "const withView = withEffectProps(Effect.fnUntraced(function* (props: P) { return {} }))",
+      ),
+    ).toEqual([])
+    expect(rules("const withNothing = withHandlers(() => ({ loud: true }))")).toEqual([])
+    expect(
+      rules("const withHover = all(withUiState(a, b, c), withHandlers((props) => ({})))"),
+    ).toEqual([])
+  })
+})
+
+describe("compose's first enhancer", () => {
+  it("is refused when it takes no props and more enhancers follow, inline or declared in the file", () => {
+    expect(rules("const D = compose(() => Effect.succeed({}), g)(V)")).toEqual([
+      "first-enhancer-takes-props",
+    ])
+    expect(
+      rules(
+        "const withA = Effect.fnUntraced(function* () { return {} })\nconst D = compose(withA, g)(V)",
+      ),
+    ).toEqual(["first-enhancer-takes-props"])
+    expect(
+      rules("function withA() { return Effect.succeed({}) }\nconst D = compose(withA, g)(V)"),
+    ).toEqual(["first-enhancer-takes-props"])
+  })
+
+  it("is let through when it takes props, comes from a wrapper, or is the only one", () => {
+    expect(rules("const D = compose(withProps({}), withA, g)(V)")).toEqual([])
+    expect(rules("const D = compose(withHandlers(() => ({ a: 1 })), g)(V)")).toEqual([])
+    expect(
+      rules(
+        "const withA = (_props: unknown) => Effect.succeed({})\nconst D = compose(withA, g)(V)",
+      ),
+    ).toEqual([])
+    expect(
+      rules(
+        "function withA(_props: P) { return Effect.succeed({}) }\nconst D = compose(withA, g)(V)",
+      ),
+    ).toEqual([])
+    expect(rules("const D = compose(() => Effect.succeed({}))(V)")).toEqual([])
+    expect(rules("const D = compose(imported, g)(V)")).toEqual([])
   })
 })
 

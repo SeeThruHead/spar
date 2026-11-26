@@ -192,13 +192,7 @@ class MappedNow<A, B> implements Now<B> {
   }
 }
 
-export const map: {
-  <A, B>(f: (value: A) => B): (self: Reactive<A>) => Reactive<B>
-  <A, B>(self: Reactive<A>, f: (value: A) => B): Reactive<B>
-} = Function.dual(
-  2,
-  <A, B>(self: Reactive<A>, f: (value: A) => B): Reactive<B> => new Mapped(self, f),
-)
+export const map = <A, B>(self: Reactive<A>, f: (value: A) => B): Reactive<B> => new Mapped(self, f)
 
 export const observed = <A>(
   source: Reactive<A>,

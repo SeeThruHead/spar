@@ -1,7 +1,7 @@
 import { Array, Schema } from "effect"
 import { parseSync } from "oxc-parser"
 import * as Diagnostics from "../Diagnostics.ts"
-import { untypedEnhancers } from "./enhancers.ts"
+import { propslessFirstEnhancers, untypedEnhancers } from "./enhancers.ts"
 import { unprovided } from "./requirements.ts"
 import type { Source } from "./requirements.ts"
 
@@ -12,6 +12,7 @@ export type Violation = {
     | "views-need-a-schema"
     | "child-needs-a-service"
     | "enhancers-typed-or-wrapped"
+    | "first-enhancer-takes-props"
   readonly code: Diagnostics.Code
   readonly message: string
   readonly file: string
@@ -66,6 +67,7 @@ const codes = {
   "no-effect-run-in-views": "SPAR_EFFECT_RUN_IN_VIEW",
   "child-needs-a-service": "SPAR_CHILD_NEEDS_A_SERVICE",
   "enhancers-typed-or-wrapped": "SPAR_ENHANCER_UNTYPED",
+  "first-enhancer-takes-props": "SPAR_FIRST_ENHANCER_PROPSLESS",
 } as const satisfies Record<Violation["rule"], Diagnostics.Code>
 
 type Where = "outside" | "view" | "hole" | "listed"
@@ -126,6 +128,9 @@ export const check = (file: string, source: string): ReadonlyArray<Violation> =>
   const found: ReadonlyArray<readonly [Violation["rule"], number]> = [
     ...visit(program, "outside"),
     ...untypedEnhancers(program).map((offset) => ["enhancers-typed-or-wrapped", offset] as const),
+    ...propslessFirstEnhancers(program).map(
+      (offset) => ["first-enhancer-takes-props", offset] as const,
+    ),
   ]
 
   return [

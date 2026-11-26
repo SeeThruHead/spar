@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { Handle, Router, View, compose, withEffect, withStore } from "spar"
+import { Handle, Router, View, compose, withEffect, withProps, withStore } from "spar"
 import { Toast } from "@spar/ui"
 import { AgentPage } from "./AgentPage.tsx"
 import { deepExample, orgRoute, reportRoute } from "./Deep.ts"
@@ -32,8 +32,9 @@ const withPage = () =>
   )
 
 export const Shell = compose(
+  withProps({}),
   withMain,
-  withEffect((props: { readonly main: Handle.Handle }) => Router.focusOnChange(props.main)),
+  withEffect((props) => Router.focusOnChange(props.main)),
   withStore(Router.Router, (router) => ({ deep: router.link(reportRoute, deepExample) })),
   withPage,
 )((props) => (
