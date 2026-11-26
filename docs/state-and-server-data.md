@@ -68,7 +68,9 @@ the work a task and read `store.running.<task>` instead.
 
 A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
 task it met. The task's start and its finish are in the log with what they carried, so a log
-replays to the same state.
+replays to the same state. When one run of a task refuses commands three times, Spar also notes
+`SPAR_REFUSALS_PILED_UP` against that task (once per run): the screen kept offering something
+the store would not do, so disable it while `store.running.<task>` is true.
 
 | `mode`         | What happens when it is started again while it runs              |
 | -------------- | ---------------------------------------------------------------- |
