@@ -1793,6 +1793,10 @@ text under `TextField`, `Select` and `Checkbox`, has the role `alert`.
 - `Listbox` (`label`, `name`, `choices`, `value`, `onChange`): a select drawn by the kit, for when
   the native control will not do. Arrow keys, Home, End, typing a first letter, Enter or Space to
   choose, and a hidden input so it posts with a form. `Select` stays the native control.
+- `Combobox` (`label`, `name`, `choices`, `value`, `onChange`): a text box whose typing narrows
+  the choices shown below it. Focus stays in the box: the arrow keys mark an option (named by
+  `aria-activedescendant`), Enter or a click takes it, Escape closes the list. A hidden input
+  posts the chosen value.
 
 `Events.cancel(event)` is an action that stops what the browser would do with an event, for a
 handler that only sometimes takes a key over.

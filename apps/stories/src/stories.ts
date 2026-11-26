@@ -1,7 +1,8 @@
 import { Effect, Schema, pipe } from "effect"
 import { Form, Reactive, Store, UiState, View, compose } from "spar"
-import { Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
+import { Combobox, Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
+  ComboboxStoryView,
   ControlsView,
   DialogStoryView,
   ListboxStoryView,
@@ -157,6 +158,28 @@ export const PopoverStory = compose(
     }
   }),
 )(PopoverStoryView)
+
+export const ComboboxStory = compose(
+  Effect.fnUntraced(function* () {
+    const fruit = yield* UiState.make("fruit", Schema.String, "")
+
+    return {
+      picked: fruit,
+      combobox: yield* View.child(Combobox, {
+        label: "Fruit",
+        name: "fruit",
+        choices: [
+          { value: "apple", label: "Apple" },
+          { value: "banana", label: "Banana" },
+          { value: "mango", label: "Mango" },
+          { value: "orange", label: "Orange" },
+        ],
+        value: fruit,
+        onChange: (value) => UiState.set(fruit, value),
+      }),
+    }
+  }),
+)(ComboboxStoryView)
 
 export const ListboxStory = compose(
   Effect.fnUntraced(function* () {

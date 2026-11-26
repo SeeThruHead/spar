@@ -160,6 +160,20 @@ export const PopoverStoryView = View.make(
   ),
 )
 
+export const ComboboxStoryView = View.make(
+  "ComboboxStoryView",
+  { combobox: Props.Element, picked: Props.Reactive(Schema.String) },
+  ({ combobox, picked }) => (
+    <section>
+      <h1>Combobox</h1>
+      {combobox}
+      <p>
+        Picked: <output aria-label="Picked fruit">{picked}</output>
+      </p>
+    </section>
+  ),
+)
+
 export const ListboxStoryView = View.make(
   "ListboxStoryView",
   { listbox: Props.Element, chosen: Props.Reactive(Schema.String) },

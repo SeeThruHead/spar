@@ -199,6 +199,32 @@ const stories: ReadonlyArray<Story> = [
       await staysOnScreen(page, "listbox")
     },
   },
+  {
+    path: "/combobox",
+    title: "Combobox",
+    play: async (page) => {
+      const fruit = page.getByRole("combobox", { name: "Fruit" })
+      const typed = async (text: string) => {
+        await fruit.focus()
+        await page.keyboard.press("ControlOrMeta+a")
+        await page.keyboard.type(text)
+      }
+
+      await typed("an")
+      await page.getByRole("listbox", { name: "Fruit" }).waitFor()
+      await page.keyboard.press("ArrowDown")
+      await page.getByRole("option", { name: "Mango", selected: true }).waitFor()
+      await page.keyboard.press("Enter")
+      await page.getByRole("listbox").waitFor({ state: "detached" })
+      await shows(page, "Picked fruit", "mango")
+      await typed("ap")
+      await page.getByRole("option", { name: "Apple" }).click()
+      await shows(page, "Picked fruit", "apple")
+      await typed("o")
+      await page.getByRole("listbox", { name: "Fruit" }).waitFor()
+      await staysOnScreen(page, "listbox")
+    },
+  },
 ]
 
 const audit = async (page: Page): Promise<ReadonlyArray<string>> => {

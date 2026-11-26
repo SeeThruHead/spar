@@ -144,6 +144,21 @@
   color: var(--spar-text);
 }
 
+.spar-combobox {
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--spar-line);
+  border-radius: var(--spar-radius);
+  background: var(--spar-surface);
+  color: var(--spar-text);
+}
+
+.spar-combobox:focus-visible {
+  outline: 2px solid var(--spar-focus);
+  outline-offset: 2px;
+}
+
 .spar-field [aria-invalid="true"] {
   border-color: var(--spar-problem);
 }

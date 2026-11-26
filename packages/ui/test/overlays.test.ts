@@ -3,7 +3,8 @@ import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Schema } from "effect"
 import { Reactive, UiState, View, compose } from "spar"
 import * as Testing from "spar/testing"
-import { Listbox, Popover, Tooltip } from "../src/index.ts"
+import { matching, steppedTo } from "../src/Combobox.ts"
+import { Combobox, Listbox, Popover, Tooltip } from "../src/index.ts"
 import { TextView } from "./KitView.tsx"
 import { OverlayKitView } from "./OverlayKit.tsx"
 
@@ -13,9 +14,17 @@ const sizes = [
   { value: "l", label: "Large" },
 ]
 
+const fruits = [
+  { value: "apple", label: "Apple" },
+  { value: "banana", label: "Banana" },
+  { value: "mango", label: "Mango" },
+  { value: "orange", label: "Orange" },
+]
+
 const Kit = compose(
   Effect.fnUntraced(function* () {
     const chosen = yield* UiState.make("chosen", Schema.String, "m")
+    const picked = yield* UiState.make("picked", Schema.String, "")
 
     return {
       remove: yield* Tooltip.make("Removes the project for everyone"),
@@ -39,7 +48,15 @@ const Kit = compose(
         value: Reactive.succeed("unknown"),
         onChange: () => [],
       }),
+      fruit: yield* View.child(Combobox, {
+        label: "Fruit",
+        name: "fruit",
+        choices: fruits,
+        value: picked,
+        onChange: (value) => UiState.set(picked, value),
+      }),
       chosen,
+      picked,
     }
   }),
 )(OverlayKitView)
@@ -222,6 +239,102 @@ describe("listboxes", () => {
       yield* focused("Red")
       yield* key("Enter")
       yield* Testing.gone("listbox")
+    }),
+  )
+})
+
+const optionLabels = () => screen.queryAllByRole("option").map((option) => option.textContent)
+
+const keyOn = (element: HTMLElement, name: string) =>
+  Effect.sync(() => fireEvent.keyDown(element, { key: name }))
+
+describe("comboboxes", () => {
+  it("narrow the choices by what is typed, and step around the ends", () => {
+    expect(matching(fruits, " AN ").map((fruit) => fruit.value)).toEqual([
+      "banana",
+      "mango",
+      "orange",
+    ])
+    expect(matching(fruits, "").length).toBe(4)
+    expect([
+      steppedTo("ArrowDown", -1, 3),
+      steppedTo("ArrowUp", -1, 3),
+      steppedTo("ArrowDown", 2, 3),
+      steppedTo("ArrowUp", 0, 3),
+      steppedTo("ArrowDown", -1, 0),
+      steppedTo("Tab", 1, 3),
+    ]).toEqual([0, 2, 0, 2, -1, 1])
+  })
+
+  it.live("typing filters the list, the arrows mark an option, and Enter takes it", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Kit)
+
+      const fruit = yield* Testing.find("combobox", "Fruit")
+
+      expect(fruit.getAttribute("aria-expanded")).toBe("false")
+      yield* Testing.fill("combobox", "Fruit", "an")
+
+      const list = yield* Testing.find("listbox", "Fruit")
+
+      expect(list.id).toBe(fruit.getAttribute("aria-controls"))
+      expect(fruit.getAttribute("aria-expanded")).toBe("true")
+      yield* Testing.eventually(() => expect(optionLabels()).toEqual(["Banana", "Mango", "Orange"]))
+      expect(fruit.getAttribute("aria-activedescendant")).toBe(
+        screen.getByRole("option", { name: "Banana" }).id,
+      )
+
+      yield* keyOn(fruit, "ArrowDown")
+      yield* Testing.eventually(() =>
+        expect(screen.getByRole("option", { name: "Mango" }).getAttribute("aria-selected")).toBe(
+          "true",
+        ),
+      )
+      expect(fruit.getAttribute("aria-activedescendant")).toBe(
+        screen.getByRole("option", { name: "Mango" }).id,
+      )
+      expect(document.activeElement).not.toBe(screen.getByRole("option", { name: "Mango" }))
+
+      yield* keyOn(fruit, "x")
+      expect(fireEvent.keyDown(fruit, { key: "Enter" })).toBe(false)
+      yield* Testing.gone("listbox")
+
+      expect(screen.getByLabelText("Picked fruit").textContent).toBe("mango")
+      expect(fruit).toHaveProperty("value", "Mango")
+      expect(document.querySelector('input[name="fruit"]')).toHaveProperty("value", "mango")
+      expect(fruit.getAttribute("aria-activedescendant")).toBeNull()
+    }),
+  )
+
+  it.live("a click takes a choice, Escape closes, and nothing matching shows no list", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Kit)
+
+      const fruit = yield* Testing.find("combobox", "Fruit")
+
+      expect(fireEvent.keyDown(fruit, { key: "Enter" })).toBe(true)
+      yield* keyOn(fruit, "ArrowUp")
+      yield* Testing.eventually(() =>
+        expect(screen.getByRole("option", { name: "Orange" }).getAttribute("aria-selected")).toBe(
+          "true",
+        ),
+      )
+      expect(fireEvent.keyDown(fruit, { key: "Escape" })).toBe(false)
+      yield* Testing.gone("listbox")
+      expect(fireEvent.keyDown(fruit, { key: "Escape" })).toBe(true)
+
+      yield* Testing.fill("combobox", "Fruit", "kiwi")
+      yield* Effect.sleep("10 millis")
+      expect(screen.queryByRole("listbox")).toBeNull()
+      expect(fruit.getAttribute("aria-expanded")).toBe("false")
+      expect(fireEvent.keyDown(fruit, { key: "Enter" })).toBe(true)
+
+      yield* Testing.fill("combobox", "Fruit", "ap")
+      yield* Testing.click("option", "Apple")
+      yield* Testing.gone("listbox")
+
+      expect(screen.getByLabelText("Picked fruit").textContent).toBe("apple")
+      yield* Testing.eventually(() => expect(document.activeElement).toBe(fruit))
     }),
   )
 })
