@@ -569,7 +569,10 @@ text under `TextField`, `Select` and `Checkbox`, has the role `alert`.
   Sunday. Days are `YYYY-MM-DD` strings. One day takes Tab; the arrow keys move a day or a week,
   Home and End go to the ends of the week, Page Up and Page Down change the month, and crossing
   a month's edge turns the page. Enter, Space or a press picks the day. With no value it opens on
-  today, read from Effect's `Clock`.
+  today, read from Effect's `Clock`. `autoFocus` puts focus on that day when it mounts.
+- `DatePicker` (`label`, `name`, `value`, `onChange`): a button naming the picked day that opens
+  a `Calendar` beside it, focused on that day. A pick closes it and gives focus back; so do
+  Escape and a press elsewhere. A hidden input posts the day.
 
 `Events.cancel(event)` is an action that stops what the browser would do with an event, for a
 handler that only sometimes takes a key over.

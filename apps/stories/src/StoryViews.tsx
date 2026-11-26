@@ -160,6 +160,20 @@ export const PopoverStoryView = View.make(
   ),
 )
 
+export const DatePickerStoryView = View.make(
+  "DatePickerStoryView",
+  { picker: Props.Element, day: Props.Reactive(Schema.String) },
+  ({ picker, day }) => (
+    <section>
+      <h1>Date picker</h1>
+      {picker}
+      <p>
+        Picked: <output aria-label="Picked start">{day}</output>
+      </p>
+    </section>
+  ),
+)
+
 export const CalendarStoryView = View.make(
   "CalendarStoryView",
   { calendar: Props.Element, day: Props.Reactive(Schema.String) },

@@ -4,6 +4,7 @@ import { Toast } from "@spar/ui"
 import {
   CalendarStory,
   ComboboxStory,
+  DatePickerStory,
   Controls,
   DialogStory,
   ListboxStory,
@@ -26,6 +27,7 @@ const popover = Router.route("/popover")
 const listbox = Router.route("/listbox")
 const combobox = Router.route("/combobox")
 const calendar = Router.route("/calendar")
+const datePicker = Router.route("/date-picker")
 
 export const Shell = compose(
   Effect.fnUntraced(function* () {
@@ -47,6 +49,7 @@ export const Shell = compose(
         LinkView({ title: "Listbox", link: router.link(listbox, {}) }),
         LinkView({ title: "Combobox", link: router.link(combobox, {}) }),
         LinkView({ title: "Calendar", link: router.link(calendar, {}) }),
+        LinkView({ title: "Date picker", link: router.link(datePicker, {}) }),
       ],
       page: yield* Router.outlet({
         routes: [
@@ -61,6 +64,7 @@ export const Shell = compose(
           Router.on(listbox, ListboxStory),
           Router.on(combobox, ComboboxStory),
           Router.on(calendar, CalendarStory),
+          Router.on(datePicker, DatePickerStory),
         ],
         otherwise: MissingView,
       }),

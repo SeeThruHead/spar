@@ -248,6 +248,25 @@ const stories: ReadonlyArray<Story> = [
       await shows(page, "Picked day", "2026-11-02")
     },
   },
+  {
+    path: "/date-picker",
+    title: "Date picker",
+    play: async (page) => {
+      await page.getByRole("button", { name: "Start: Thursday, November 26, 2026" }).click()
+      await page.getByRole("dialog", { name: "Start" }).waitFor()
+      await dayHasFocus(page, "Thursday, November 26, 2026")
+      await staysOnScreen(page, "dialog")
+      await page.keyboard.press("ArrowDown")
+      await dayHasFocus(page, "Thursday, December 3, 2026")
+      await page.keyboard.press("Enter")
+      await page.getByRole("dialog").waitFor({ state: "detached" })
+      await shows(page, "Picked start", "2026-12-03")
+      await page.getByRole("button", { name: "Start: Thursday, December 3, 2026" }).click()
+      await page.keyboard.press("Escape")
+      await page.getByRole("dialog").waitFor({ state: "detached" })
+      await shows(page, "Picked start", "2026-12-03")
+    },
+  },
 ]
 
 const audit = async (page: Page): Promise<ReadonlyArray<string>> => {

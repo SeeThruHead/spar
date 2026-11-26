@@ -21,12 +21,16 @@ export const Calendar = compose(
   withProps({
     label: Schema.String,
     value: Props.Reactive(Schema.String),
+    autoFocus: Schema.Boolean,
     onChange: Props.Callback(Schema.String),
   }),
   Effect.fnUntraced(function* (props) {
     const first = yield* Effect.flatMap(props.value.get, startingDay)
     const focused = yield* UiState.make("focused", Schema.String, first)
     const handles = yield* Effect.forEach(Array.range(0, 41), () => Handle.make)
+    const opening = props.autoFocus ? Array.get(handles, indexIn(first)) : Option.none()
+
+    yield* Effect.forkScoped(Effect.forEach(Option.toArray(opening), Handle.focus))
     const picked = yield* Reactive.zip(focused, props.value)
     const movedTo = (day: string) => [UiState.set(focused, day), focusAt(handles, indexIn(day))]
     const dayAt = (index: number) => Reactive.map(focused, (day) => dayIn(monthOf(day), index))

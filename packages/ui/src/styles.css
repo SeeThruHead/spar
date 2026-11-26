@@ -223,6 +223,16 @@
   color: var(--spar-on-accent);
 }
 
+.spar-date-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.spar-popover.spar-date-panel {
+  padding: 0;
+}
+
 .spar-field [aria-invalid="true"] {
   border-color: var(--spar-problem);
 }

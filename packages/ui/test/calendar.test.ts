@@ -4,7 +4,8 @@ import { Effect, Option, Schema } from "effect"
 import { UiState, View, compose } from "spar"
 import * as Testing from "spar/testing"
 import { gridOf, indexIn, monthTitle, movedBy } from "../src/days.ts"
-import { Calendar } from "../src/index.ts"
+import { shownDay } from "../src/DatePicker.ts"
+import { Calendar, DatePicker } from "../src/index.ts"
 import { CalendarKitView } from "./CalendarKit.tsx"
 
 const Kit = (start: string) =>
@@ -17,11 +18,28 @@ const Kit = (start: string) =>
         calendar: yield* View.child(Calendar, {
           label: "Due date",
           value: day,
+          autoFocus: false,
           onChange: (picked) => UiState.set(day, picked),
         }),
       }
     }),
   )(CalendarKitView)
+
+const Picker = compose(
+  Effect.fnUntraced(function* () {
+    const day = yield* UiState.make("start", Schema.String, "")
+
+    return {
+      day,
+      calendar: yield* View.child(DatePicker, {
+        label: "Start",
+        name: "start",
+        value: day,
+        onChange: (picked) => UiState.set(day, picked),
+      }),
+    }
+  }),
+)(CalendarKitView)
 
 const keyOnFocus = (name: string) =>
   Effect.sync(() => fireEvent.keyDown(document.activeElement ?? document.body, { key: name }))
@@ -102,6 +120,38 @@ describe("calendars", () => {
       yield* Testing.click("button", "Next month")
       yield* Testing.click("button", "Next month")
       yield* Testing.find("grid", "January 2027")
+    }),
+  )
+
+  it.live("a date picker opens a calendar on its day, and a pick closes it and says the day", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Picker)
+
+      const trigger = yield* Testing.find("button", "Start: Pick a date")
+
+      expect(shownDay("2026-11-26")).toBe("Thursday, November 26, 2026")
+      expect(trigger.getAttribute("aria-expanded")).toBe("false")
+      yield* Testing.click("button", "Start: Pick a date")
+      yield* Testing.find("dialog", "Start")
+      yield* Testing.eventually(() =>
+        expect(document.activeElement?.getAttribute("tabindex")).toBe("0"),
+      )
+      expect(document.activeElement?.closest("[role=dialog]")).not.toBeNull()
+
+      const today = focusedDay() ?? ""
+
+      yield* Effect.sync(() => fireEvent.click(document.activeElement ?? document.body))
+      yield* Testing.gone("dialog")
+      yield* Testing.eventually(() => expect(document.activeElement).toBe(trigger))
+
+      expect(trigger.getAttribute("aria-label")).toBe(`Start: ${today}`)
+      expect(trigger.textContent).toBe(today)
+      expect(screen.getByLabelText("Picked day").textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+      yield* Testing.click("button", `Start: ${today}`)
+      yield* Testing.eventually(() => expect(focusedDay()).toBe(today))
+      yield* Testing.click("button", `Start: ${today}`)
+      yield* Testing.gone("dialog")
     }),
   )
 

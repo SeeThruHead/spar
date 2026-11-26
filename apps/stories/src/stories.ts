@@ -3,6 +3,7 @@ import { Form, Reactive, Store, UiState, View, compose } from "spar"
 import {
   Calendar,
   Combobox,
+  DatePicker,
   Dialog,
   Listbox,
   Menu,
@@ -15,6 +16,7 @@ import {
 import {
   CalendarStoryView,
   ComboboxStoryView,
+  DatePickerStoryView,
   ControlsView,
   DialogStoryView,
   ListboxStoryView,
@@ -171,6 +173,22 @@ export const PopoverStory = compose(
   }),
 )(PopoverStoryView)
 
+export const DatePickerStory = compose(
+  Effect.fnUntraced(function* () {
+    const day = yield* UiState.make("start", Schema.String, "2026-11-26")
+
+    return {
+      day,
+      picker: yield* View.child(DatePicker, {
+        label: "Start",
+        name: "start",
+        value: day,
+        onChange: (picked) => UiState.set(day, picked),
+      }),
+    }
+  }),
+)(DatePickerStoryView)
+
 export const CalendarStory = compose(
   Effect.fnUntraced(function* () {
     const day = yield* UiState.make("day", Schema.String, "2026-11-26")
@@ -180,6 +198,7 @@ export const CalendarStory = compose(
       calendar: yield* View.child(Calendar, {
         label: "Due date",
         value: day,
+        autoFocus: false,
         onChange: (picked) => UiState.set(day, picked),
       }),
     }
