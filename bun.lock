@@ -37,6 +37,7 @@
       "name": "@spar/bench",
       "dependencies": {
         "@effect/platform-browser": "4.1.4",
+        "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@6f86af8",
         "@tanstack/react-query": "5.108.1",
         "@tanstack/react-router": "1.170.46",
         "effect": "4.1.4",
@@ -404,6 +405,8 @@
     "@effect/tsgo-win32-arm64": ["@effect/tsgo-win32-arm64@0.67.7", "", { "os": "win32", "cpu": "arm64" }, "sha512-Wj0uurKDr3x2O/I8RGD69D7Ot7iowdGzzzRoH04qoKx1ZXpnEmZ8I+8CFmcMpKeYTP4T+OPjiAm8vbQgf2be+A=="],
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.67.7", "", { "os": "win32", "cpu": "x64" }, "sha512-42Z+8gL9JR6ntmeAoZXHaJ/5fb+F9i9HMJaa9yY8lBbtns1RHTT807qV//RISm7M5pUloM9qzAmNbGJB2FbIbA=="],
+
+    "@effect/ui": ["@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@6f86af8", { "peerDependencies": { "effect": "^4.1.4" } }, "sha512-qJV3GQLGt6rVczK3kjanq6opSAwrRXpoBUj27kj2lUcLykzjwmyOb+tYDKVD8TuFM9kgg8J+zZhPfGI7zIZeWQ=="],
 
     "@effect/vitest": ["@effect/vitest@4.1.4", "", { "peerDependencies": { "effect": "^4.1.4", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-AKpZ6zKihCRhY7hDbiQ2yp/krw+afIkxDRjFMwwzMiyhd0iYk0WaHa9J6GGC7TUF/C7HP2dZyMVq5xC0Qm/2/g=="],
 

@@ -27,3 +27,7 @@ Checked 'Select a row' (CI table: Spar 10.2 ms, React 3.5, to the next frame): t
 **2026-11-20T11:00:44Z**
 
 Decided not to strip diagnostic text from production builds: Diagnostics.ts is 10.7 kB before gzip, and those texts are the messages agents read in production logs; trimming them works against the point. The remaining bundle work is structural (Effect's floor, Stream under Reactive.changes).
+
+**2026-11-26T11:12:39Z**
+
+26 Nov, main d4481d6 + PR 14: the benchmark app is 164.0 kB minified, 57.0 kB gzipped (was 72.2). By source map (scratch bundle-sources.ts): effect 122.3 kB (internal/effect 26.6, SchemaAST 25.9, core 5.1, Schema 5.0, Duration 5.0, Queue 4.0), spar 38.2 kB (render 6.1, uiTree 4.0, dom 3.7, store 3.7, said 3.5, html 1.8, App 1.5, Tabs 1.1), app 3.5 kB. What Spar could still avoid (Queue/Channel/MutableList under Reactive and listen, html.ts reached through App's route rehearsal, Tabs through State) is about 10 kB minified, a few kB gzipped. The rest is Effect's runtime and Schema, the floor. Left open, low priority.

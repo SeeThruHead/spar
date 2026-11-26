@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "effect-tsgo tsrs -p tsconfig.json && effect-tsgo tsrs -p src/solid/tsconfig.json && effect-tsgo tsrs -p src/react/tsconfig.json",
-    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src/spar src/spar-composed src/nav-spar src/foldkit src/nav-foldkit src/shared scripts",
-    "build": "vite build --config vite.spar.config.ts && vite build --config vite.spar-composed.config.ts && vite build --config vite.solid.config.ts && vite build --config vite.foldkit.config.ts && vite build --config vite.react.config.ts && vite build --config vite.nav-spar.config.ts && vite build --config vite.nav-react.config.ts && vite build --config vite.nav-foldkit.config.ts && bun run --cwd ../bench-solid2 build",
+    "lint": "effect-tsgo --tsrs-lint oxlint -c ../../packages/lint/oxlintrc.json src/spar src/spar-composed src/nav-spar src/foldkit src/nav-foldkit src/effect-ui src/shared scripts",
+    "build": "vite build --config vite.spar.config.ts && vite build --config vite.spar-composed.config.ts && vite build --config vite.solid.config.ts && vite build --config vite.foldkit.config.ts && vite build --config vite.effect-ui.config.ts && vite build --config vite.react.config.ts && vite build --config vite.nav-spar.config.ts && vite build --config vite.nav-react.config.ts && vite build --config vite.nav-foldkit.config.ts && bun run --cwd ../bench-solid2 build",
     "navigate": "bun run build && bun scripts/navigate.ts",
     "bench": "bun run build && bun scripts/bench.ts",
     "leaks": "bun run build && bun scripts/leaks.ts",
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@effect/platform-browser": "4.1.4",
+    "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@6f86af8",
     "@tanstack/react-query": "5.108.1",
     "@tanstack/react-router": "1.170.46",
     "effect": "4.1.4",

@@ -3706,8 +3706,8 @@ Foldkit is moving under the Effect organization and its frontend is being rebuil
 primitives inside Effect. This page records, as plainly as possible, what differs between that
 architecture and Spar's. Foldkit's side is read from the installed package (0.170.0) and from the
 two apps in this repo that are written in it (`apps/bench/src/foldkit` and
-`apps/bench/src/nav-foldkit`). Nothing is known here about the rebuilt version: as of 19 Nov
-2026 there is no public code or RFC for it, in Foldkit's repo or under the Effect organization.
+`apps/bench/src/nav-foldkit`). The rebuilt version is now public as Effect UI, and has its own
+page: "Spar beside Effect UI".
 
 ### What Spar does that the Elm architecture does not, by its structure
 
@@ -3751,8 +3751,8 @@ and the backend (`docs/devtools-compared.md`).
   JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
-- **It will not be tied to the DOM.** The stated plan is primitives that work across rendering
-  environments. Spar draws to the DOM and to an HTML string, nothing else.
+- **It is not tied to the DOM.** Effect UI, its successor, has a terminal host on OpenTUI. Spar
+  draws to the DOM, to an HTML string and to a small terminal renderer, chosen by a Layer.
 
 ### What Spar builds that Effect already ships or is likely to
 
@@ -3771,6 +3771,218 @@ Effect's own pieces if its authoring model were kept:
 
 Spar uses none of the modules in the right-hand column. Whether its model fits on them has not
 been tried.
+
+
+# Spar beside Effect UI
+
+Effect UI (`@effect/ui`, github.com/Effect-TS/ui) is the Effect organization's new frontend
+library, grown from Foldkit. This page is read from its source at commit 6f86af8 (26 Nov 2026),
+which is not on npm yet. Both apps on this page are in this repo, type-checked and run:
+`apps/bench/src/effect-ui` builds against that commit's snapshot.
+
+### The same app in both
+
+The reset counter: Add 1 counts, and Reset waits two seconds, then sets the count to 0. While the
+reset runs, Add 1 and a second Reset do nothing.
+
+Spar. The store holds the count, the reset is a task of the store, and the task names what it
+refuses while it runs. The component takes what it needs from the store:
+
+```tsx
+export class CounterStore extends Store.Tag<CounterStore>()("beside/ResetCounter", {
+  state: Counting,
+  initialState: { count: 0 },
+  actions: {
+    added: Store.action(Schema.Void, (state: Counting): Counting => ({ count: state.count + 1 })),
+  },
+  selectors: { count: Store.selector(Schema.Int, (state: Counting) => state.count) },
+  tasks: {
+    reset: Store.task(Schema.Void, {
+      result: Schema.Void,
+      run: () => Effect.sleep(Duration.seconds(2)),
+      finish: (): Counting => ({ count: 0 }),
+      mode: "switch",
+      refuses: ["added", "reset"],
+    }),
+  },
+}) {}
+```
+
+(`packages/spar/test/besideEffectUi.test.tsx`)
+
+```tsx
+export const ResetCounter = compose(
+  withStore(CounterStore, (store) => ({
+    count: store.select.count,
+    resetting: store.running.reset,
+    onAdd: store.commands.added(),
+    onReset: store.tasks.reset(),
+  })),
+)((props) => (
+  <section aria-label="Counter">
+    <output aria-label="Count">{props.count}</output>
+    <button onClick={props.onAdd}>Add 1</button>
+    <button onClick={props.onReset} disabled={props.resetting}>
+      Reset after a delay
+    </button>
+  </section>
+))
+
+describe("the reset counter on the page beside Effect UI", () => {
+  it.effect("refuses Add 1 and a second reset while the reset runs, then counts from 0", () =>
+    Effect.gen(function* () {
+      const counter = yield* CounterStore
+
+      yield* counter.commands.added()
+      yield* counter.tasks.reset()
+      yield* counter.commands.added()
+      yield* counter.tasks.reset()
+
+      expect(yield* counter.select.count.get).toBe(1)
+
+      yield* TestClock.adjust(Duration.seconds(2))
+
+      expect(yield* counter.select.count.get).toBe(0)
+    }).pipe(Effect.provide(CounterStore.layer.pipe(Layer.provideMerge(OneState.layer)))),
+  )
+
+  it.live("draws the count and adds 1 on a click", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(ResetCounter)
+      yield* Testing.click("button", "Add 1")
+
+      const count = yield* Testing.find("status", "Count")
+
+      yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
+    }).pipe(Effect.provide(CounterStore.layer)),
+  )
+})
+```
+
+(`packages/spar/test/besideEffectUi.test.tsx`)
+
+Effect UI. The component is its own Elm program: a Model with a Schema, a message for each thing
+that can happen, and `update` returning the next Model and the Commands to run. The wait is a
+Command whose answer is the `CompletedReset` message:
+
+```ts
+export const CounterMessage = UiSchema.TaggedEnum({
+  ClickedAdd: {},
+  ClickedReset: {},
+  CompletedReset: {},
+})
+```
+
+(`apps/bench/src/effect-ui/ResetCounter.ts`)
+
+```ts
+export class ResetAfterDelay extends Command.Service<ResetAfterDelay>()("counter/ResetAfterDelay", {
+  args: {},
+  success: CounterMessage,
+  mode: "switch",
+}) {
+  static readonly layer = this.toLayer(() =>
+    Effect.as(Effect.sleep(Duration.seconds(2)), CounterMessage.CompletedReset()),
+  )
+}
+```
+
+(`apps/bench/src/effect-ui/ResetCounter.ts`)
+
+```ts
+const CounterWithoutLayer = Html.component({
+  name: "ResetCounter",
+  model: CounterModel,
+  message: CounterMessage,
+}).make({
+  init: () => ({ count: 0, resetting: false }),
+  update: {
+    ClickedAdd: ($) => ($.model.resetting ? $.model : $.evolve({ count: (count) => count + 1 })),
+    ClickedReset: ($) =>
+      $.model.resetting ? $.model : $.evolve({ resetting: true }).run(ResetAfterDelay.make({})),
+    CompletedReset: ($) => $.evolve({ count: 0, resetting: false }),
+  },
+  view: (h, model) =>
+    h.section.attr("aria-label", "Counter").children(
+      h.output.attr("aria-label", "Count").children(String(model.count)),
+      h.button.on("click", CounterMessage.ClickedAdd()).children("Add 1"),
+      h.button
+        .on("click", CounterMessage.ClickedReset())
+        .attr("disabled", h.isRunning(ResetAfterDelay) ? "" : undefined)
+        .children("Reset after a delay"),
+    ),
+})
+```
+
+(`apps/bench/src/effect-ui/ResetCounter.ts`)
+
+What the two have to say to make "nothing while it resets" true:
+
+- **Spar** writes it once: `refuses: ["added", "reset"]` on the task. No action checks anything, a
+  new action is not refused until it is listed, and a refused command is in the log as
+  `refused`. Whether it runs is `store.running.reset`, worked out from the task.
+- **Effect UI** writes it in each `update` branch: the Model has a `resetting` field, and
+  `ClickedAdd` and `ClickedReset` each check it. A new message has to remember to. The
+  completion is a message of the component like any other: a parent cannot send it (a parent
+  only passes props), but `CompletedReset` handled while idle still sets the count to 0, and the
+  devtools' `dispatch` tool can send it. `h.isRunning(ResetAfterDelay)` says whether the Command
+  runs, and it is there in `view` only, not in `update`.
+
+The table app of `docs/benchmarks.md` is also written in both (`apps/bench/src/spar`,
+`apps/bench/src/effect-ui/main.ts`); there, Effect UI keeps each row with `h.lazy`, as its own
+docs show.
+
+### The log
+
+- **Effect UI's `MessageLog` is off unless provided.** It defaults to a no-op, and the runtime
+  builds no entry while it is off (`packages/ui/src/internal/messageLog.ts:11-19`,
+  `internal/recorder.ts:117`). It is a development and test hook; production observability goes
+  through Effect's tracer, logger and metrics (`MessageLog.ts:5-10`). Spar's log is always on,
+  because a store changes only through it.
+- **Both order one app's entries in one sequence.** Effect UI numbers every entry of one mounted
+  root from one counter, across all its components (`internal/recorder.ts:37-42`,
+  `internal/runtime.ts:519-521`), and records what caused each (`causedBy`). Spar has one
+  timeline for the app: stores, UI state, routes and calls.
+- **Replay.** Effect UI's `Story.fromLog` replays one component's path, purely, giving each
+  `update` back the props, query results and shared values it read as recorded, and comparing the
+  Commands it returns instead of running them (`testing/Story.ts:492-514`). The devtools' time
+  travel paints the whole page from each instance's recorded state. Spar replays a store's
+  entries to rebuild its state, rewinds the whole app's state to a moment, and forks from it.
+
+### Where Effect UI is stronger
+
+- **A component kit.** `@effect/ui-kit` ships 45 unstyled, accessible components (Calendar,
+  DatePicker, Combobox, Dialog, VirtualList, Typeahead and more). Spar has none.
+- **Testing a screen as data.** `Story` sends messages and resolves Commands by hand, and
+  `HtmlScene` clicks by role, both with no browser and no clock. Spar tests stores as services
+  and components by role in a page.
+- **Every message of a component in one place,** `update` keyed by message tag: leave one out
+  and it does not compile.
+- **The causal chain in the devtools:** each entry links to what sent it and to where each
+  Command it issued ended, and why.
+- **Breadth for its age:** SSR with hydration, a router, `Component.lazy` for code splitting,
+  keep-alive children, debounced and many-at-once queries, and a terminal host on OpenTUI.
+- **It is Effect's own,** and is likely to be what an Effect user reaches for first.
+
+### Where Spar is stronger
+
+- **A rule written once cannot be forgotten.** `refuses` on a task, and the build refusing
+  mistakes it can see (the `SPAR_` codes, each with its fix). Effect UI's
+  guards are code in each `update` branch.
+- **A view runs once.** Reactive values update the nodes that show them; Effect UI renders the
+  instance again and patches what changed (with `h.lazy` to skip unchanged rows).
+- **Traces.** Every command, task, query and call is an Effect span, drawn as a waterfall in the
+  devtools with no collector. Effect UI's core has no spans at 6f86af8; its log is the record.
+- **The log is the state.** Always on, replayed to rebuild state, rewound and forked, and kept on
+  the device for a saved store; an outbox resends what the server has not confirmed.
+- **Data where it is used.** A component asks for a query in its own Effect, and a reactive input
+  makes a dependent query wait by itself. In Effect UI a component declares its queries by name
+  with their args, which is close; a query's result stays beside the Model in both.
+
+### Speed and size
+
+Both are in `docs/benchmarks.md`, measured on the same CI box as the others. The table app is
+57.0 kB gzipped in Spar and 60.5 kB in Effect UI at 6f86af8.
 
 
 # Spar beside Solid 2.0

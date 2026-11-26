@@ -5,6 +5,7 @@
     "src/nav-spar",
     "src/foldkit",
     "src/nav-foldkit",
+    "src/effect-ui",
     "src/shared",
     "src/nav-shared",
     "scripts",
