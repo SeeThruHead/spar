@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "@effect/vitest"
-import { Deferred, Effect, Fiber, Predicate, Ref, Stream } from "effect"
+import { Deferred, Effect, Fiber, Predicate, Ref, Schedule, Stream } from "effect"
 import { Tabs } from "spar"
+
+const firstHeard = (times: Ref.Ref<number>): Effect.Effect<number> =>
+  Ref.get(times).pipe(
+    Effect.filterOrFail((count) => count > 0),
+    Effect.retry(Schedule.spaced("2 millis")),
+    Effect.timeout("2 seconds"),
+    Effect.orDie,
+  )
 
 const queueingLocks = () => {
   const tails = new Map<string, Promise<unknown>>()
@@ -124,10 +132,7 @@ describe("tabs in a browser", () => {
       yield* Effect.sync(() => neighbour.postMessage("ledger"))
 
       expect(yield* Deferred.await(heard)).toBe("ledger")
-
-      yield* Effect.sleep("10 millis")
-
-      expect(yield* Ref.get(times)).toBe(1)
+      expect(yield* firstHeard(times)).toBe(1)
       expect(closed.mock.calls).toHaveLength(0)
 
       yield* Effect.sync(() => window.dispatchEvent(new StorageEvent("storage", { key: "other" })))

@@ -9,20 +9,20 @@ A component is `compose(...enhancers)((props) => <jsx />)`: enhancers first, the
 inline. Each enhancer is a function from the props so far to an Effect of what it adds; the view's
 props are inferred from them. Enhancers and the view run once, on mount.
 
-| Function                                                  | What it adds                                                                                                                                                                 |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `compose(...enhancers)(view)`                             | A component. Called without the view, a group of enhancers that is itself an enhancer.                                                                                       |
-| `withProps({ name: Schema })`                             | The props its parent passes in JSX, each with a Schema. A wrong prop in the parent's JSX is a compile error.                                                                 |
-| `withStore(Store, (store) => props)`                      | Values and commands read from a store, or from any service with the same shape.                                                                                              |
-| `withUiState(name, Schema, initial)`                      | One piece of UI state, under `name`, kept in the UI tree and rewound with everything else.                                                                                   |
-| `withQuery(name, Query, (props) => input)`                | A query's handle under `name`, asked with an input made from the props.                                                                                                      |
-| `withHandlers((props) => handlers)`                       | Plain values or actions made from the props.                                                                                                                                 |
-| `withEffectProps((props) => effect)`                      | The props an Effect makes from the props so far, for example `withEffectProps(Effect.fnUntraced(function* (props) { ... }))`. Use it rather than an untyped inline function. |
-| `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                                                                                               |
-| `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                                                                                      |
-| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one; `by` gives each row's key, a string or a number.                                                                         |
-| `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                                                                                  |
-| `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin.                               |
+| Function                                                  | What it adds                                                                                                                                                                                                     |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compose(...enhancers)(view)`                             | A component. Called without the view, a group of enhancers that is itself an enhancer.                                                                                                                           |
+| `withProps({ name: Schema })`                             | The props its parent passes in JSX, each with a Schema. A wrong prop in the parent's JSX is a compile error.                                                                                                     |
+| `withStore(Store, (store) => props)`                      | Values and commands read from a store, or from any service with the same shape.                                                                                                                                  |
+| `withUiState(name, Schema, initial)`                      | One piece of UI state, under `name`, kept in the UI tree and rewound with everything else.                                                                                                                       |
+| `withQuery(name, Query, (props) => input)`                | A query's handle under `name`, asked with an input made from the props.                                                                                                                                          |
+| `withHandlers((props) => handlers)`                       | Plain values or actions made from the props.                                                                                                                                                                     |
+| `withEffectProps((props) => effect)`                      | The props an Effect makes from the props so far, for example `withEffectProps(Effect.fnUntraced(function* (props) { ... }))`. Use it rather than an untyped inline function.                                     |
+| `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                                                                                                                                   |
+| `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                                                                                                                          |
+| `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one; `by` gives each row's key, a string or a number. `item` is a `Reactive` of the row, not the row: read a field with `Reactive.map(item, (row) => row.label)`. |
+| `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                                                                                                                      |
+| `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin.                                                                   |
 
 A child component is written in JSX inside the view: `<Dropdown label="Sort by" onPick={pick} />`.
 It keeps its own UI state, and runs with the services of the component that draws it. What it
@@ -204,6 +204,11 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 `Handle.make` in a component's Effect, `ref={handle}` on an element, then `Handle.focus(handle)`,
 `Handle.focusInPlace(handle)` (focus without scrolling the page, as the router does after going
 back), `Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
+
+`Handle.measure(handle)` is an `Effect<Option<Box>>`: `Option.none()` while nothing is attached,
+and a `Box` is `{ x, y, width, height }` in pixels, not a DOMRect (there is no `top`, `left`,
+`right` or `bottom`; the bottom edge is `y + height`). Read it with `Option.match` or
+`Option.map(box => box.y + box.height)`.
 
 ## Form
 

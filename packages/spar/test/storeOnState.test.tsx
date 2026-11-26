@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Effect, FiberHandle, Layer, Schedule, Schema } from "effect"
+import { Context, Effect, FiberHandle, Layer, Option, Schedule, Schema } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import { Store, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import * as State from "../src/State.ts"
+import * as Cell from "../src/internal/cell.ts"
 import { Tree, UiTree } from "../src/internal/uiTree.ts"
 
 const keepingLayer = Layer.sync(UiTree, () => {
@@ -14,6 +15,22 @@ const keepingLayer = Layer.sync(UiTree, () => {
 
   return tree
 })
+
+const lastInspected = Cell.make<Option.Option<Store.Inspected>>(Option.none())
+
+const capturing = {
+  keepStates: 1000,
+  register: (store: Store.Inspected) => Effect.sync(() => lastInspected.write(Option.some(store))),
+}
+
+const inspectedStore = Effect.orDie(
+  Effect.flatMap(
+    Effect.sync(() => lastInspected.read()),
+    (found) => Effect.fromNullishOr(Option.getOrUndefined(found)),
+  ),
+)
+
+const inspectedLog = Effect.flatMap(inspectedStore, (store) => store.log.get)
 
 const Counting = Schema.Struct({ count: Schema.Int, resetting: Schema.Boolean })
 
@@ -185,6 +202,42 @@ describe("a store on one state", () => {
       )
 
       expect(restarted).toBe(3)
+    }),
+  )
+
+  it.live("logs what it restored, so its log replays to the same state in a fresh page", () =>
+    Effect.gen(function* () {
+      const storage = yield* Layer.build(KeyValueStore.layerMemory)
+      const saved = CounterModel.layerSaved.pipe(
+        Layer.provide(Layer.succeedContext(storage)),
+        Layer.provideMerge(keepingLayer),
+      )
+
+      yield* Effect.scoped(
+        Effect.provide(
+          Effect.flatMap(CounterModel, (counter) => counter.commands.added(3)),
+          saved,
+        ),
+      )
+
+      const restored = yield* Effect.scoped(
+        Effect.provide(inspectedLog, saved).pipe(Effect.provideService(Store.Inspector, capturing)),
+      )
+      const replayed = yield* Effect.scoped(
+        Effect.provide(
+          Effect.gen(function* () {
+            const fresh = yield* inspectedStore
+
+            yield* fresh.load(restored)
+
+            return yield* fresh.stateAt(restored.at(-1)?.seq ?? 0)
+          }),
+          CounterModel.layer.pipe(Layer.provideMerge(keepingLayer)),
+        ).pipe(Effect.provideService(Store.Inspector, capturing)),
+      )
+
+      expect(restored.map((entry) => entry.action)).toEqual(["restored from storage"])
+      expect(replayed).toEqual({ count: 3, resetting: false })
     }),
   )
 
