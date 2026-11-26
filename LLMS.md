@@ -3744,11 +3744,12 @@ and the backend (`docs/devtools-compared.md`).
   Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
-- **Speed on a few list operations, depending on the run.** In the run at 2fc0a51 Foldkit is
-  ahead of plain Spar at updating every 10th row (16.0 ms against 23.8; Spar's composed version
-  takes 8.4) and at replacing all rows (67.1 against 70.0). Earlier runs had it ahead at swapping
-  and removing instead, where Spar now leads, so a few milliseconds here are within the noise.
-  Spar uses less memory and ships less JavaScript (`docs/benchmarks.md`).
+- **Speed on a few list operations, in some runs.** In the run at 2fc0a51 Foldkit was ahead of
+  plain Spar at updating every 10th row (16.0 ms against 23.8) and at replacing all rows (67.1
+  against 70.0), and earlier runs had it ahead at swapping and removing. In the run at 7ce3181
+  Spar was ahead or level on every operation (swapping two rows 24.2 against 24.1), so a few
+  milliseconds here are within the noise. Spar uses less memory and ships less JavaScript
+  (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
 - **It is not tied to the DOM.** Effect UI, its successor, has a terminal host on OpenTUI. Spar
@@ -3982,12 +3983,20 @@ docs show.
 ### Speed and size
 
 Both are in `docs/benchmarks.md`, measured on the same CI box as the others. In the run at
-2fc0a51, Effect UI was ahead of Spar at selecting a row (5.3 ms against 7.2), clearing 1,000 rows
-(7.3 against 13.0) and starting up (26.9 against 34.5). Spar was ahead at swapping (12.9 against
-18.4), removing one row (16.4 against 23.2), replacing all rows (70.0 against 81.8) and changing
-one row among 10,000 (70.2 ms against 98.0 to the next frame, 1.4 against 8.3 until the DOM
-changed). Creating rows and memory were close. The table app ships 55.9 kB gzipped in Spar and
-59.1 kB in Effect UI. A few milliseconds move between runs, so read the ratios, not single cells.
+7ce3181, Spar was ahead of Effect UI at selecting a row (3.1 ms against 3.9), updating every
+10th row (18.6 against 29.0) and changing one row among 10,000 until the DOM changed (2.4 against
+15.7). Effect UI was ahead at clearing 1,000 rows (10.4 against 14.7), swapping two rows (17.8
+against 24.2) and starting up (38.8 against 45.1). Creating, replacing and removing rows, changing
+one row among 10,000 to the next frame, and memory were close. The table app ships 56.1 kB
+gzipped in Spar and 59.1 kB in Effect UI. That run was slower than usual for every framework on
+the box, and several milliseconds move between runs, so read the ratios, not single cells.
+
+What is left in clearing, profiled on the box with `bun run --cwd apps/bench profile`: removing
+the rows takes Spar about as long as Effect UI, since the DOM is the same and both take it out in
+one call. The rest is that each Spar row owns its listeners and subscriptions and lets them go,
+where Effect UI's rows hold no listeners (it listens once, on the root). Startup is spread over
+module evaluation and setting up the runtime, layers and store, with no step much bigger than
+the others.
 
 
 # Spar beside Solid 2.0
