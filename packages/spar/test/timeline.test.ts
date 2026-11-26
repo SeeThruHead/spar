@@ -260,6 +260,17 @@ describe("one log of everything that happened", () => {
     ).toEqual(["input from test/Users . value"])
     expect(
       Devtools.barsOf([
+        {
+          span: {
+            ...recorded("deliver", null, 1, 2, false),
+            attributes: { "spar.background": "outbox", "spar.view": "Desk" },
+          },
+          where: "page",
+        },
+      ]).map((bar) => bar.note),
+    ).toEqual(["in the background: the click was done when it was saved · in Desk"])
+    expect(
+      Devtools.barsOf([
         { span: recorded("whole", null, 0, 100, false), where: "page" },
         { span: recorded("test/Users/requested", "whole", 10, 11, false), where: "page" },
         {

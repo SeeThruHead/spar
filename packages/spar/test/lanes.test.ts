@@ -54,6 +54,9 @@ describe("an event's row", () => {
     expect(summaryOfMoment({ ...moment(3, "ui", "Shell . draft"), detail: "x".repeat(100) })).toBe(
       `Shell . draft "${"x".repeat(78)}…`,
     )
+    expect(summaryOfMoment({ ...moment(4, "ui", "Shell . draft"), detail: "x".repeat(78) })).toBe(
+      `Shell . draft "${"x".repeat(78)}"`,
+    )
   })
 })
 
@@ -115,6 +118,15 @@ describe("a wait between spans", () => {
     expect(waitBefore(later, siblings([["just", "deliver", 80]]))).toBe("after a 20 ms wait")
     expect(waitBefore(later, siblings([["short", "deliver", 81]]))).toBe("")
     expect(waitBefore(later, [{ span: later, where: "page" as const }])).toBe("")
+    expect(
+      waitBefore(
+        later,
+        siblings([
+          ["early", "deliver", 50],
+          ["overlapping", "deliver", 120],
+        ]),
+      ),
+    ).toBe("after a 50 ms wait")
   })
 })
 
@@ -144,6 +156,7 @@ describe("what an action changed in a store", () => {
     expect(fieldChanges(1, 2)).toEqual(["1 → 2"])
     expect(fieldChanges([1], [1])).toEqual([])
     expect(fieldChanges({ count: 1 }, { count: 1 })).toEqual([])
+    expect(fieldChanges({ count: 1 }, 5)).toEqual(['{"count":1} → 5'])
   })
 })
 
