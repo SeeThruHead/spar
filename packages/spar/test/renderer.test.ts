@@ -116,6 +116,7 @@ describe("the renderer", () => {
       expect(icon.namespaceURI).toBe("http://www.w3.org/2000/svg")
       expect(circle?.namespaceURI).toBe("http://www.w3.org/2000/svg")
       expect(circle?.getAttribute("class")).toBe("dot")
+      expect(circle?.getAttribute("tabindex")).toBe("0")
       expect(paragraph.namespaceURI).toBe("http://www.w3.org/1999/xhtml")
       expect(icon.getAttribute("width")).toBe("16")
 

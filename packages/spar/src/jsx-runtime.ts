@@ -97,7 +97,6 @@ type SvgAttributeNames =
   | "filter"
   | "href"
   | "id"
-  | "tabindex"
   | "gradientUnits"
   | "gradientTransform"
   | "patternUnits"
@@ -125,7 +124,9 @@ type SvgAttributeNames =
   | "font-family"
   | "font-weight"
 
-type SvgAttributes = { readonly [K in SvgAttributeNames]?: Attribute<string | number> }
+type SvgAttributes = { readonly [K in SvgAttributeNames]?: Attribute<string | number> } & {
+  readonly tabIndex?: Attribute<number>
+}
 
 type Html<Tag extends keyof HTMLElementTagNameMap> = Common &
   Properties<HTMLElementTagNameMap[Tag]> &

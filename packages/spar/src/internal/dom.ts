@@ -37,7 +37,7 @@ export const setText = (node: Text, value: unknown): void => {
 }
 
 const isProperty = (node: Host, name: string): boolean => {
-  if (node.namespaceURI === svgNamespace) return false
+  if (node.namespaceURI === svgNamespace) return name === "tabIndex"
   if (attributeNames.test(name)) return false
 
   return name in node
