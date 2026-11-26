@@ -1,6 +1,6 @@
 ---
 id: spa-ojvy
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-11-20T08:13:04Z
@@ -31,3 +31,7 @@ Decided not to strip diagnostic text from production builds: Diagnostics.ts is 1
 **2026-11-26T11:12:39Z**
 
 26 Nov, main d4481d6 + PR 14: the benchmark app is 164.0 kB minified, 57.0 kB gzipped (was 72.2). By source map (scratch bundle-sources.ts): effect 122.3 kB (internal/effect 26.6, SchemaAST 25.9, core 5.1, Schema 5.0, Duration 5.0, Queue 4.0), spar 38.2 kB (render 6.1, uiTree 4.0, dom 3.7, store 3.7, said 3.5, html 1.8, App 1.5, Tabs 1.1), app 3.5 kB. What Spar could still avoid (Queue/Channel/MutableList under Reactive and listen, html.ts reached through App's route rehearsal, Tabs through State) is about 10 kB minified, a few kB gzipped. The rest is Effect's runtime and Schema, the floor. Left open, low priority.
+
+**2026-11-26T16:27:35Z**
+
+Measured at 813ac03 (CI bench 56.1 kB gz with Vite; Bun build 59.4). Effect floor (service, layer, Schema, stream, span) 35.2 kB gz. Above it, by experiment on top of the floor: Stream.callback (Queue) 1.4 kB gz, the JSON codecs (toCodecJson, fromJsonString) 1.9 kB gz, and Spar's own code plus the app 19.6 kB gz built alone (53.2 kB minified; biggest render 6.3, dom 4.3, store 4.1, uiTree 4.0, said 4.0 kB minified). After minifying, Schema no longer keeps http/Cookies or net/* (only encoding/Base64 2.1 kB, in the floor too). Each piece is a feature in use: reactive changes are a Stream, the log and saved state encode JSON, the time-travel tree holds the log, said holds the diagnostic texts (kept, see the note above). The largest single saving is about 1.4 kB gz, by hand-writing a queue under Reactive.changes, which is not worth it. Spar now ships less than Effect UI (59.1) and React (68.0). DECISION: close; no structural change.
