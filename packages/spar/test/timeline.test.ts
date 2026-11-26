@@ -408,6 +408,7 @@ describe("one log of everything that happened", () => {
         state: Reactive.succeed(null),
         stateAt: () => Effect.succeed(null),
         log: Reactive.succeed([]),
+        recording: Effect.succeed({ store: "test/Late", start: null, steps: [] }),
         viewing: Reactive.succeed(null),
         travelTo: (seq) => Ref.update(sentTo, (all) => [...all, seq]),
         actions: () => [],

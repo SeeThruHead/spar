@@ -72,6 +72,16 @@ export const atRun = {
     what: "A Play test asked for something by role and name, and the settled page did not have it.",
     fix: "Check the role and name against what the view draws, and that the test's layer answers what the page needs. A Play waits only until the page settles; time that has to pass is moved with TestClock.adjust first.",
   },
+  SPAR_REPLAY_DIVERGED: {
+    kind: "run",
+    what: "A recorded session was replayed against the store, and one of its steps made a different state than it did when it was recorded.",
+    fix: "Read the step the report names, and the recorded and replayed states beside it. If the change is a bug, fix the action's reducer. If the new state is right, record the session again from the devtools.",
+  },
+  SPAR_REPLAY_UNREADABLE: {
+    kind: "run",
+    what: "A recorded session holds a state or payload that the store's schemas no longer read.",
+    fix: "The store's state or that action's payload schema changed since the session was recorded. Record it again, or keep the old shape readable with a Schema transformation.",
+  },
 } as const satisfies Readonly<Record<string, Diagnostic>>
 
 export type RunCode = keyof typeof atRun

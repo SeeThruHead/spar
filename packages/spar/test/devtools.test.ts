@@ -59,6 +59,12 @@ const exported = (): string => {
   return box instanceof HTMLTextAreaElement ? box.value : ""
 }
 
+const recorded = (): string => {
+  const box = screen.getByLabelText("test/Tally recording")
+
+  return box instanceof HTMLTextAreaElement ? box.value : ""
+}
+
 const problem = (): string | null => screen.getByLabelText("test/Tally problem").textContent
 
 const waiting = (): string | null => screen.getByLabelText("Outbox waiting").textContent
@@ -157,6 +163,12 @@ describe("devtools", () => {
           [2, { by: 10 }],
           [3, { by: 100 }],
         ])
+
+        yield* Testing.click("button", "Record as a test")
+        yield* Testing.eventually(() => expect(recorded()).toContain('"state":{"count":111}'))
+        expect(
+          yield* Testing.replay(Tally, yield* Schema.decodeEffect(Store.RecordingText)(recorded())),
+        ).toEqual({ count: 111 })
 
         yield* Testing.fill(
           "textbox",

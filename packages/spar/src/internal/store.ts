@@ -2,7 +2,17 @@ import { Context, Effect, Fiber, Layer, Option, Record, Schema, Semaphore, Struc
 import type { Scope } from "effect"
 import * as Cell from "./cell.ts"
 import { UnknownAction } from "./journal.ts"
-import type { Action, Actions, Entry, Mode, Selector, Selectors, Task, Tasks } from "./journal.ts"
+import type {
+  Action,
+  Actions,
+  Entry,
+  Mode,
+  Recording,
+  Selector,
+  Selectors,
+  Task,
+  Tasks,
+} from "./journal.ts"
 import { sourced } from "./inspect.ts"
 import { noticed } from "./notice.ts"
 import { fromCell, map, zip } from "./reactive.ts"
@@ -33,6 +43,7 @@ export type Inspected = {
   readonly state: Reactive<unknown>
   readonly stateAt: (seq: number) => Effect.Effect<unknown>
   readonly log: Reactive<ReadonlyArray<Entry>>
+  readonly recording: Effect.Effect<Recording>
   readonly viewing: Reactive<number | null>
   readonly travelTo: (seq: number | null) => Effect.Effect<void>
   readonly actions: () => ReadonlyArray<{ readonly name: string; readonly schema: Schema.Top }>
@@ -205,6 +216,52 @@ const seededFrom = <State>(
 
 const finishedName = (name: string): string => `${name} finished`
 
+const beforeFirst = (entries: ReadonlyArray<Entry>): number =>
+  (entries.at(0)?.seq ?? Number.POSITIVE_INFINITY) - 1
+
+const tasksOf = <T extends object>(given: T | undefined): T => given ?? Object.create(null)
+
+type Reducing<State> = { readonly reducer: Action<State, unknown>["reducer"] }
+
+export type Reducers<State> = Readonly<Record<string, Reducing<State>>>
+
+export const reducersOf = <
+  State,
+  A extends Actions<State>,
+  S extends Selectors<State>,
+  T extends Tasks<State, Needs>,
+  Needs,
+>(
+  definition: Definition<State, A, S, T, Needs>,
+): Reducers<State> => {
+  const decodeState = Schema.decodeUnknownEffect(Schema.toCodecJson(definition.state))
+  const unchanged: Reducing<State> = { reducer: () => Effect.succeed((now: State) => now) }
+  const replaced: Reducing<State> = {
+    reducer: (payload) => Effect.map(decodeState(payload), (whole) => () => whole),
+  }
+  const jobs: Readonly<Record<string, Task<State, unknown, string, Needs>>> = tasksOf(
+    definition.tasks,
+  )
+
+  return {
+    ...Object.fromEntries(replacingWholeState.map((name) => [name, replaced])),
+    ...definition.actions,
+    ...Record.map(jobs, () => unchanged),
+    ...Object.fromEntries(
+      Record.toEntries(jobs).map(([name, job]) => [finishedName(name), { reducer: job.finished }]),
+    ),
+  }
+}
+
+export const reducerOf = <State>(
+  reducers: Reducers<State>,
+  name: string,
+): Effect.Effect<Reducing<State>, UnknownAction> =>
+  Effect.mapError(
+    Effect.fromNullishOr(Record.get(reducers, name).pipe(Option.getOrUndefined)),
+    () => new UnknownAction({ action: name }),
+  )
+
 const piledUpAt = 3
 
 type Holding = { readonly count: Cell.Cell<number>; readonly refused: Cell.Cell<number> }
@@ -217,8 +274,6 @@ const runEnded = ({ count, refused }: Holding): Effect.Effect<void> =>
     count.write(count.read() - 1)
     if (count.read() === 0) refused.write(0)
   })
-
-const tasksOf = <T extends object>(given: T | undefined): T => given ?? Object.create(null)
 
 type Starter = (work: Effect.Effect<void>) => Effect.Effect<void>
 
@@ -425,25 +480,8 @@ export const made = Effect.fnUntraced(function* <
 
   tree.keepAtLeast(inspector.keepStates)
   const encodeState = Schema.encodeEffect(Schema.toCodecJson(definition.state))
-  type Reducing = { readonly reducer: Action<State, unknown>["reducer"] }
-  const unchanged: Reducing = { reducer: () => Effect.succeed((now: State) => now) }
-  const decodeState = Schema.decodeUnknownEffect(Schema.toCodecJson(definition.state))
-  const replaced: Reducing = {
-    reducer: (payload) => Effect.map(decodeState(payload), (whole) => () => whole),
-  }
-  const logged: Readonly<Record<string, Reducing>> = {
-    ...Object.fromEntries(replacingWholeState.map((name) => [name, replaced])),
-    ...named,
-    ...Record.map(jobs, () => unchanged),
-    ...Object.fromEntries(
-      Record.toEntries(jobs).map(([name, job]) => [finishedName(name), { reducer: job.finished }]),
-    ),
-  }
-  const handlerOf = (name: string) =>
-    Effect.mapError(
-      Effect.fromNullishOr(Record.get(logged, name).pipe(Option.getOrUndefined)),
-      () => new UnknownAction({ action: name }),
-    )
+  const logged = reducersOf(definition)
+  const handlerOf = (name: string) => reducerOf(logged, name)
   const live = map(state.log, (written) =>
     written
       .filter((entry) => entry.path.length === 0 && entry.slot === slot.name)
@@ -474,6 +512,23 @@ export const made = Effect.fnUntraced(function* <
     )
 
   const both = yield* zip(live, fromCell(borrowed))
+  const shownLog = map(both, ([entries, past]) =>
+    Option.match(past, { onNone: () => entries, onSome: (loaded) => loaded.entries }),
+  )
+  const valueAt = (seq: number): Effect.Effect<State> =>
+    Option.match(borrowed.read(), {
+      onNone: () => slot.valueAt(seq),
+      onSome: (past) => Effect.succeed(stateAt(past, definition.initialState, seq)),
+    })
+  const encodedAt = (seq: number) => Effect.orDie(Effect.flatMap(valueAt(seq), encodeState))
+  const recordedFrom = (entries: ReadonlyArray<Entry>): Effect.Effect<Recording> =>
+    Effect.all({
+      store: Effect.succeed(key),
+      start: encodedAt(beforeFirst(entries)),
+      steps: Effect.forEach(entries, (entry) =>
+        Effect.map(encodedAt(entry.seq), (after) => ({ ...entry, state: after })),
+      ),
+    })
 
   yield* Effect.addFinalizer(() => inspector.forget?.(key) ?? Effect.void)
   yield* inspector.register({
@@ -481,14 +536,9 @@ export const made = Effect.fnUntraced(function* <
     base: 0,
     encoded: Effect.orDie(Effect.flatMap(slot.value.get, encodeState)),
     state: slot.value,
-    stateAt: (seq) =>
-      Option.match(borrowed.read(), {
-        onNone: () => slot.valueAt(seq),
-        onSome: (past) => Effect.succeed(stateAt(past, definition.initialState, seq)),
-      }),
-    log: map(both, ([entries, past]) =>
-      Option.match(past, { onNone: () => entries, onSome: (loaded) => loaded.entries }),
-    ),
+    stateAt: valueAt,
+    log: shownLog,
+    recording: Effect.flatMap(shownLog.get, recordedFrom),
     viewing: fromCell(viewing),
     travelTo: (seq) => (seq === null ? backToLive : shownFrom(seq)),
     actions: () =>

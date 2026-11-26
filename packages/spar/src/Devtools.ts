@@ -466,9 +466,16 @@ const StorePanel = compose(
     const exported = yield* UiState.make("exported", Schema.String, "")
     const pasted = yield* UiState.make("pasted", Schema.String, "")
     const problem = yield* UiState.make("problem", Schema.String, "")
+    const recorded = yield* UiState.make("recorded", Schema.String, "")
     const say = (text: string) => run(UiState.set(problem, text))
 
     return {
+      recorded,
+      onRecord: store.recording.pipe(
+        Effect.flatMap(Schema.encodeEffect(Store.RecordingText)),
+        Effect.orDie,
+        Effect.flatMap((text) => run(UiState.set(recorded, text))),
+      ),
       exported,
       pasted,
       problem,

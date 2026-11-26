@@ -1753,6 +1753,27 @@ as what a user does and needs no `eventually`. A page that never stops changing 
 `NotOnPage` (`SPAR_PLAY_NOT_ON_PAGE`). `packages/spar/test/play.test.tsx` runs the reset counter's
 real task this way, and a query that answers after a second of test time.
 
+`Testing.replay(Store, recording)` turns a recorded session into a regression test. In the
+devtools, a store's "Record as a test" button copies its log with the state each step made
+(`Store.RecordingText`: the start state, then each action, payload and state). Save it beside a
+test and replay it:
+
+```ts
+const replayedFrom = (saved: string) =>
+  Effect.flatMap(Schema.decodeEffect(Store.RecordingText)(saved), (recording) =>
+    Testing.replay(Tally, recording),
+  )
+```
+
+(`packages/spar/test/replay.test.ts`)
+
+The replay runs each step's reducer from the recorded start, without running tasks: a task's
+finish is replayed from the result that was logged. It succeeds with the last state, and fails at
+the first step whose state differs with `Diverged` (`SPAR_REPLAY_DIVERGED`), which names the step
+and gives the recorded and replayed states. An action the store no longer has fails with
+`Store.UnknownAction`, and a state or payload its schemas no longer read with `Unreadable`
+(`SPAR_REPLAY_UNREADABLE`).
+
 ### @spar/ui
 
 `Button`, `SubmitButton`, `TextField`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Menu`,
@@ -4357,6 +4378,22 @@ Reported by: The running app: an error's message, or an entry in the log.
 A Play test asked for something by role and name, and the settled page did not have it.
 
 Fix: Check the role and name against what the view draws, and that the test's layer answers what the page needs. A Play waits only until the page settles; time that has to pass is moved with TestClock.adjust first.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_REPLAY_DIVERGED
+
+A recorded session was replayed against the store, and one of its steps made a different state than it did when it was recorded.
+
+Fix: Read the step the report names, and the recorded and replayed states beside it. If the change is a bug, fix the action's reducer. If the new state is right, record the session again from the devtools.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+#### SPAR_REPLAY_UNREADABLE
+
+A recorded session holds a state or payload that the store's schemas no longer read.
+
+Fix: The store's state or that action's payload schema changed since the session was recorded. Record it again, or keep the old shape readable with a Schema transformation.
 
 Reported by: The running app: an error's message, or an entry in the log.
 
