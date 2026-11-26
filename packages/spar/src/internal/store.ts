@@ -12,6 +12,7 @@ import * as State from "../State.ts"
 import * as Timeline from "../Timeline.ts"
 import type { Mountable } from "../View.ts"
 import { within } from "./viewParts.ts"
+import { replacingWholeState } from "./written.ts"
 
 type PayloadOf<A> = A extends {
   readonly decode: (payload: Schema.Json) => Effect.Effect<infer Payload, Schema.SchemaError>
@@ -343,7 +344,7 @@ export const made = Effect.fnUntraced(function* <
     Effect.flatMap(slot.value.get, (now) =>
       Effect.flatMap(job.work(payload, now), (result) =>
         Effect.flatMap(Effect.orDie(job.finished(result)), (reduce) =>
-          applied(finishedName(name), reduce, result),
+          traced(finishedName(name), applied(finishedName(name), reduce, result)),
         ),
       ),
     )
@@ -389,7 +390,12 @@ export const made = Effect.fnUntraced(function* <
   const encodeState = Schema.encodeEffect(Schema.toCodecJson(definition.state))
   type Reducing = { readonly reducer: Action<State, unknown>["reducer"] }
   const unchanged: Reducing = { reducer: () => Effect.succeed((now: State) => now) }
+  const decodeState = Schema.decodeUnknownEffect(Schema.toCodecJson(definition.state))
+  const replaced: Reducing = {
+    reducer: (payload) => Effect.map(decodeState(payload), (whole) => () => whole),
+  }
   const logged: Readonly<Record<string, Reducing>> = {
+    ...Object.fromEntries(replacingWholeState.map((name) => [name, replaced])),
     ...named,
     ...Record.map(jobs, () => unchanged),
     ...Object.fromEntries(

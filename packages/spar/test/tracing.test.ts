@@ -17,6 +17,14 @@ class Visits extends Store.Tag<Visits>()("test/Visits", {
     visited: Store.action(Schema.Void, (state: State) => ({ visits: state.visits + 1 })),
   },
   selectors: { visits: Store.selector(Schema.Finite, (state: State) => state.visits) },
+  tasks: {
+    cleared: Store.task(Schema.Void, {
+      result: Schema.Void,
+      run: () => Effect.void,
+      finish: (): State => ({ visits: 0 }),
+      mode: "switch",
+    }),
+  },
 }) {}
 
 describe("tracing", () => {
@@ -76,6 +84,40 @@ describe("tracing", () => {
           .map((span) => span.attributes["spar.entry"]),
       ).toEqual(logged)
       expect(logged).toHaveLength(2)
+    }),
+  )
+
+  it.effect("a task's finish runs in its own span, which names the log entry it made", () =>
+    Effect.gen(function* () {
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+      const keeping = Layer.sync(UiTree, () => {
+        const tree = new Tree()
+
+        tree.keepAtLeast(10)
+
+        return tree
+      })
+
+      const logged = yield* Effect.gen(function* () {
+        const visits = yield* Visits
+        const state = yield* OneState.current
+
+        yield* visits.tasks.cleared()
+        yield* Effect.yieldNow
+
+        return (yield* state.log.get).map((entry) => [entry.name, String(entry.seq)])
+      }).pipe(Effect.provide(Visits.layer.pipe(Layer.provideMerge(keeping))), Effect.provide(spans))
+
+      const finished = logged.filter(([name]) => name === "cleared finished")
+
+      expect(finished).toHaveLength(1)
+      expect(
+        buffer
+          .recent()
+          .filter((span) => span.name === "test/Visits/cleared finished")
+          .map((span) => span.attributes["spar.entry"]),
+      ).toEqual(finished.map(([, seq]) => seq))
     }),
   )
 })

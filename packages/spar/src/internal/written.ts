@@ -2,6 +2,12 @@ import { Effect, Option } from "effect"
 import type { Schema } from "effect"
 import type { Kept, Trace } from "./uiTree.ts"
 
+export const restoredFromStorage = "restored from storage"
+
+export const fromAnotherTab = "another tab"
+
+export const replacingWholeState: ReadonlyArray<string> = [restoredFromStorage, fromAnotherTab]
+
 export const tracedBy: Effect.Effect<Trace> = Effect.map(
   Effect.option(Effect.currentSpan),
   (span) =>

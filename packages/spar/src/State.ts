@@ -6,7 +6,7 @@ import { fromCell } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { Tree as UiTreeClass, UiTree } from "./internal/uiTree.ts"
 import type { Kept, Snapshot, Tree, Written } from "./internal/uiTree.ts"
-import { writeTo } from "./internal/written.ts"
+import { fromAnotherTab, restoredFromStorage, writeTo } from "./internal/written.ts"
 
 export type { Snapshot, Written } from "./internal/uiTree.ts"
 
@@ -46,25 +46,31 @@ const Saving = Context.Reference<Option.Option<KeyValueStore.KeyValueStore>>("sp
 
 const storedKey = (path: ReadonlyArray<string>): string => `spar/state/${path.join(" / ")}`
 
-const startingValue = <A, I>(
+const savedValue = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
   path: ReadonlyArray<string>,
   schema: Schema.Codec<A, I>,
-  initial: A,
-): Effect.Effect<A> =>
+): Effect.Effect<Option.Option<A>> =>
   Option.match(saving, {
-    onNone: () => Effect.succeed(initial),
+    onNone: () => Effect.succeedNone,
     onSome: (store) =>
       Effect.map(Effect.orDie(store.get(storedKey(path))), (kept) =>
-        Option.getOrElse(
-          Option.flatMap(
-            Option.fromUndefinedOr(kept),
-            Schema.decodeUnknownOption(Schema.fromJsonString(Schema.toCodecJson(schema))),
-          ),
-          () => initial,
+        Option.flatMap(
+          Option.fromUndefinedOr(kept),
+          Schema.decodeUnknownOption(Schema.fromJsonString(Schema.toCodecJson(schema))),
         ),
       ),
   })
+
+const replacedBy = <A, I>(
+  kept: Kept<A>,
+  schema: Schema.Codec<A, I>,
+  name: string,
+  value: A,
+): Effect.Effect<void> =>
+  Effect.flatMap(Effect.orDie(Schema.encodeEffect(Schema.toCodecJson(schema))(value)), (payload) =>
+    writeTo(kept, name, value, payload),
+  )
 
 const writtenAndSaved = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
@@ -107,9 +113,12 @@ const followOtherTabs = <A, I>(
   Effect.forEach(Option.toArray(saving), () =>
     Effect.forkScoped(
       Stream.runForEach(tabs.announced(storedKey(path)), () =>
-        Effect.flatMap(
-          Effect.suspend(() => startingValue(saving, path, schema, kept.current())),
-          (now) => writeTo(kept, "another tab", now),
+        Effect.flatMap(savedValue(saving, path, schema), (found) =>
+          Effect.forEach(
+            Option.toArray(found),
+            (now) => replacedBy(kept, schema, fromAnotherTab, now),
+            { discard: true },
+          ),
         ),
       ),
       { startImmediately: true },
@@ -124,14 +133,19 @@ const slotIn = (tree: Tree) =>
   ): Effect.fn.Return<Slot<A>, never, Scope.Scope> {
     const saving = yield* Saving
     const tabs = yield* Tabs.Tabs
-    const start = yield* startingValue(saving, path, schema, initial)
+    const saved = yield* savedValue(saving, path, schema)
     const kept = yield* Effect.acquireRelease(
-      Effect.sync(() => tree.hold(tree.root(), path.join(" / "), schema, start)),
+      Effect.sync(() => tree.hold(tree.root(), path.join(" / "), schema, initial)),
       (held) => Effect.sync(() => tree.release(held)),
     )
     const written = (name: string, next: (now: A) => A, payload?: Schema.Json) =>
       writtenAndSaved(saving, tabs, path, schema, kept, name, next, payload)
 
+    yield* Effect.forEach(
+      Option.toArray(saved),
+      (value) => replacedBy(kept, schema, restoredFromStorage, value),
+      { discard: true },
+    )
     yield* followOtherTabs(saving, tabs, path, schema, kept)
 
     return {
