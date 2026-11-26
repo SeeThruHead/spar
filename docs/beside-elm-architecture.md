@@ -42,11 +42,11 @@ and the backend (`docs/devtools-compared.md`).
   Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
-- **Speed on a few list operations, depending on the run.** In the latest run of this repo's
-  benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
-  one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next
-  frame. Earlier runs ordered these differently, so a few milliseconds here are within the noise. Spar uses less memory and ships less
-  JavaScript (`docs/benchmarks.md`).
+- **Speed on a few list operations, depending on the run.** In the run at 2fc0a51 Foldkit is
+  ahead of plain Spar at updating every 10th row (16.0 ms against 23.8; Spar's composed version
+  takes 8.4) and at replacing all rows (67.1 against 70.0). Earlier runs had it ahead at swapping
+  and removing instead, where Spar now leads, so a few milliseconds here are within the noise.
+  Spar uses less memory and ships less JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
 - **It is not tied to the DOM.** Effect UI, its successor, has a terminal host on OpenTUI. Spar
