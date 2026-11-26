@@ -1,0 +1,219 @@
+import { describe, expect, it } from "@effect/vitest"
+import { Duration, Effect, Layer, Option, Ref, Schema } from "effect"
+import { TestClock } from "effect/testing"
+import { State as OneState, Store, Timeline } from "spar"
+
+const State = Schema.Struct({ count: Schema.Finite, delay: Schema.Finite })
+
+type State = typeof State.Type
+
+const initialState: State = { count: 0, delay: 2 }
+
+const counting = {
+  incremented: Store.action(Schema.Void, (state: State): State => ({
+    ...state,
+    count: state.count + 1,
+  })),
+}
+
+const selectors = { count: Store.selector(Schema.Finite, (state: State) => state.count) }
+
+const reset = (mode: Store.Mode, refuses: ReadonlyArray<"incremented" | "reset">) =>
+  Store.task(Schema.Void, {
+    result: Schema.Void,
+    run: (_: void, state: State) => Effect.sleep(Duration.seconds(state.delay)),
+    finish: (state: State): State => ({ ...state, count: 0 }),
+    mode,
+    refuses,
+  })
+
+class Held extends Store.Tag<Held>()("test/Held", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: { reset: reset("switch", ["incremented", "reset"]) },
+}) {}
+
+class Restarted extends Store.Tag<Restarted>()("test/Restarted", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: { reset: reset("switch", []) },
+}) {}
+
+const added = (mode: Store.Mode) =>
+  Store.task(Schema.Finite, {
+    result: Schema.Finite,
+    run: (by: number) => Effect.as(Effect.sleep(Duration.seconds(1)), by),
+    finish: (state: State, by: number): State => ({ ...state, count: state.count + by }),
+    mode,
+  })
+
+class Queued extends Store.Tag<Queued>()("test/Queued", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: { add: added("queue") },
+}) {}
+
+class Together extends Store.Tag<Together>()("test/Together", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: { add: added("concurrent") },
+}) {}
+
+const recorded = Effect.gen(function* () {
+  const notes = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
+
+  return {
+    notes,
+    recorder: Option.some((noted: Timeline.Noted) => Ref.update(notes, (all) => [...all, noted])),
+  }
+})
+
+const kinds = (notes: Ref.Ref<ReadonlyArray<Timeline.Noted>>, kind: Timeline.Kind) =>
+  Effect.map(Ref.get(notes), (all) =>
+    all.filter((noted) => noted.kind === kind).map((noted) => noted.name),
+  )
+
+const watched = <A, E, R>(
+  test: (notes: Ref.Ref<ReadonlyArray<Timeline.Noted>>) => Effect.Effect<A, E, R>,
+) =>
+  Effect.flatMap(recorded, ({ notes, recorder }) =>
+    Effect.provideService(test(notes), Timeline.Recorder, recorder),
+  )
+
+describe("a store's task", () => {
+  it.effect(
+    "refuses what it names while it runs, itself included, and ends by changing the state",
+    () =>
+      watched((notes) =>
+        Effect.gen(function* () {
+          const counter = yield* Held
+
+          yield* counter.commands.incremented()
+          yield* counter.tasks.reset()
+
+          expect(yield* counter.running.reset.get).toBe(true)
+
+          yield* counter.commands.incremented()
+          yield* counter.tasks.reset()
+
+          expect(yield* counter.select.count.get).toBe(1)
+
+          yield* TestClock.adjust(Duration.seconds(2))
+
+          expect(yield* counter.select.count.get).toBe(0)
+          expect(yield* counter.running.reset.get).toBe(false)
+
+          yield* counter.commands.incremented()
+
+          expect(yield* counter.select.count.get).toBe(1)
+          expect(yield* kinds(notes, "command")).toEqual([
+            "test/Held/incremented",
+            "test/Held/reset",
+            "test/Held/reset finished",
+            "test/Held/incremented",
+          ])
+          expect(
+            (yield* Ref.get(notes))
+              .filter((noted) => noted.kind === "refused")
+              .map((noted) => [noted.name, noted.detail]),
+          ).toEqual([
+            ["test/Held/incremented", { while: ["reset"] }],
+            ["test/Held/reset", { while: ["reset"] }],
+          ])
+        }).pipe(Effect.provide(Held.layer.pipe(Layer.provideMerge(OneState.layer)))),
+      ),
+  )
+
+  it.effect("in switch mode a second start replaces the first, which never finishes", () =>
+    watched((notes) =>
+      Effect.gen(function* () {
+        const counter = yield* Restarted
+
+        yield* counter.commands.incremented()
+        yield* counter.tasks.reset()
+        yield* TestClock.adjust(Duration.seconds(1))
+        yield* counter.tasks.reset()
+        yield* TestClock.adjust(Duration.seconds(1))
+
+        expect(yield* counter.select.count.get).toBe(1)
+        expect(yield* counter.running.reset.get).toBe(true)
+
+        yield* TestClock.adjust(Duration.seconds(1))
+
+        expect(yield* counter.select.count.get).toBe(0)
+        expect(yield* counter.running.reset.get).toBe(false)
+        expect(yield* kinds(notes, "command")).toEqual([
+          "test/Restarted/incremented",
+          "test/Restarted/reset",
+          "test/Restarted/reset",
+          "test/Restarted/reset finished",
+        ])
+      }).pipe(Effect.provide(Restarted.layer.pipe(Layer.provideMerge(OneState.layer)))),
+    ),
+  )
+
+  it.effect("in queue mode each start waits for the one before it", () =>
+    Effect.gen(function* () {
+      const counter = yield* Queued
+
+      yield* counter.tasks.add(1)
+      yield* counter.tasks.add(10)
+      yield* TestClock.adjust(Duration.seconds(1))
+
+      expect(yield* counter.select.count.get).toBe(1)
+      expect(yield* counter.running.add.get).toBe(true)
+
+      yield* TestClock.adjust(Duration.seconds(1))
+
+      expect(yield* counter.select.count.get).toBe(11)
+      expect(yield* counter.running.add.get).toBe(false)
+    }).pipe(Effect.provide(Queued.layer.pipe(Layer.provideMerge(OneState.layer)))),
+  )
+
+  it.effect("in concurrent mode every start runs at once", () =>
+    Effect.gen(function* () {
+      const counter = yield* Together
+
+      yield* counter.tasks.add(1)
+      yield* counter.tasks.add(10)
+      yield* TestClock.adjust(Duration.seconds(1))
+
+      expect(yield* counter.select.count.get).toBe(11)
+      expect(yield* counter.running.add.get).toBe(false)
+    }).pipe(Effect.provide(Together.layer.pipe(Layer.provideMerge(OneState.layer)))),
+  )
+
+  it.effect("a log holding a task's start and finish replays to the same state", () =>
+    Effect.gen(function* () {
+      const inspected = yield* Ref.make<Option.Option<Store.Inspected>>(Option.none())
+      const inspector = {
+        keepStates: 0,
+        register: (store: Store.Inspected) => Ref.set(inspected, Option.some(store)),
+      }
+
+      yield* Effect.gen(function* () {
+        const counter = yield* Queued
+        const store = Option.getOrThrow(yield* Ref.get(inspected))
+
+        yield* store.load([
+          { id: "1", action: "add", payload: 5, seq: 1 },
+          { id: "2", action: "add finished", payload: 5, seq: 2 },
+          { id: "3", action: "incremented", payload: null, seq: 3 },
+        ])
+
+        expect(yield* counter.state.get).toEqual({ count: 6, delay: 2 })
+      }).pipe(
+        Effect.provide(Queued.layer.pipe(Layer.provideMerge(OneState.layer))),
+        Effect.provideService(Store.Inspector, inspector),
+      )
+    }),
+  )
+})

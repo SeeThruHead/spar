@@ -24,29 +24,39 @@ needs it.
 
 ## What takes time is an Effect
 
-A store is a Schema, pure actions and selectors over its part of the one state. It accepts every
-command at any time; there are no guards, phases or refusals. Work that takes time is a plain
-Effect on a service, and Effect's own tools decide what happens when events interleave.
+A store is a Schema, pure actions and selectors over its part of the one state. Work that takes
+time is a task of the store: an Effect that runs in the store, then changes the state once, when
+it finishes. A task says what happens when it is started again, and which commands the store
+refuses while it runs.
 
-A reset that takes two seconds is three steps: start, wait, finish. Written as one Effect and run
-by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothing, from a button,
-a key or an agent alike:
+The counter's reset waits two seconds, then sets the count to 0. While it runs, Add 1 and a second
+reset are refused, from a button, a key or an agent alike:
 
-<<< apps/site/src/StoreDemo.ts#withReset
+<<< apps/sidebar/src/ResetCounterStore.ts#ResetCounterStore
 
-The same tools cover the other cases:
+What this rules out:
 
-| What should happen to a repeat | How it is written                                                   |
-| ------------------------------ | ------------------------------------------------------------------- |
-| Ignored while the first runs   | `FiberHandle.run(handle, effect, { onlyIfMissing: true })`          |
-| Replaces the first             | `FiberHandle.run(handle, effect)`, which interrupts the earlier run |
-| Waits its turn                 | A `Semaphore` with one permit around the effect                     |
-| One per key                    | A `FiberMap` keyed by what the work is about                        |
-| Survives a reload and retries  | An `Outbox.channel`, which keeps it on the device until it is sent  |
+- **No half-finished reset.** The reset is one task, not a start command and a finish command, so
+  nothing can interleave between two steps, and nobody can send the finish early: there is no
+  finish command to send.
+- **No flag to forget.** `store.running.reset` is true while the task runs. It is worked out from
+  the task, not stored in the state, so it cannot disagree with what is running.
+- **No check to repeat.** What the reset refuses is written once, on the task. An action does not
+  check anything, so a new action cannot forget to.
 
-Every command is in the log and the trace with what it carried, so the order things happened in
-is never a guess. The counter in the showcase, `apps/sidebar/src/ResetCounter.tsx`, keeps its
-buttons enabled and its + key working; its reset is the Effect above.
+A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
+task it met. The task's start and its finish are in the log with what they carried, so a log
+replays to the same state.
+
+| `mode`         | What happens when it is started again while it runs              |
+| -------------- | ---------------------------------------------------------------- |
+| `"switch"`     | The new run replaces the running one, which is interrupted       |
+| `"queue"`      | The new run waits for the one before it                          |
+| `"concurrent"` | Both run                                                         |
+| any mode       | List the task in its own `refuses` and a second start is refused |
+
+Work that must survive a reload and be retried, such as a message to the server, goes through an
+`Outbox.channel` instead, which keeps it on the device until it is sent.
 
 ## Server data lives in a store
 
@@ -70,8 +80,9 @@ That file mounts `Parent` and checks it shows `loaded: 3 orders`.
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
 
-- **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
-  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and no enhancer
+- **`ask` is a declaration.** It returns at once with a handle: `result`, a reactive Effect
+  `AsyncResult` (`Initial`, `Success` or `Failure`, each with a `waiting` flag), and `refetch`.
+  It does not wait for data, and no enhancer
   does, so every query in the tree being mounted is declared in the same
   pass and they all start together. Nesting components does not make a waterfall.
 - **The query runs in its store, not in the component.** The store is provided at the root
@@ -101,20 +112,20 @@ Each of these is an entry in the log and a span in the trace.
 | React Query                                | Spar                                                                                                                                                                                                        |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                      |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                               |
+| `status`, `data`, `error`                  | The handle's `result`, an `AsyncResult` from `effect/reactivity`: read it with `AsyncResult.match`, `AsyncResult.value` or `result.waiting`                                                                 |
 | Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                           |
 | `staleTime`                                | `staleAfter`                                                                                                                                                                                                |
 | `refetch()`                                | The handle's `refetch`                                                                                                                                                                                      |
 | Deduping identical requests                | One request for each input at a time. A second while loading is not sent                                                                                                                                    |
 | A late answer overwriting a newer one      | Ignored: an answer carries the number of the request it answers                                                                                                                                             |
 | `invalidateQueries` after a mutation       | `TheQuery.invalidate` after the save, in the service method that saves                                                                                                                                      |
-| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                              |
+| Keeps old data while loading               | Yes: while a refetch or a new input loads, `result` is the last `Success` with `waiting: true`, so the last rows stay on screen and `waiting` says they are being replaced                                  |
 | `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                           |
 | Optimistic update                          | `TheQuery.patch(input, change)` shows the change at once; an `Outbox.channel` sends it and ends with `TheQuery.invalidate`; `Outbox.givenUp(channel)` runs `TheQuery.invalidate` if the send fails for good |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                          |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                       |
+| Keeping the last page while the next loads | Nothing to do: `result` keeps the last page, marked `waiting`                                                                                                                                               |
 | Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                           |
+| Retries                                    | `retry`, a schedule; `result` stays `waiting` until it gives up                                                                                                                                             |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
 
 ### A list read a page at a time
@@ -133,7 +144,8 @@ at the end.
 the end. `loadMore` does nothing while the last page is still loading or when there is no more.
 `failed` says a page failed. Going back to the list later finds its pages in the cache, by each
 page's `staleAfter`. For numbered pages where only one shows at a time, pass the page number as
-the input of an ordinary `ask` and show `latest` while the next one loads.
+the input of an ordinary `ask`: its `result` keeps the page on screen, marked `waiting`, while the
+next one loads.
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.
@@ -172,8 +184,9 @@ plain "API Cache" example does the same by hand with `AsyncData` fields in the M
 | A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
 | Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An Effect calls `TheQuery.read(input)`                                                   |
 
-Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
-holding old data" apart as states of their own, where Spar leaves you to read `status` and
-`value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
+Both tell "refreshing with old data" and "failed but still holding old data" apart: Foldkit with
+`AsyncData`'s `Refreshing` and `Stale`, Spar with Effect's `AsyncResult` (a `Success` or a
+`Failure` with `waiting`, and a `Failure` that keeps its `previousSuccess`). Foldkit's query API
+is marked experimental. Where Spar is ahead: nothing is lifted or
 folded by hand, a stale time is declared, a dependent query needs no code, and every request and
 answer is in the log.

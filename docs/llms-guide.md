@@ -103,8 +103,8 @@ in an enhancer and pass `props.shown` instead.
 | Show one thing or another                 | `<Show when={props.open}>...</Show>`                                                                                                    | A ternary inside JSX                                                                                           |
 | Load data from the server                 | A `Query.Tag`, and `withQuery(name, TheQuery, (props) => input)` where it is needed                                                     | Fetching in a component and passing the result down                                                            |
 | Use loaded data in an action              | An Effect that reads `TheQuery.read(input)` and then sends a command with the result                                                    | Props or arguments that carry server data                                                                      |
-| Stop a second run while one is going      | Run the work with `FiberHandle.run(handle, effect, { onlyIfMissing: true })`                                                            | Disabling the button and hoping nothing else starts it                                                         |
-| Run a flow with a wait in it              | One Effect: a command, `Effect.sleep` or the call, a command with the result                                                            | A lock, a queue, a flag in UI state                                                                            |
+| Stop a second run while one is going      | A `Store.task` that lists itself in `refuses`                                                                                           | Disabling the button and hoping nothing else starts it                                                         |
+| Run a flow with a wait in it              | A `Store.task`: `run` does the wait or the call, `finish` changes the state with what it returned                                       | Two commands (start, finish), a lock, a flag in the state or in UI state                                       |
 | Call your backend                         | `Backend.rpc(Group, url)` and call the client                                                                                           | `fetch`, axios, tRPC, a hand-rolled client                                                                     |
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                        | `fetch`, `FetchHttpClient.layer`                                                                               |
 | Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                              | Calling the server from a handler and hoping                                                                   |
@@ -188,19 +188,22 @@ because the store and its view sit in the same file.
 Read the "State, events that interleave, and server data" part below before writing any store
 with async work. The short version:
 
-- A store accepts every command; there are no guards. Work that takes time is an Effect on a
-  service (or an enhancer): it sends a command, does the work, and sends a command with the
-  result. Every command is in the log and the trace.
+- Work that takes time is a task of the store (`Store.task`): `run` is the Effect, `finish`
+  changes the state once with what it returned, `mode` says what a second start does, and
+  `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
+  state; never store a flag. Every start, finish and refusal is in the log and the trace.
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
   that needs it reads `TheQuery.read(input)` itself.
-- When only the newest run matters (a search box, a filter), run it with
-  `FiberHandle.run(handle, effect)`, which stops the one before; or load it with a Query.
-- When a second press must not start the work again (Pay, Save, Send), run it with
-  `FiberHandle.run(handle, effect, { onlyIfMissing: true })`, which ignores the repeat.
+- When only the newest run matters (a search box, a filter), give the task `mode: "switch"`,
+  which stops the one before; or load it with a Query.
+- When a second press must not start the work again (Pay, Save, Send), list the task in its own
+  `refuses`.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
-- A query's `value` is null while a new input loads. To keep the last rows on screen while the
-  next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
+- A query's handle is `{ result, refetch }`, `result` being Effect's `AsyncResult`. Read it with
+  `AsyncResult.match(result, { onInitial, onFailure, onSuccess })`, `AsyncResult.value(result)`
+  or `result.waiting`; never keep a loading flag of your own. While the next page or filter loads,
+  `result` stays the last `Success`, marked `waiting`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.

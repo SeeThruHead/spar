@@ -25,6 +25,21 @@ export type Action<State, Payload> = {
 
 export type Actions<State> = Readonly<Record<string, Action<State, unknown>>>
 
+export type Mode = "switch" | "queue" | "concurrent"
+
+export type Task<State, Payload, Refuses extends string = string> = {
+  readonly encode: (input: unknown) => Effect.Effect<Schema.Json, Schema.SchemaError>
+  readonly decode: (payload: Schema.Json) => Effect.Effect<Payload, Schema.SchemaError>
+  readonly work: (payload: Schema.Json, state: State) => Effect.Effect<Schema.Json>
+  readonly finished: (
+    result: Schema.Json,
+  ) => Effect.Effect<(state: State) => State, Schema.SchemaError>
+  readonly mode: Mode
+  readonly refuses: ReadonlyArray<Refuses>
+}
+
+export type Tasks<State> = Readonly<Record<string, Task<State, unknown>>>
+
 export type Selector<State, A> = {
   readonly schema: Schema.Codec<A, unknown>
   readonly select: (state: State) => A

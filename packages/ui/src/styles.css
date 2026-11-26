@@ -1,21 +1,21 @@
 :root {
   color-scheme: light dark;
   --spar-surface: #ffffff;
-  --spar-raised: #f8f9fa;
-  --spar-page: #f1f3f5;
-  --spar-hover: #f1f3f5;
-  --spar-text: #212529;
-  --spar-bright: #000000;
-  --spar-muted: #495057;
-  --spar-line: #dee2e6;
-  --spar-accent: #1971c2;
-  --spar-accent-hover: #1864ab;
-  --spar-accent-soft: #e7f5ff;
-  --spar-link: #1971c2;
+  --spar-raised: #f6f7f9;
+  --spar-page: #f6f7f9;
+  --spar-hover: #f3f4f7;
+  --spar-text: #1d2330;
+  --spar-bright: #11151c;
+  --spar-muted: #5b6474;
+  --spar-line: #e6e8ec;
+  --spar-accent: #3d5afe;
+  --spar-accent-hover: #2f4ae0;
+  --spar-accent-soft: #eef1ff;
+  --spar-link: #3d5afe;
   --spar-on-accent: #ffffff;
-  --spar-danger: #c92a2a;
-  --spar-problem: #c92a2a;
-  --spar-focus: #228be6;
+  --spar-danger: #ce2c31;
+  --spar-problem: #d13438;
+  --spar-focus: #3d5afe;
   --spar-radius: 0.5rem;
   --spar-gap: 0.625rem;
   --spar-font:

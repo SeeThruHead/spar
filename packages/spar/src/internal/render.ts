@@ -130,10 +130,31 @@ const attach = (node: Dom.Host, handle: Handle): Later =>
     SubscriptionRef.set(handle[HandleTypeId], Option.none()),
   )
 
-const listener =
-  (place: Place, type: string, handler: unknown) =>
-  (event: Event): void =>
-    place.start(traced(type, toAction(handler, event), event.currentTarget, place.view))
+const oncePerPress = new Set(["click", "submit"])
+
+const held = (busy: Cell.Cell<boolean>, action: Action): Action => {
+  if (!Effect.isEffect(action)) return action
+
+  busy.write(true)
+
+  return Effect.ensuring(
+    action,
+    Effect.sync(() => busy.write(false)),
+  )
+}
+
+const listener = (place: Place, type: string, handler: unknown) => {
+  const busy = Cell.make(false)
+  const holds = oncePerPress.has(type)
+
+  return (event: Event): void => {
+    if (holds && busy.read()) return
+
+    const action = traced(type, toAction(handler, event), event.currentTarget, place.view)
+
+    place.start(holds ? held(busy, action) : action)
+  }
+}
 
 const listen = (node: Dom.Host, type: string, handler: unknown, place: Place): void =>
   Cell.own(place.owner, Dom.listen(node, type, listener(place, type, handler)))

@@ -1,4 +1,5 @@
 import { Clock, Effect, Layer, Option, Schema } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import type { Duration } from "effect"
 import { Props, Query, Reactive, UiState, View, compose, withProps } from "spar"
 import { LoadRowView, LoadsView } from "./LoadsView.tsx"
@@ -85,6 +86,20 @@ const LoadRow = compose(
 
 const endOf = (found: Timed | null): number => found?.endedAt ?? 0
 
+const statusIn = (result: AsyncResult.AsyncResult<Timed>): string =>
+  result.waiting
+    ? "loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "waiting",
+        onFailure: () => "failed",
+        onSuccess: () => "loaded",
+      })
+
+const shownOf = (handle: Query.Handle<Timed, never>) => ({
+  status: Reactive.map(handle.result, statusIn),
+  value: Reactive.map(handle.result, (result) => Option.getOrNull(AsyncResult.value(result))),
+})
+
 const told = (run: Run | null, ends: ReadonlyArray<number>): string => {
   if (run === null) return "Nothing loaded yet"
   if (ends.some((end) => end === 0)) return "Loading"
@@ -96,13 +111,16 @@ export const Loads = compose(
   Effect.fnUntraced(function* () {
     const run = yield* UiState.make("run", Schema.NullOr(Run), null)
     const asked = Reactive.map(run, Option.fromNullOr)
-    const profile = yield* ProfileQuery.ask(asked)
-    const orders = yield* OrdersQuery.ask(asked)
+    const profile = yield* Effect.map(ProfileQuery.ask(asked), shownOf)
+    const orders = yield* Effect.map(OrdersQuery.ask(asked), shownOf)
     const whenProfiled = yield* Reactive.zip(profile.value, run)
-    const suggestions = yield* SuggestionsQuery.ask(
-      Reactive.map(whenProfiled, ([found, now]) =>
-        found === null ? Option.none<Run>() : Option.fromNullOr(now),
+    const suggestions = yield* Effect.map(
+      SuggestionsQuery.ask(
+        Reactive.map(whenProfiled, ([found, now]) =>
+          found === null ? Option.none<Run>() : Option.fromNullOr(now),
+        ),
       ),
+      shownOf,
     )
     const first = yield* Reactive.zip(profile.value, orders.value)
     const last = yield* Reactive.zip(suggestions.value, run)
@@ -110,25 +128,12 @@ export const Loads = compose(
 
     return {
       rows: yield* Effect.all([
-        View.child(LoadRow, {
-          name: "Profile",
-          note: "needs nothing",
-          status: profile.status,
-          value: profile.value,
-          run,
-        }),
-        View.child(LoadRow, {
-          name: "Orders",
-          note: "needs nothing",
-          status: orders.status,
-          value: orders.value,
-          run,
-        }),
+        View.child(LoadRow, { name: "Profile", note: "needs nothing", ...profile, run }),
+        View.child(LoadRow, { name: "Orders", note: "needs nothing", ...orders, run }),
         View.child(LoadRow, {
           name: "Suggestions",
           note: "needs the profile",
-          status: suggestions.status,
-          value: suggestions.value,
+          ...suggestions,
           run,
         }),
       ]),

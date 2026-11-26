@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { Query, Reactive, Renderer, Router, Server, Store, compose } from "spar"
 import { NothingView, ShelfView, TeaView } from "./instantData.tsx"
+import { valueOf } from "./results.ts"
 
 class TeaQuery extends Query.Tag<TeaQuery>()("test/Tea", {
   input: Schema.String,
@@ -16,7 +17,7 @@ const Tea = compose(
   Effect.fnUntraced(function* () {
     const tea = yield* TeaQuery.ask("green")
 
-    return { name: Reactive.map(tea.value, (found) => found ?? "none yet") }
+    return { name: Reactive.map(valueOf(tea), (found) => found ?? "none yet") }
   }),
 )(TeaView)
 

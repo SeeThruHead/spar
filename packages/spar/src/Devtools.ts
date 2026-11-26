@@ -9,6 +9,7 @@ import {
   Predicate,
   Record,
   Schema,
+  Stream,
   pipe,
 } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
@@ -21,7 +22,10 @@ import {
   DeadView,
   EntryView,
   FactView,
+  EventView,
   InspectorView,
+  LaneView,
+  LanesView,
   MomentView,
   OutboxView,
   OutlineView,
@@ -29,7 +33,9 @@ import {
   StoreView,
   BranchView,
   TimelineView,
+  TravelView,
   ToolsView,
+  Tick as TickSchema,
   TraceView,
   VeilView,
 } from "./devtools/PanelView.tsx"
@@ -81,6 +87,7 @@ export class Registry extends Context.Service<
     readonly viewing: Reactive.Reactive<number | null>
     readonly travelTo: (seq: number | null) => Effect.Effect<void>
     readonly uiState: () => UiState.Snapshot
+    readonly changesAt: (seq: number | null) => ReadonlyArray<string>
     readonly setUi: (path: UiState.Path, name: string, value: Schema.Json) => boolean
     readonly follow: (tree: ReturnType<typeof Trees.makeTree>) => void
     readonly branches: Reactive.Reactive<ReadonlyArray<Branch>>
@@ -94,6 +101,37 @@ type Remembered = {
   readonly moment: Timeline.Moment
   readonly ui: UiState.Snapshot
   readonly stores: Readonly<Record<string, number>>
+}
+
+type Kept = { readonly ui: UiState.Snapshot; readonly stores: Readonly<Record<string, number>> }
+
+const uiPlace = (entry: UiState.Snapshot[number]): string =>
+  [...entry.path, entry.name].join(" / ").replace(/ \/ (?=[^/]*$)/, " . ")
+
+const valueText = (value: Schema.Json): string => Formatter.formatJson(value)
+
+export const changeLines = (before: Kept | undefined, now: Kept): ReadonlyArray<string> => {
+  const earlier = before?.ui ?? []
+  const was = new Map(earlier.map((entry) => [uiPlace(entry), entry.value]))
+  const is = new Map(now.ui.map((entry) => [uiPlace(entry), entry.value]))
+  const changed = now.ui.flatMap((entry) => {
+    const place = uiPlace(entry)
+    const found = was.get(place)
+    if (found === undefined) return [`+ ${place}  ${valueText(entry.value)}`]
+
+    const old = valueText(found)
+    const next = valueText(entry.value)
+
+    return old === next ? [] : [`${place}  ${old} → ${next}`]
+  })
+  const gone = earlier
+    .filter((entry) => !is.has(uiPlace(entry)))
+    .map((entry) => `- ${uiPlace(entry)}`)
+  const moved = Object.entries(now.stores)
+    .filter(([key, at]) => before?.stores[key] !== at)
+    .map(([key, at]) => `${key}  entry ${before?.stores[key] ?? "none"} → ${at}`)
+
+  return [...moved, ...changed, ...gone]
 }
 
 type Named = { readonly id: number; readonly name: string; readonly from: number | null }
@@ -320,6 +358,13 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
       travelTo,
       uiState: () => trees.read().uiSnapshot(),
+      changesAt: (seq) => {
+        const all = past.read().remembered
+        const index =
+          seq === null ? all.length - 1 : all.findIndex((kept) => kept.moment.seq === seq)
+
+        return all.slice(index, index + 1).flatMap((now) => changeLines(all[index - 1], now))
+      },
       setUi: (path, name, value) => trees.read().put(path, name, value),
       follow: (tree) => {
         tree.keepAtLeast(1000)
@@ -364,6 +409,37 @@ const step = Effect.fnUntraced(function* (
   )
 })
 
+const printed = (value: unknown): string => shortened(Formatter.formatJson(value))
+
+const fieldOf = (record: Readonly<Record<string, unknown>>, key: string): string =>
+  Object.hasOwn(record, key) ? printed(record[key]) : "(absent)"
+
+export const fieldChanges = (prior: unknown, next: unknown): ReadonlyArray<string> => {
+  if (!Predicate.isObject(prior) || !Predicate.isObject(next)) {
+    return printed(prior) === printed(next) ? [] : [`${printed(prior)} → ${printed(next)}`]
+  }
+
+  return [...new Set([...Object.keys(prior), ...Object.keys(next)])]
+    .filter((key) => fieldOf(prior, key) !== fieldOf(next, key))
+    .map((key) => `${key}: ${fieldOf(prior, key)} → ${fieldOf(next, key)}`)
+}
+
+const changedText = (lines: ReadonlyArray<string>): string =>
+  lines.length === 0 ? "Nothing in this store changed." : lines.join("\n")
+
+const changedBy = (
+  store: Store.Inspected,
+  viewing: number | null,
+  log: ReadonlyArray<Store.Entry>,
+) =>
+  Option.match(Option.fromNullishOr(viewing ?? log.at(-1)?.seq), {
+    onNone: () => Effect.succeed("No action yet."),
+    onSome: (seq) =>
+      Effect.map(Effect.all([store.stateAt(seq - 1), store.stateAt(seq)]), ([prior, next]) =>
+        changedText(fieldChanges(prior, next)),
+      ),
+  })
+
 const StorePanel = compose(
   withProps({ inspected: Props.Reactive(InspectedStore) }),
   Effect.fnUntraced(function* (props) {
@@ -382,6 +458,11 @@ const StorePanel = compose(
       ),
     )
 
+    const watched = yield* Reactive.zip(store.viewing, store.log)
+    const changed = yield* Reactive.fromStream(
+      "",
+      Stream.mapEffect(watched.changes, ([viewing, log]) => changedBy(store, viewing, log)),
+    )
     const exported = yield* UiState.make("exported", Schema.String, "")
     const pasted = yield* UiState.make("pasted", Schema.String, "")
     const problem = yield* UiState.make("problem", Schema.String, "")
@@ -409,6 +490,7 @@ const StorePanel = compose(
         viewing === null ? "live" : `action ${viewing}`,
       ),
       state: Reactive.map(store.state, (state) => Formatter.formatJson(state, { space: 2 })),
+      changed,
       entries,
       onBack: step(store, before),
       onForward: step(store, after),
@@ -463,8 +545,17 @@ export const Panel = compose(
   }),
 )(PanelView)
 
-const summaryOfMoment = (moment: Timeline.Moment): string =>
-  `${moment.kind} ${moment.name} ${Formatter.formatJson(moment.detail)}`
+const shortened = (text: string): string => (text.length > 80 ? `${text.slice(0, 79)}…` : text)
+
+const detailOfMoment = (moment: Timeline.Moment): string => {
+  if (moment.kind === "call") return ""
+  if (moment.detail === null) return ""
+
+  return shortened(Formatter.formatJson(moment.detail))
+}
+
+export const summaryOfMoment = (moment: Timeline.Moment): string =>
+  `${moment.name} ${detailOfMoment(moment)}`.trim()
 
 export const detailOfBranch = (branch: Branch): string =>
   branch.from === null
@@ -478,7 +569,221 @@ const neighbour = (
 ): number | null =>
   seqs.at(Math.max((viewing === null ? seqs.length : seqs.indexOf(viewing)) + by, 0)) ?? null
 
+type Tick = typeof TickSchema.Type
+
+export type Lane = { readonly slot: string; readonly ticks: ReadonlyArray<Tick> }
+
+const slotOf = (moment: Timeline.Moment): string => {
+  if (moment.kind === "route") return "router"
+  if (moment.kind === "call") return "calls"
+  if (moment.kind === "ui") return moment.name.replace(/ \. .*$/, "")
+
+  const parts = moment.name.split("/")
+
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : moment.name
+}
+
+const fractionOf = (index: number, count: number): number =>
+  count <= 1 ? 0.5 : index / (count - 1)
+
+export const lanesOf = (moments: ReadonlyArray<Timeline.Moment>): ReadonlyArray<Lane> => {
+  const ticked = moments.map((moment, index) => ({
+    slot: slotOf(moment),
+    tick: {
+      seq: moment.seq,
+      kind: moment.kind,
+      at: `${(fractionOf(index, moments.length) * 100).toFixed(2)}%`,
+    },
+  }))
+
+  return [...new Set(ticked.map((each) => each.slot))].map((slot) => ({
+    slot,
+    ticks: ticked.filter((each) => each.slot === slot).map((each) => each.tick),
+  }))
+}
+
+const laneName = 180
+
+const laneEnd = 12
+
+export const acrossLanes = (
+  moments: ReadonlyArray<Timeline.Moment>,
+  seq: number | null,
+): string => {
+  const index =
+    seq === null ? moments.length - 1 : moments.findIndex((moment) => moment.seq === seq)
+  const fraction = fractionOf(Math.max(index, 0), moments.length)
+
+  return `calc(${laneName}px + (100% - ${laneName + laneEnd}px) * ${fraction.toFixed(4)})`
+}
+
+type Surface = {
+  readonly clientX: number
+  readonly currentTarget: {
+    readonly getBoundingClientRect: () => { readonly left: number; readonly width: number }
+  }
+}
+
+export const seqAt = (moments: ReadonlyArray<Timeline.Moment>, event: Surface): number | null => {
+  const box = event.currentTarget.getBoundingClientRect()
+  const fraction =
+    (event.clientX - box.left - laneName) / Math.max(box.width - laneName - laneEnd, 1)
+  const index = Math.round(Math.min(Math.max(fraction, 0), 1) * Math.max(moments.length - 1, 0))
+
+  return moments[index]?.seq ?? null
+}
+
+const tickColor: Readonly<Record<string, string>> = {
+  command: "#6ea8fe",
+  ui: "#c39bff",
+  route: "#f0b45a",
+  data: "#4fd1c5",
+  call: "#8bd17c",
+  noticed: "#ff8a94",
+  refused: "#ff8a94",
+  waited: "#f0b45a",
+}
+
+export const ticksDrawn = (ticks: ReadonlyArray<Tick>): string =>
+  ticks
+    .map((tick) => {
+      const color = tickColor[tick.kind] ?? "#6ea8fe"
+
+      return `linear-gradient(${color}, ${color}) calc(${tick.at} - 3px) 4px / 6px 10px no-repeat`
+    })
+    .join(", ")
+
+export const LanesPanel = compose(
+  withProps({
+    shown: Props.Reactive(Schema.Boolean),
+    scrubbed: Props.State(Schema.NullOr(Schema.Int)),
+    onTrace: Props.Callback(Schema.String),
+  }),
+  Effect.fnUntraced(function* ({ shown, scrubbed, onTrace }) {
+    const registry = yield* Registry
+    const scrubbing = yield* UiState.make("scrubbing", Schema.Boolean, false)
+    const viewed = yield* Reactive.zip(registry.moments, registry.viewing)
+    const scrubbedAt = yield* Reactive.zip(registry.moments, scrubbed)
+    const pointed = (event: Surface) =>
+      Effect.map(registry.moments.get, (moments) => seqAt(moments, event))
+
+    return {
+      shown,
+      scrubbing,
+      marker: Reactive.map(viewed, ([moments, viewing]) => acrossLanes(moments, viewing)),
+      scrubAt: Reactive.map(scrubbedAt, ([moments, seq]) => acrossLanes(moments, seq)),
+      lanes: yield* pipe(
+        Reactive.map(registry.moments, lanesOf),
+        Reactive.mapBy(
+          (lane: Lane) => lane.slot,
+          LaneView,
+          (lane, slot) => ({ slot, ticks: Reactive.map(lane, (now) => ticksDrawn(now.ticks)) }),
+        ),
+      ),
+      onStart: (event: Surface) =>
+        Effect.map(pointed(event), (seq) => [
+          UiState.set(scrubbing, true),
+          UiState.set(scrubbed, seq),
+        ]),
+      onScrub: Effect.fnUntraced(function* (event: Surface) {
+        const dragging = yield* scrubbing.get
+        if (!dragging) return
+
+        const seq = yield* pointed(event)
+
+        return UiState.set(scrubbed, seq)
+      }),
+      onLetGo: Effect.fnUntraced(function* (event: Surface) {
+        const moments = yield* registry.moments.get
+        const seq = seqAt(moments, event)
+        const chosen = moments.filter((moment) => moment.seq === seq)
+
+        return [
+          UiState.set(scrubbing, false),
+          UiState.set(scrubbed, null),
+          ...chosen.map((moment) => registry.travelTo(moment.seq)),
+          ...chosen
+            .filter((moment) => moment.traceId !== "")
+            .map((moment) => onTrace(moment.traceId)),
+        ]
+      }),
+    }
+  }),
+)(LanesView)
+
+const chosenMoment = (
+  moments: ReadonlyArray<Timeline.Moment>,
+  viewing: number | null,
+): ReadonlyArray<Timeline.Moment> =>
+  viewing === null ? moments.slice(-1) : moments.filter((moment) => moment.seq === viewing)
+
+export const eventShown = (moments: ReadonlyArray<Timeline.Moment>, viewing: number | null) => {
+  const found = chosenMoment(moments, viewing)
+
+  return {
+    heading: found.map((moment) => `#${moment.seq} ${moment.name}`).join("") || "No event yet",
+    kind: found.map((moment) => moment.kind).join(""),
+    detail: found
+      .map((moment) =>
+        moment.detail === null ? "" : Formatter.formatJson(moment.detail, { space: 2 }),
+      )
+      .join(""),
+    traceId: found.map((moment) => moment.traceId).join(""),
+    spanId: found.map((moment) => moment.spanId).join(""),
+  }
+}
+
+export const EventPanel = compose(
+  Effect.fnUntraced(function* () {
+    const registry = yield* Registry
+    const chosen = yield* Reactive.zip(registry.moments, registry.viewing)
+    const shown = Reactive.map(chosen, ([moments, viewing]) => eventShown(moments, viewing))
+
+    return {
+      heading: Reactive.map(shown, (now) => now.heading),
+      kind: Reactive.map(shown, (now) => now.kind),
+      detail: Reactive.map(shown, (now) => now.detail),
+      traceId: Reactive.map(shown, (now) => now.traceId),
+      spanId: Reactive.map(shown, (now) => now.spanId),
+      changes: Reactive.map(chosen, ([, viewing]) => changesText(registry.changesAt(viewing))),
+    }
+  }),
+)(EventView)
+
+export const changesText = (lines: ReadonlyArray<string>): string =>
+  lines.length === 0 ? "Nothing in the state changed." : lines.join("\n")
+
 export const TimelinePanel = compose(
+  withProps({
+    onTrace: Props.Callback(Schema.String),
+    scrubbed: Props.Reactive(Schema.NullOr(Schema.Int)),
+  }),
+  Effect.fnUntraced(function* ({ onTrace, scrubbed }) {
+    const registry = yield* Registry
+
+    return {
+      moments: yield* pipe(
+        registry.moments,
+        Reactive.mapBy(
+          (moment: Timeline.Moment) => String(moment.seq),
+          MomentView,
+          (moment, seq) => ({
+            seq,
+            kind: Reactive.map(moment, (now) => now.kind),
+            summary: Reactive.map(moment, summaryOfMoment),
+            trace: Reactive.map(moment, (now) => now.traceId),
+            current: Reactive.map(registry.viewing, (viewing) => String(viewing) === seq),
+            scrubbed: Reactive.map(scrubbed, (at) => String(at) === seq),
+            onJump: registry.travelTo(Number(seq)),
+            onTrace: Effect.flatMap(moment.get, (now) => run(onTrace(now.traceId))),
+          }),
+        ),
+      ),
+    }
+  }),
+)(TimelineView)
+
+export const TravelPanel = compose(
   withProps({ onTrace: Props.Callback(Schema.String) }),
   Effect.fnUntraced(function* ({ onTrace }) {
     const registry = yield* Registry
@@ -494,25 +799,20 @@ export const TimelinePanel = compose(
       yield* Effect.forEach(traces, (traceId) => run(onTrace(traceId)), { discard: true })
     })
 
+    yield* Events.onDocument("keydown", (event) => {
+      if (!isShortcut(event)) return []
+      if (event.code === "ArrowLeft") return [stepped(-1)]
+      if (event.code === "ArrowRight") return [stepped(1)]
+      if (event.code === "End") return [registry.travelTo(null)]
+
+      return []
+    })
+
     return {
       position: Reactive.map(registry.viewing, (viewing) =>
         viewing === null ? "Now" : `At ${viewing}`,
       ),
-      moments: yield* pipe(
-        registry.moments,
-        Reactive.mapBy(
-          (moment: Timeline.Moment) => String(moment.seq),
-          MomentView,
-          (moment, seq) => ({
-            seq,
-            summary: Reactive.map(moment, summaryOfMoment),
-            trace: Reactive.map(moment, (now) => now.traceId),
-            current: Reactive.map(registry.viewing, (viewing) => String(viewing) === seq),
-            onJump: registry.travelTo(Number(seq)),
-            onTrace: Effect.flatMap(moment.get, (now) => run(onTrace(now.traceId))),
-          }),
-        ),
-      ),
+      live: Reactive.map(registry.viewing, (viewing) => viewing === null),
       branches: yield* pipe(
         registry.branches,
         Reactive.mapBy(
@@ -532,7 +832,7 @@ export const TimelinePanel = compose(
       onFork: registry.fork,
     }
   }),
-)(TimelineView)
+)(TravelView)
 
 export const Component = Schema.Struct({
   name: Schema.String,
@@ -801,6 +1101,7 @@ type Bar = {
   readonly note: string
   readonly waitedFrom: string
   readonly waited: string
+  readonly about: string
 }
 
 const endOf = (span: Spans.Recorded): number => span.endedAt ?? span.startedAt
@@ -839,6 +1140,29 @@ const askedBefore = (
     ordered.map((each) => each.span),
   )
 
+const noticeableWait = 20
+
+export const waitBefore = (span: Spans.Recorded, all: ReadonlyArray<Sided>): string => {
+  const ended = all
+    .map((each) => each.span)
+    .filter((other) => other.parentSpanId === span.parentSpanId && other.spanId !== span.spanId)
+    .map(endOf)
+    .filter((end) => end <= span.startedAt)
+  const gap = Math.min(...ended.map((end) => span.startedAt - end))
+
+  return Number.isFinite(gap) && gap >= noticeableWait ? `after a ${gap.toFixed(0)} ms wait` : ""
+}
+
+export const backgroundOf = (attributes: Readonly<Record<string, string>>): string =>
+  attributes["spar.background"] === "outbox"
+    ? "in the background: the click was done when it was saved"
+    : ""
+
+const notesOf = (span: Spans.Recorded, all: ReadonlyArray<Sided>): string =>
+  [backgroundOf(span.attributes), noteOf(span.attributes), waitBefore(span, all)]
+    .filter((note) => note !== "")
+    .join(" · ")
+
 export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
   const ordered = sided.toSorted((left, right) => left.span.startedAt - right.span.startedAt)
   const byId = new Map(ordered.map((each) => [each.span.spanId, each.span]))
@@ -854,14 +1178,26 @@ export const barsOf = (sided: ReadonlyArray<Sided>): ReadonlyArray<Bar> => {
     indent: px(depthOf(span, byId, 0) * 12),
     left: percent(span.startedAt - start, whole),
     width: percent(endOf(span) - span.startedAt, whole),
-    note: noteOf(span.attributes),
+    note: notesOf(span, ordered),
     waitedFrom: percent((askedBefore(span, ordered)?.startedAt ?? span.startedAt) - start, whole),
     waited: percent(
       span.startedAt - (askedBefore(span, ordered)?.startedAt ?? span.startedAt),
       whole,
     ),
+    about: aboutSpan(span, where),
   }))
 }
+
+export const aboutSpan = (span: Spans.Recorded, where: string): string =>
+  [
+    span.name,
+    `${where} · ${(endOf(span) - span.startedAt).toFixed(1)} ms${span.failed ? " · failed" : ""}`,
+    `span    ${span.spanId}`,
+    `parent  ${span.parentSpanId ?? "none, it starts the trace"}`,
+    `trace   ${span.traceId}`,
+    "",
+    ...Object.entries(span.attributes).map(([name, value]) => `${name}  ${value}`),
+  ].join("\n")
 
 const backendCount = (): number =>
   Option.getOrElse(
@@ -887,8 +1223,8 @@ const fromBackends = (traceId: string, ask: number) =>
 const decodeSpans = Schema.decodeUnknownOption(Schema.Array(Spans.Recorded))
 
 export const TracePanel = compose(
-  withProps({ traceId: Props.Reactive(Schema.String) }),
-  Effect.fnUntraced(function* ({ traceId }) {
+  withProps({ traceId: Props.Reactive(Schema.String), onSpan: Props.Callback(Schema.String) }),
+  Effect.fnUntraced(function* ({ traceId, onSpan }) {
     const registry = yield* Registry
     const page = yield* Effect.serviceOption(Spans.SpanBuffer)
     const backend = Cell.make<ReadonlyArray<Spans.Recorded>>([])
@@ -947,6 +1283,7 @@ export const TracePanel = compose(
             waitedFrom: Reactive.map(bar, (now) => now.waitedFrom),
             waited: Reactive.map(bar, (now) => now.waited),
             note: Reactive.map(bar, (now) => now.note),
+            onSelect: Effect.map(bar.get, (now) => onSpan(now.about)),
           }),
         ),
       ),
@@ -957,17 +1294,45 @@ export const TracePanel = compose(
   }),
 )(TraceView)
 
+export const isShortcut = (event: {
+  readonly altKey: boolean
+  readonly shiftKey: boolean
+}): boolean => event.altKey && event.shiftKey
+
 export const Tools = compose(
   Effect.fnUntraced(function* () {
     const tracing = yield* UiState.make("tracing", Schema.String, "")
+    const scrubbed = yield* UiState.make("scrubbed", Schema.NullOr(Schema.Int), null)
+    const lanesShown = yield* UiState.make("lanes", Schema.Boolean, true)
+    const onTrace = (traceId: string) => UiState.set(tracing, traceId)
+    const detailTab = yield* UiState.make("detail", Schema.String, "event")
+    const spanAbout = yield* UiState.make("span", Schema.String, "")
+    const onSpan = (about: string) => [
+      UiState.set(spanAbout, about),
+      UiState.set(detailTab, "span"),
+    ]
+
+    const open = yield* UiState.make("open", Schema.Boolean, false)
+
+    yield* Events.onDocument("keydown", (event) => {
+      if (!isShortcut(event)) return []
+      if (event.code === "KeyD") return [UiState.update(open, (shown) => !shown)]
+      if (event.code === "KeyL") return [UiState.update(lanesShown, (shown) => !shown)]
+
+      return []
+    })
 
     return {
-      open: yield* UiState.make("open", Schema.Boolean, false),
+      open,
+      lanesShown,
+      detailTab,
+      spanAbout,
+      event: yield* View.child(EventPanel, {}),
       inspector: yield* View.child(Inspector, {}),
-      timeline: yield* View.child(TimelinePanel, {
-        onTrace: (traceId) => UiState.set(tracing, traceId),
-      }),
-      trace: yield* View.child(TracePanel, { traceId: tracing }),
+      lanes: yield* View.child(LanesPanel, { shown: lanesShown, scrubbed, onTrace }),
+      travel: yield* View.child(TravelPanel, { onTrace }),
+      timeline: yield* View.child(TimelinePanel, { onTrace, scrubbed }),
+      trace: yield* View.child(TracePanel, { traceId: tracing, onSpan }),
       stores: yield* View.child(Panel, {}),
     }
   }),

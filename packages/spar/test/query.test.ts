@@ -15,10 +15,13 @@ import {
   Tracer,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
+import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { resultOf } from "../src/internal/queryResult.ts"
+import { errorIn, statusIn, statusOf, valueIn, valueOf } from "./results.ts"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
@@ -158,8 +161,29 @@ const opened = Effect.gen(function* () {
   }
 })
 
+const heldEntry = (
+  status: "loading" | "loaded" | "failed",
+  value: string | null,
+  error: string | null,
+) => ({
+  status,
+  value,
+  error,
+  loadedAt: 1,
+  request: 1,
+  input: null,
+  traceId: "",
+  spanId: "",
+  unusedSince: null,
+})
+
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
-  Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
+  Effect.map(handle.result.get, (result) => [
+    statusIn(result),
+    valueIn(result),
+    errorIn(result),
+    result.waiting,
+  ])
 
 const feedSays = (label: string) =>
   document.querySelector(`[aria-label="Feed ${label}"]`)?.textContent
@@ -180,7 +204,7 @@ const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new 
 const askedTogether = Effect.gen(function* () {
   const users = yield* Users.ask()
   const stock = yield* Stock.ask()
-  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const firstUser = Reactive.map(valueOf(users), (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
   const orders = yield* Orders.ask(firstUser)
 
   return { users, stock, orders }
@@ -199,9 +223,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
         expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
 
         yield* answer("stock", 40)
-        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* valueOf(declared.stock).get).toBe(40)
         expect(yield* whats).toEqual(["users", "stock"])
-        expect(yield* declared.orders.status.get).toBe("waiting")
+        expect(yield* statusOf(declared.orders).get).toBe("waiting")
 
         yield* answer("users", [ada, grace])
         yield* Effect.yieldNow
@@ -247,23 +271,25 @@ describe("the natural way: a value from one place feeds a query declared in anot
     }),
   )
 
-  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
-    Effect.gen(function* () {
-      const { built, answer } = yield* opened
-      const page = yield* SubscriptionRef.make(1)
-      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+  it.effect(
+    "while another input loads, the last value loaded is still the result, marked waiting",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const page = yield* SubscriptionRef.make(1)
+        const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
 
-      yield* Effect.yieldNow
-      expect(yield* orders.latest.get).toBeNull()
-      yield* answer("orders 1", ["tea"])
-      yield* SubscriptionRef.set(page, 2)
-      yield* Effect.yieldNow
-      yield* Effect.yieldNow
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+        yield* answer("orders 1", ["tea"])
+        yield* SubscriptionRef.set(page, 2)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
-      yield* answer("orders 2", ["ink"])
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
-    }),
+        yield* answer("orders 2", ["ink"])
+        expect(yield* readings(orders)).toEqual(["loaded", ["ink"], null, false])
+      }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
@@ -281,10 +307,10 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 1", "orders 2"])
-      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+      expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
       yield* answer("orders 2", ["ink"])
-      expect(yield* orders.value.get).toEqual(["ink"])
+      expect(yield* valueOf(orders).get).toEqual(["ink"])
 
       yield* SubscriptionRef.set(selected, 1)
       yield* Effect.yieldNow
@@ -304,9 +330,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 7"])
-      expect(yield* first.status.get).toBe("loading")
+      expect(yield* statusOf(first).get).toBe("loading")
       yield* answer("orders 7", ["pen"])
-      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+      expect([yield* valueOf(first).get, yield* valueOf(second).get]).toEqual([["pen"], ["pen"]])
     }),
   )
 
@@ -415,8 +441,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
           const orders = yield* Orders.ask(userId)
 
           return {
-            status: orders.status,
-            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+            status: statusOf(orders),
+            count: Reactive.map(valueOf(orders), (loaded) => loaded?.length ?? 0),
           }
         }),
       )(OrdersView)
@@ -531,7 +557,7 @@ describe("server data in a store", () => {
         5000,
       ])
       yield* answer("users", [ada, grace])
-      expect(yield* later.value.get).toEqual([ada, grace])
+      expect(yield* valueOf(later).get).toEqual([ada, grace])
     }),
   )
 
@@ -871,7 +897,7 @@ describe("server data in a store", () => {
       yield* refuse("stock", "busy")
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* answer("stock", 9)
       expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
     }),
@@ -938,9 +964,9 @@ describe("server data in a store", () => {
       const [key] = Object.keys((yield* users.state.get).entries)
 
       yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
@@ -959,7 +985,7 @@ describe("server data in a store", () => {
       expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
 
       yield* answer("users", [grace])
-      expect(yield* shown.value.get).toEqual([grace])
+      expect(yield* valueOf(shown).get).toEqual([grace])
     }),
   )
 
@@ -971,8 +997,8 @@ describe("server data in a store", () => {
             const stock = yield* Stock.ask()
 
             return {
-              status: stock.status,
-              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+              status: statusOf(stock),
+              count: Reactive.map(valueOf(stock), (loaded) => loaded ?? 0),
             }
           }),
         )(OrdersView),
@@ -993,9 +1019,81 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states are plain data with a Schema", () => {
+  it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
     expect(
-      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
-    ).toEqual([true, true, true, true, false])
+      [
+        resultOf(undefined, null),
+        resultOf(heldEntry("loading", null, null), null),
+        resultOf(heldEntry("loading", null, null), "kept"),
+        resultOf(heldEntry("loaded", "tea", null), null),
+        resultOf(heldEntry("failed", null, "busy"), null),
+        resultOf(heldEntry("failed", "tea", "busy"), null),
+      ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
+    ).toEqual([
+      ["waiting", null, null],
+      ["loading", null, null],
+      ["loading", "kept", null],
+      ["loaded", "tea", null],
+      ["failed", null, "busy"],
+      ["failed", "tea", "busy"],
+    ])
+
+    const loaded = resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = resultOf({ ...heldEntry("loading", null, null), loadedAt: null }, "kept")
+
+    expect([
+      AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
+      AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
+    ]).toEqual([1, 0])
   })
+})
+
+class Plain extends Query.Tag<Plain>()("test/Plain", {
+  input: Schema.Int,
+  success: Schema.String,
+  failure: Schema.String,
+  load: (n: number) => Effect.succeed(String(n)),
+}) {}
+
+const malformed: ReadonlyArray<readonly [string, Schema.Json]> = [
+  ["requested", { key: "1" }],
+  ["loaded", { key: "1", request: 1, value: 7, at: 1 }],
+  ["failed", { key: "1", request: 1 }],
+  ["patched", { key: "1" }],
+  ["released", { key: "1" }],
+  ["held", {}],
+  ["dropped", { key: "1" }],
+  ["streamed", { entries: { 1: { status: "bogus" } } }],
+  ["loadedAhead", {}],
+  ["taken", {}],
+]
+
+describe("a query's commands, replayed from a log or the devtools", () => {
+  it.effect("refuse a payload their Schema does not accept, and change nothing", () =>
+    Effect.gen(function* () {
+      const inspected = yield* Ref.make<ReadonlyArray<Store.Inspected>>([])
+      const inspector = {
+        keepStates: 0,
+        register: (store: Store.Inspected) => Ref.update(inspected, (all) => [...all, store]),
+      }
+
+      yield* Effect.gen(function* () {
+        const [store] = yield* Ref.get(inspected)
+        const refused = yield* Effect.forEach(malformed, ([action, payload]) =>
+          Effect.map(
+            Effect.flip(Option.getOrThrow(Option.fromNullishOr(store)).run(action, payload)),
+            (error) => [action, error._tag],
+          ),
+        )
+
+        expect(refused).toEqual(malformed.map(([action]) => [action, "SchemaError"]))
+        expect(yield* Option.getOrThrow(Option.fromNullishOr(store)).encoded).toEqual({
+          entries: {},
+        })
+      }).pipe(
+        Effect.provide(Layer.provideMerge(Plain.live, State.layer)),
+        Effect.provideService(Store.Inspector, inspector),
+      )
+    }),
+  )
 })

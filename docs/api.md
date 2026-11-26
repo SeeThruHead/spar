@@ -147,11 +147,12 @@ step and fork the whole app.
 
 ### Work that takes time
 
-A store accepts every command; there are no guards. Work that takes time is an Effect on a
-service, and Effect decides what happens to a repeat: `FiberHandle.run(handle, effect, {
-onlyIfMissing: true })` ignores a second run while the first is going, plain `FiberHandle.run`
-replaces it, a `Semaphore` makes it wait, and an `Outbox.channel` keeps it on the device until it
-is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
+Work that takes time is a task of the store: `Store.task(payload, { result, run, finish, mode,
+refuses })` in the store's `tasks`. `run` is the Effect, `finish` changes the state once with what
+it returned, `mode` (`"switch"`, `"queue"`, `"concurrent"`) says what a second start does, and
+`refuses` names the commands and tasks refused while it runs. The store gains `tasks.<name>(payload)`
+to start it and `running.<name>`, a reactive boolean. What must survive a reload goes on an
+`Outbox.channel` (`apps/sidebar/src/ResetCounterStore.ts`, `docs/state-and-server-data.md`).
 
 ### A store beside its view
 
@@ -201,7 +202,8 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 ## Handle
 
 `Handle.make` in a component's Effect, `ref={handle}` on an element, then `Handle.focus(handle)`,
-`Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
+`Handle.focusInPlace(handle)` (focus without scrolling the page, as the router does after going
+back), `Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
 
 ## Form
 
@@ -335,9 +337,11 @@ in the log, the devtools and the traces like any other.
 | `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
-means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
-`loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
-input, for paging without a blank) and `refetch`, all reactive. It asks again
+means no argument). The handle has `result` and `refetch`. `result` is a reactive
+`AsyncResult` from `effect/reactivity`: `Initial` while the input is none or nothing has loaded,
+`Success` with the value, `Failure` with the typed error (and the last success, if any), each with
+`waiting: true` while a request runs. While a new input loads, `result` stays the last `Success`,
+marked `waiting`, so paging never blanks. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
@@ -417,7 +421,9 @@ What the tools show, docked at the corner of the page:
 - **Everything that happened.** One log of store commands, UI state changes, route changes and
   data arriving and backend calls, in order, each with its trace id. Jump to any moment, step
   earlier and later, or go back to now; the whole app, stores and UI state together, shows that
-  moment, and stepping opens the trace of the moment stepped to.
+  moment, and stepping opens the trace of the moment stepped to. From the keyboard, with Alt and
+  Shift held: ← and → step, End goes back to now, L shows or hides the lanes, and D opens or
+  closes the panel. None of these is a key an app is likely to want.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
   page: a saved store's saved state is not rewritten, so a reload returns to what was saved.

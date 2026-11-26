@@ -78,7 +78,7 @@
       - button "Reset after a delay"
     - text: Delay in seconds
     - spinbutton "Delay in seconds": "2"
-    - paragraph: "The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect, run by a FiberHandle."
+    - paragraph: "The + key adds 1 too. While the reset runs, the store refuses Add 1 and a second reset: the reset is one task of the store, and it names what it refuses."
   - region "People":
     - heading "People" [level=2]
     - paragraph:

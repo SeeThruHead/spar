@@ -201,11 +201,12 @@ by the build. A call the framework cannot see is a call missing from the trace.
 
 ## 18. Work that takes time is an Effect, and server data is a store
 
-Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
-command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
-`FiberHandle` that ignores or replaces it, a `Semaphore` that queues it). The rule is in that one
-Effect, so a button, a key and an agent get the same behaviour, and every command it sends is in
-the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
+Events interleave: anything can arrive while a multi-step flow is waiting. Slow work is a task of
+the store: one Effect that changes the state once, when it ends, so there is no in-between state
+to interleave with. The task says what a repeat does (`switch`, `queue`, `concurrent`) and which
+commands are refused while it runs. The rule is written once, on the task, so a button, a key and
+an agent get the same behaviour, a new command cannot forget it, and every start, finish and
+refusal is in the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
 and failed states, and any Effect reads it directly, so no prop carries server data.
 
 ## 19. The past can be walked and branched

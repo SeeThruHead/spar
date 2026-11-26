@@ -55,7 +55,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await log.getByText("filter").first().waitFor({ timeout: 5000 })
 
   const typed = log.locator("ol li", { hasText: 'filter "notes"' })
-  const first = (await typed.locator("code").first().textContent()) ?? ""
+  const first = ((await typed.locator("[data-what]").first().textContent()) ?? "").trim()
 
   await page.getByRole("searchbox").first().fill("")
   await typed.getByRole("button", { name: /^Jump to / }).click()
@@ -64,7 +64,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   const position = (await page.getByLabel("Timeline position").textContent()) ?? ""
 
   await page.screenshot({ path: `${root}artifacts/devtools-timeline.png` })
-  await log.getByRole("button", { name: "Back to now" }).click()
+  await page.getByLabel("Time travel").getByRole("button", { name: "Back to now" }).click()
 
   const live = await page.getByRole("searchbox").first().inputValue()
 
@@ -152,12 +152,16 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
   await counter.getByRole("button", { name: "Reset after a delay" }).click()
   await counter.getByRole("button", { name: "Reset after a delay" }).click()
   await page.keyboard.press("+")
-  await counter.getByLabel("Count", { exact: true }).filter({ hasText: "3" }).waitFor()
+  await log.locator("ol li[data-kind=refused]").nth(1).waitFor()
 
   const duringReset = (await counter.getByLabel("Count", { exact: true }).textContent()) ?? ""
-  const resetsStarted = await log.locator("ol li", { hasText: "resetClicked" }).count()
+  const resetRows = log.locator("ol li[data-kind=command]", {
+    has: page.locator("code", { hasText: /\/reset$/ }),
+  })
+  const resetsStarted = await resetRows.count()
+  const refusals = await log.locator("ol li[data-kind=refused]").count()
 
-  await log.locator("ol li", { hasText: "resetClicked" }).first().scrollIntoViewIfNeeded()
+  await resetRows.first().scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${root}artifacts/devtools-reset.png` })
   await counter
     .getByLabel("Counter status")
@@ -182,7 +186,7 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
 
   const rewoundNotes = (await scratch.getByLabel("Scratchpad count").textContent()) ?? ""
 
-  await log.getByRole("button", { name: "Fork from here" }).click()
+  await page.getByLabel("Time travel").getByRole("button", { name: "Fork from here" }).click()
   await noted("other")
 
   const forkedNotes = await scratch.getByRole("list").innerText()
@@ -202,10 +206,13 @@ const steps = async (): Promise<ReadonlyArray<string>> => {
     ...(["requested", "loaded"].every((word) => loadedBy.some((line) => line.includes(word)))
       ? []
       : [`the users query was logged as: ${loadedBy.join(" | ")}`]),
-    ...(duringReset === "3" ? [] : [`during the reset the count was "${duringReset}"`]),
+    ...(duringReset === "2" ? [] : [`during the reset the count was "${duringReset}"`]),
     ...(resetsStarted === 1
       ? []
-      : [`a second reset was not ignored: ${resetsStarted} resets started`]),
+      : [`a second reset was not refused: ${resetsStarted} resets started`]),
+    ...(refusals === 2
+      ? []
+      : [`the second reset and the + key should be refused, ${refusals} refusals were logged`]),
     ...(afterReset === "0" ? [] : [`after the reset the count was "${afterReset}"`]),
     ...(rewoundNotes === "1 note"
       ? []

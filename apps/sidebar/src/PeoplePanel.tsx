@@ -1,15 +1,16 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { For, Reactive, compose, withHandlers, withQuery, withStore } from "spar"
-import type { Query } from "spar"
 import { PeopleStore, UsersQuery, exportCsv } from "./People.ts"
 
-const statusOf = (status: Query.Status): string =>
-  ({
-    waiting: "Waiting",
-    loading: "Loading",
-    loaded: "Loaded",
-    failed: "Could not load",
-  })[status]
+const statusOf = <A, E>(result: AsyncResult.AsyncResult<A, E>): string =>
+  result.waiting
+    ? "Loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "Waiting",
+        onFailure: () => "Could not load",
+        onSuccess: () => "Loaded",
+      })
 
 const withExport = Effect.fnUntraced(function* () {
   const services = yield* Effect.context<PeopleStore | UsersQuery>()
@@ -20,7 +21,9 @@ const withExport = Effect.fnUntraced(function* () {
 const PeoplePanel = compose(
   withQuery("users", UsersQuery, () => undefined),
   withHandlers((props) => ({
-    rows: Reactive.map(props.users.value, (loaded) => loaded ?? []),
+    rows: Reactive.map(props.users.result, (result) =>
+      Option.getOrElse(AsyncResult.value(result), () => []),
+    ),
   })),
   withStore(PeopleStore, (people) => ({
     selected: people.select.selected,
@@ -35,7 +38,7 @@ const PeoplePanel = compose(
   <section class="people" aria-label="People">
     <h2>People</h2>
     <p>
-      <output aria-label="People status">{Reactive.map(props.users.status, statusOf)}</output>,{" "}
+      <output aria-label="People status">{Reactive.map(props.users.result, statusOf)}</output>,{" "}
       <output aria-label="People selected">{props.count}</output>
     </p>
     <table>

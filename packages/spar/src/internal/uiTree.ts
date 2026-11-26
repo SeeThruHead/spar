@@ -85,8 +85,12 @@ export class Kept<A> implements Cell.Cell<A> {
     this.past.write(rebuilt(kept))
   }
 
+  valueAt(seq: number): A {
+    return reached(this.past.read(), seq)?.value ?? this.first.read()
+  }
+
   showAt(seq: number): void {
-    this.display(reached(this.past.read(), seq)?.value ?? this.first.read())
+    this.display(this.valueAt(seq))
   }
 
   forkAt(seq: number): void {

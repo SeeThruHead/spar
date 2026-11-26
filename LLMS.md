@@ -103,8 +103,8 @@ in an enhancer and pass `props.shown` instead.
 | Show one thing or another                 | `<Show when={props.open}>...</Show>`                                                                                                    | A ternary inside JSX                                                                                           |
 | Load data from the server                 | A `Query.Tag`, and `withQuery(name, TheQuery, (props) => input)` where it is needed                                                     | Fetching in a component and passing the result down                                                            |
 | Use loaded data in an action              | An Effect that reads `TheQuery.read(input)` and then sends a command with the result                                                    | Props or arguments that carry server data                                                                      |
-| Stop a second run while one is going      | Run the work with `FiberHandle.run(handle, effect, { onlyIfMissing: true })`                                                            | Disabling the button and hoping nothing else starts it                                                         |
-| Run a flow with a wait in it              | One Effect: a command, `Effect.sleep` or the call, a command with the result                                                            | A lock, a queue, a flag in UI state                                                                            |
+| Stop a second run while one is going      | A `Store.task` that lists itself in `refuses`                                                                                           | Disabling the button and hoping nothing else starts it                                                         |
+| Run a flow with a wait in it              | A `Store.task`: `run` does the wait or the call, `finish` changes the state with what it returned                                       | Two commands (start, finish), a lock, a flag in the state or in UI state                                       |
 | Call your backend                         | `Backend.rpc(Group, url)` and call the client                                                                                           | `fetch`, axios, tRPC, a hand-rolled client                                                                     |
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                        | `fetch`, `FetchHttpClient.layer`                                                                               |
 | Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                              | Calling the server from a handler and hoping                                                                   |
@@ -188,19 +188,22 @@ because the store and its view sit in the same file.
 Read the "State, events that interleave, and server data" part below before writing any store
 with async work. The short version:
 
-- A store accepts every command; there are no guards. Work that takes time is an Effect on a
-  service (or an enhancer): it sends a command, does the work, and sends a command with the
-  result. Every command is in the log and the trace.
+- Work that takes time is a task of the store (`Store.task`): `run` is the Effect, `finish`
+  changes the state once with what it returned, `mode` says what a second start does, and
+  `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
+  state; never store a flag. Every start, finish and refusal is in the log and the trace.
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
   that needs it reads `TheQuery.read(input)` itself.
-- When only the newest run matters (a search box, a filter), run it with
-  `FiberHandle.run(handle, effect)`, which stops the one before; or load it with a Query.
-- When a second press must not start the work again (Pay, Save, Send), run it with
-  `FiberHandle.run(handle, effect, { onlyIfMissing: true })`, which ignores the repeat.
+- When only the newest run matters (a search box, a filter), give the task `mode: "switch"`,
+  which stops the one before; or load it with a Query.
+- When a second press must not start the work again (Pay, Save, Send), list the task in its own
+  `refuses`.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
-- A query's `value` is null while a new input loads. To keep the last rows on screen while the
-  next page or filter loads, show the handle's `latest`; for "load more", use `TheQuery.pages`.
+- A query's handle is `{ result, refetch }`, `result` being Effect's `AsyncResult`. Read it with
+  `AsyncResult.match(result, { onInitial, onFailure, onSuccess })`, `AsyncResult.value(result)`
+  or `result.waiting`; never keep a loading flag of your own. While the next page or filter loads,
+  `result` stays the last `Success`, marked `waiting`; for "load more", use `TheQuery.pages`.
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
@@ -296,7 +299,13 @@ export const Orders = compose(
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
   <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+    {Reactive.map(props.orders.result, (result) =>
+      AsyncResult.match(result, {
+        onInitial: () => "Loading orders",
+        onFailure: () => "The orders could not be loaded",
+        onSuccess: ({ value, waiting }) => `${value.length} orders${waiting ? ", updating" : ""}`,
+      }),
+    )}
   </p>
 ))
 ```
@@ -315,8 +324,8 @@ That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and
 
 What Spar does with it:
 
-1. `ask` (which `withQuery` calls) returns at once with a handle: `status`, `value`, `error`,
-   `loading`, each a reactive value, and `refetch`. No enhancer waits for data.
+1. `ask` (which `withQuery` calls) returns at once with a handle: `result`, a reactive Effect
+   `AsyncResult`, and `refetch`. No enhancer waits for data.
 2. Because nothing waits, the parent goes straight on to draw its children, and they draw theirs.
    Every query in the tree is reached in one pass, and every query with an input starts then,
    together.
@@ -333,20 +342,20 @@ const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
   withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
   withQuery("author", AuthorQuery, (props) =>
-    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
+    Reactive.map(props.report.result, (result) => Option.fromNullishOr(foundIn(result)?.authorId)),
   ),
 )((props) => (
   <section class="segment" aria-label="Report">
     <h1>
-      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+      <output aria-label="Report name">{Reactive.map(props.report.result, labelOf)}</output>
     </h1>
     <p>
-      <output aria-label="Report status">{props.report.status}</output>
+      <output aria-label="Report status">{Reactive.map(props.report.result, statusOf)}</output>
     </p>
     <p>
       Written by{" "}
-      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
-      <output aria-label="Author status">{props.author.status}</output>
+      <output aria-label="Author name">{Reactive.map(props.author.result, labelOf)}</output>{" "}
+      <output aria-label="Author status">{Reactive.map(props.author.result, statusOf)}</output>
     </p>
   </section>
 ))
@@ -478,7 +487,7 @@ loaded this way, as above.
 
 ### Pending and failure, per segment
 
-Each segment shows its own query's `status`, so one slow segment does not blank the others. For
+Each segment shows its own query's `result`, so one slow segment does not blank the others. For
 a component whose own Effect can wait or fail, `View.pending(placeholder)` and
 `View.recover(failure, view)` wrap that component alone. A query takes `retry`, a schedule,
 and stays `loading` until the schedule gives up.
@@ -837,11 +846,12 @@ by the build. A call the framework cannot see is a call missing from the trace.
 
 ### 18. Work that takes time is an Effect, and server data is a store
 
-Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
-command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
-`FiberHandle` that ignores or replaces it, a `Semaphore` that queues it). The rule is in that one
-Effect, so a button, a key and an agent get the same behaviour, and every command it sends is in
-the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
+Events interleave: anything can arrive while a multi-step flow is waiting. Slow work is a task of
+the store: one Effect that changes the state once, when it ends, so there is no in-between state
+to interleave with. The task says what a repeat does (`switch`, `queue`, `concurrent`) and which
+commands are refused while it runs. The rule is written once, on the task, so a button, a key and
+an agent get the same behaviour, a new command cannot forget it, and every start, finish and
+refusal is in the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
 and failed states, and any Effect reads it directly, so no prop carries server data.
 
 ### 19. The past can be walked and branched
@@ -1135,11 +1145,12 @@ step and fork the whole app.
 
 #### Work that takes time
 
-A store accepts every command; there are no guards. Work that takes time is an Effect on a
-service, and Effect decides what happens to a repeat: `FiberHandle.run(handle, effect, {
-onlyIfMissing: true })` ignores a second run while the first is going, plain `FiberHandle.run`
-replaces it, a `Semaphore` makes it wait, and an `Outbox.channel` keeps it on the device until it
-is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
+Work that takes time is a task of the store: `Store.task(payload, { result, run, finish, mode,
+refuses })` in the store's `tasks`. `run` is the Effect, `finish` changes the state once with what
+it returned, `mode` (`"switch"`, `"queue"`, `"concurrent"`) says what a second start does, and
+`refuses` names the commands and tasks refused while it runs. The store gains `tasks.<name>(payload)`
+to start it and `running.<name>`, a reactive boolean. What must survive a reload goes on an
+`Outbox.channel` (`apps/sidebar/src/ResetCounterStore.ts`, `docs/state-and-server-data.md`).
 
 #### A store beside its view
 
@@ -1265,7 +1276,8 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 ### Handle
 
 `Handle.make` in a component's Effect, `ref={handle}` on an element, then `Handle.focus(handle)`,
-`Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
+`Handle.focusInPlace(handle)` (focus without scrolling the page, as the router does after going
+back), `Handle.scrollIntoView(handle)` or `Handle.measure(handle)`.
 
 ### Form
 
@@ -1451,9 +1463,11 @@ in the log, the devtools and the traces like any other.
 | `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
-means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
-`loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
-input, for paging without a blank) and `refetch`, all reactive. It asks again
+means no argument). The handle has `result` and `refetch`. `result` is a reactive
+`AsyncResult` from `effect/reactivity`: `Initial` while the input is none or nothing has loaded,
+`Success` with the value, `Failure` with the typed error (and the last success, if any), each with
+`waiting: true` while a request runs. While a new input loads, `result` stays the last `Success`,
+marked `waiting`, so paging never blanks. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
@@ -1564,7 +1578,9 @@ What the tools show, docked at the corner of the page:
 - **Everything that happened.** One log of store commands, UI state changes, route changes and
   data arriving and backend calls, in order, each with its trace id. Jump to any moment, step
   earlier and later, or go back to now; the whole app, stores and UI state together, shows that
-  moment, and stepping opens the trace of the moment stepped to.
+  moment, and stepping opens the trace of the moment stepped to. From the keyboard, with Alt and
+  Shift held: ← and → step, End goes back to now, L shows or hides the lanes, and D opens or
+  closes the panel. None of these is a key an app is likely to want.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
   page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
@@ -1716,43 +1732,69 @@ needs it.
 
 ### What takes time is an Effect
 
-A store is a Schema, pure actions and selectors over its part of the one state. It accepts every
-command at any time; there are no guards, phases or refusals. Work that takes time is a plain
-Effect on a service, and Effect's own tools decide what happens when events interleave.
+A store is a Schema, pure actions and selectors over its part of the one state. Work that takes
+time is a task of the store: an Effect that runs in the store, then changes the state once, when
+it finishes. A task says what happens when it is started again, and which commands the store
+refuses while it runs.
 
-A reset that takes two seconds is three steps: start, wait, finish. Written as one Effect and run
-by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothing, from a button,
-a key or an agent alike:
+The counter's reset waits two seconds, then sets the count to 0. While it runs, Add 1 and a second
+reset are refused, from a button, a key or an agent alike:
 
 ```ts
-const withReset = Effect.fnUntraced(function* () {
-  const store = yield* CounterStore
-  const running = yield* FiberHandle.make()
-  const reset = Effect.gen(function* () {
-    yield* store.commands.resetClicked()
-    yield* Effect.sleep("2 seconds")
-    yield* store.commands.resetCompleted()
-  })
-
-  return { onReset: Effect.asVoid(FiberHandle.run(running, reset, { onlyIfMissing: true })) }
-})
+export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
+  state: State,
+  initialState,
+  actions: {
+    incremented: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      count: state.count + 1,
+    })),
+    resetDurationChanged: Store.action(Schema.Finite, (state: State, seconds: number): State => ({
+      ...state,
+      resetDuration: Math.max(0, seconds),
+    })),
+  },
+  selectors: {
+    count: Store.selector(Schema.Finite, (state: State) => state.count),
+    resetDuration: Store.selector(Schema.Finite, (state: State) => state.resetDuration),
+  },
+  tasks: {
+    reset: Store.task(Schema.Void, {
+      result: Schema.Void,
+      run: (_: void, state: State) => Effect.sleep(Duration.seconds(state.resetDuration)),
+      finish: (state: State): State => ({ ...state, count: 0 }),
+      mode: "switch",
+      refuses: ["incremented", "reset"],
+    }),
+  },
+}) {}
 ```
 
-(`apps/site/src/StoreDemo.ts`)
+(`apps/sidebar/src/ResetCounterStore.ts`)
 
-The same tools cover the other cases:
+What this rules out:
 
-| What should happen to a repeat | How it is written                                                   |
-| ------------------------------ | ------------------------------------------------------------------- |
-| Ignored while the first runs   | `FiberHandle.run(handle, effect, { onlyIfMissing: true })`          |
-| Replaces the first             | `FiberHandle.run(handle, effect)`, which interrupts the earlier run |
-| Waits its turn                 | A `Semaphore` with one permit around the effect                     |
-| One per key                    | A `FiberMap` keyed by what the work is about                        |
-| Survives a reload and retries  | An `Outbox.channel`, which keeps it on the device until it is sent  |
+- **No half-finished reset.** The reset is one task, not a start command and a finish command, so
+  nothing can interleave between two steps, and nobody can send the finish early: there is no
+  finish command to send.
+- **No flag to forget.** `store.running.reset` is true while the task runs. It is worked out from
+  the task, not stored in the state, so it cannot disagree with what is running.
+- **No check to repeat.** What the reset refuses is written once, on the task. An action does not
+  check anything, so a new action cannot forget to.
 
-Every command is in the log and the trace with what it carried, so the order things happened in
-is never a guess. The counter in the showcase, `apps/sidebar/src/ResetCounter.tsx`, keeps its
-buttons enabled and its + key working; its reset is the Effect above.
+A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
+task it met. The task's start and its finish are in the log with what they carried, so a log
+replays to the same state.
+
+| `mode`         | What happens when it is started again while it runs              |
+| -------------- | ---------------------------------------------------------------- |
+| `"switch"`     | The new run replaces the running one, which is interrupted       |
+| `"queue"`      | The new run waits for the one before it                          |
+| `"concurrent"` | Both run                                                         |
+| any mode       | List the task in its own `refuses` and a second start is refused |
+
+Work that must survive a reload and be retried, such as a message to the server, goes through an
+`Outbox.channel` instead, which keeps it on the device until it is sent.
 
 ### Server data lives in a store
 
@@ -1783,7 +1825,13 @@ export const Orders = compose(
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
   <p>
-    {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
+    {Reactive.map(props.orders.result, (result) =>
+      AsyncResult.match(result, {
+        onInitial: () => "Loading orders",
+        onFailure: () => "The orders could not be loaded",
+        onSuccess: ({ value, waiting }) => `${value.length} orders${waiting ? ", updating" : ""}`,
+      }),
+    )}
   </p>
 ))
 ```
@@ -1803,8 +1851,9 @@ That file mounts `Parent` and checks it shows `loaded: 3 orders`.
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
 
-- **`ask` is a declaration.** It returns at once with a handle of reactive values (`status`,
-  `value`, `error`, `loading`) and `refetch`. It does not wait for data, and no enhancer
+- **`ask` is a declaration.** It returns at once with a handle: `result`, a reactive Effect
+  `AsyncResult` (`Initial`, `Success` or `Failure`, each with a `waiting` flag), and `refetch`.
+  It does not wait for data, and no enhancer
   does, so every query in the tree being mounted is declared in the same
   pass and they all start together. Nesting components does not make a waterfall.
 - **The query runs in its store, not in the component.** The store is provided at the root
@@ -1821,7 +1870,7 @@ What makes that enough:
 const askedTogether = Effect.gen(function* () {
   const users = yield* Users.ask()
   const stock = yield* Stock.ask()
-  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const firstUser = Reactive.map(valueOf(users), (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
   const orders = yield* Orders.ask(firstUser)
 
   return { users, stock, orders }
@@ -1840,9 +1889,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
         expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
 
         yield* answer("stock", 40)
-        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* valueOf(declared.stock).get).toBe(40)
         expect(yield* whats).toEqual(["users", "stock"])
-        expect(yield* declared.orders.status.get).toBe("waiting")
+        expect(yield* statusOf(declared.orders).get).toBe("waiting")
 
         yield* answer("users", [ada, grace])
         yield* Effect.yieldNow
@@ -1888,23 +1937,25 @@ describe("the natural way: a value from one place feeds a query declared in anot
     }),
   )
 
-  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
-    Effect.gen(function* () {
-      const { built, answer } = yield* opened
-      const page = yield* SubscriptionRef.make(1)
-      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+  it.effect(
+    "while another input loads, the last value loaded is still the result, marked waiting",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const page = yield* SubscriptionRef.make(1)
+        const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
 
-      yield* Effect.yieldNow
-      expect(yield* orders.latest.get).toBeNull()
-      yield* answer("orders 1", ["tea"])
-      yield* SubscriptionRef.set(page, 2)
-      yield* Effect.yieldNow
-      yield* Effect.yieldNow
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+        yield* answer("orders 1", ["tea"])
+        yield* SubscriptionRef.set(page, 2)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
-      yield* answer("orders 2", ["ink"])
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
-    }),
+        yield* answer("orders 2", ["ink"])
+        expect(yield* readings(orders)).toEqual(["loaded", ["ink"], null, false])
+      }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
@@ -1922,10 +1973,10 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 1", "orders 2"])
-      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+      expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
       yield* answer("orders 2", ["ink"])
-      expect(yield* orders.value.get).toEqual(["ink"])
+      expect(yield* valueOf(orders).get).toEqual(["ink"])
 
       yield* SubscriptionRef.set(selected, 1)
       yield* Effect.yieldNow
@@ -1945,9 +1996,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 7"])
-      expect(yield* first.status.get).toBe("loading")
+      expect(yield* statusOf(first).get).toBe("loading")
       yield* answer("orders 7", ["pen"])
-      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+      expect([yield* valueOf(first).get, yield* valueOf(second).get]).toEqual([["pen"], ["pen"]])
     }),
   )
 
@@ -2056,8 +2107,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
           const orders = yield* Orders.ask(userId)
 
           return {
-            status: orders.status,
-            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+            status: statusOf(orders),
+            count: Reactive.map(valueOf(orders), (loaded) => loaded?.length ?? 0),
           }
         }),
       )(OrdersView)
@@ -2172,7 +2223,7 @@ describe("server data in a store", () => {
         5000,
       ])
       yield* answer("users", [ada, grace])
-      expect(yield* later.value.get).toEqual([ada, grace])
+      expect(yield* valueOf(later).get).toEqual([ada, grace])
     }),
   )
 
@@ -2512,7 +2563,7 @@ describe("server data in a store", () => {
       yield* refuse("stock", "busy")
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* answer("stock", 9)
       expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
     }),
@@ -2579,9 +2630,9 @@ describe("server data in a store", () => {
       const [key] = Object.keys((yield* users.state.get).entries)
 
       yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
@@ -2600,7 +2651,7 @@ describe("server data in a store", () => {
       expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
 
       yield* answer("users", [grace])
-      expect(yield* shown.value.get).toEqual([grace])
+      expect(yield* valueOf(shown).get).toEqual([grace])
     }),
   )
 
@@ -2612,8 +2663,8 @@ describe("server data in a store", () => {
             const stock = yield* Stock.ask()
 
             return {
-              status: stock.status,
-              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+              status: statusOf(stock),
+              count: Reactive.map(valueOf(stock), (loaded) => loaded ?? 0),
             }
           }),
         )(OrdersView),
@@ -2634,10 +2685,32 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states are plain data with a Schema", () => {
+  it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
     expect(
-      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
-    ).toEqual([true, true, true, true, false])
+      [
+        resultOf(undefined, null),
+        resultOf(heldEntry("loading", null, null), null),
+        resultOf(heldEntry("loading", null, null), "kept"),
+        resultOf(heldEntry("loaded", "tea", null), null),
+        resultOf(heldEntry("failed", null, "busy"), null),
+        resultOf(heldEntry("failed", "tea", "busy"), null),
+      ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
+    ).toEqual([
+      ["waiting", null, null],
+      ["loading", null, null],
+      ["loading", "kept", null],
+      ["loaded", "tea", null],
+      ["failed", null, "busy"],
+      ["failed", "tea", "busy"],
+    ])
+
+    const loaded = resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = resultOf({ ...heldEntry("loading", null, null), loadedAt: null }, "kept")
+
+    expect([
+      AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
+      AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
+    ]).toEqual([1, 0])
   })
 })
 ```
@@ -2659,20 +2732,20 @@ Each of these is an entry in the log and a span in the trace.
 | React Query                                | Spar                                                                                                                                                                                                        |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                      |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                               |
+| `status`, `data`, `error`                  | The handle's `result`, an `AsyncResult` from `effect/reactivity`: read it with `AsyncResult.match`, `AsyncResult.value` or `result.waiting`                                                                 |
 | Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                           |
 | `staleTime`                                | `staleAfter`                                                                                                                                                                                                |
 | `refetch()`                                | The handle's `refetch`                                                                                                                                                                                      |
 | Deduping identical requests                | One request for each input at a time. A second while loading is not sent                                                                                                                                    |
 | A late answer overwriting a newer one      | Ignored: an answer carries the number of the request it answers                                                                                                                                             |
 | `invalidateQueries` after a mutation       | `TheQuery.invalidate` after the save, in the service method that saves                                                                                                                                      |
-| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                              |
+| Keeps old data while loading               | Yes: while a refetch or a new input loads, `result` is the last `Success` with `waiting: true`, so the last rows stay on screen and `waiting` says they are being replaced                                  |
 | `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                           |
 | Optimistic update                          | `TheQuery.patch(input, change)` shows the change at once; an `Outbox.channel` sends it and ends with `TheQuery.invalidate`; `Outbox.givenUp(channel)` runs `TheQuery.invalidate` if the send fails for good |
 | Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                          |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                       |
+| Keeping the last page while the next loads | Nothing to do: `result` keeps the last page, marked `waiting`                                                                                                                                               |
 | Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                           |
+| Retries                                    | `retry`, a schedule; `result` stays `waiting` until it gives up                                                                                                                                             |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
 
 #### A list read a page at a time
@@ -2722,7 +2795,8 @@ at the end.
 the end. `loadMore` does nothing while the last page is still loading or when there is no more.
 `failed` says a page failed. Going back to the list later finds its pages in the cache, by each
 page's `staleAfter`. For numbered pages where only one shows at a time, pass the page number as
-the input of an ordinary `ask` and show `latest` while the next one loads.
+the input of an ordinary `ask`: its `result` keeps the page on screen, marked `waiting`, while the
+next one loads.
 
 Place it like any store: `TheQuery.live` in the app's layers, or `TheQuery.beside(component)` to
 ship it with the view that shows it.
@@ -2774,9 +2848,10 @@ plain "API Cache" example does the same by hand with `AsyncData` fields in the M
 | A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
 | Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An Effect calls `TheQuery.read(input)`                                                   |
 
-Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
-holding old data" apart as states of their own, where Spar leaves you to read `status` and
-`value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
+Both tell "refreshing with old data" and "failed but still holding old data" apart: Foldkit with
+`AsyncData`'s `Refreshing` and `Stale`, Spar with Effect's `AsyncResult` (a `Success` or a
+`Failure` with `waiting`, and a `Failure` that keeps its `previousSuccess`). Foldkit's query API
+is marked experimental. Where Spar is ahead: nothing is lifted or
 folded by hand, a stale time is declared, a dependent query needs no code, and every request and
 answer is in the log.
 
@@ -3240,9 +3315,12 @@ describe("rendering", () => {
 ### A long action
 
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
-short: a store command, a UI state change, a navigation. Put slow work in an Effect on a service,
-run by a `FiberHandle` so a repeat is ignored while it runs, or on an outbox channel for what must
-reach the server. A form's submit already ignores a second submit while the first is running.
+short: a store command, a UI state change, a navigation. Put slow work in a task of the store
+(`Store.task`), whose `mode` and `refuses` say what a repeat or another command does while it
+runs, or on an outbox channel for what must reach the server. A click or a submit whose handler
+is still running ignores a second press of the same element, so a double click on Export or Pay
+runs the work once. A handler that finishes at once, such as a store command, counts every click,
+and typing is never dropped.
 
 
 # Coming from React
@@ -3366,8 +3444,6 @@ and the backend (`docs/devtools-compared.md`).
   Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
-- **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
-  as cases of their own. In Spar you read `status` and `value` together.
 - **Speed on a few list operations, depending on the run.** In the latest run of this repo's
   benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
   one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next
@@ -3409,13 +3485,13 @@ follows is what Solid says it does, not what was seen it do, except where the be
 |                                   | Solid 2.0                                                                                           | Spar                                                                                                                                                               |
 | --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Declaring it                      | Any computation that returns a promise: `createMemo(() => fetchUser(id()))`                         | A query class with Schemas, then `yield* TheQuery.ask(input)` in the component                                                                                     |
-| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `status`                                                                                        |
+| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `result`                                                                                        |
 | One piece that needs another      | A computation reads the other's value, so it runs when that value is ready                          | The second query's input is made from the first one's value; it is `waiting` until then                                                                            |
-| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `status` is `loading`; `latest` keeps the last loaded value                                                                                                        |
+| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `result` keeps the last value, marked `waiting`                                                                                                                    |
 | A request that is superseded      | The earlier run is cleaned up, and an AbortController registered in it can cancel the request       | The earlier answer is ignored when it lands, because it is not for the newest request. The request is not cancelled                                                |
 | A cache by input, a stale time    | Not in the core: a computation holds the value for its current inputs                               | Yes: entries keyed by the encoded input, `staleAfter`, refetch on focus and reconnect                                                                              |
 | A change shown before it is saved | `action` with `createOptimisticStore`; the optimistic value reverts by itself when the work settles | `TheQuery.patch(input, f)` beside an `Outbox.channel` send; the send survives a reload and is retried, and on `Outbox.givenUp` the query loads what the server has |
-| Failure                           | `<Errored>`, or an effect's `error` option                                                          | The handle's `error`, typed by the query's failure Schema; `retry` takes a schedule                                                                                |
+| Failure                           | `<Errored>`, or an effect's `error` option                                                          | A `Failure` in the handle's `result`, typed by the query's failure Schema; `retry` takes a schedule                                                                |
 | Asking again                      | `refresh(user)`, with `affects(user)` to show it as pending                                         | The handle's `refetch`, or `TheQuery.invalidate` from any Effect                                                                                                   |
 
 **The same idea in both.** Data that arrives later is a reactive value. What depends on it is
@@ -3511,35 +3587,35 @@ page sets its model beside Spar's, from Treflex's own README and reference (`act
 `restart-and-records.md`). Both keep work out of components; they differ in where the work lives
 and how two pieces of work on the same thing relate.
 
-| Question                      | Treflex                                                                                                           | Spar                                                                                                      |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | In an Effect on a service; the store (`Store.Tag`) holds the state, a reducer per action                  |
-| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; an Effect sends commands as its work goes                     |
-| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the Effect's requirements, provided as layers; a test provides other layers            |
-| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other unless the Effect says so (a `Semaphore`); each command applies at once         |
-| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `FiberHandle.run` with `onlyIfMissing` ignores the repeat; plain `FiberHandle.run` stops the one running  |
-| Is it running?                | `inFlight(action, owner)`                                                                                         | A field in the state that the Effect sets at its start and end, so the view can read it                   |
-| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | Written as code in the Effect, before it sends the command                                                |
-| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | A saved store (`layerSaved`) comes back from the device; an outbox channel resends what was not confirmed |
-| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its fibers stop with its scope                                 |
-| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, UI state and routes, each with its trace; time travel and forks in the devtools |
+| Question                      | Treflex                                                                                                           | Spar                                                                                                           |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | In a task of the store (`Store.task`): one Effect that changes the state once, when it finishes                |
+| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; an Effect sends commands as its work goes                          |
+| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the Effect's requirements, provided as layers; a test provides other layers                 |
+| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | A task names the commands refused while it runs; everything else applies at once                               |
+| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | The task's `mode`: `switch` stops the one running, `queue` waits, `concurrent` runs both; or it refuses itself |
+| Is it running?                | `inFlight(action, owner)`                                                                                         | `store.running.<task>`, worked out from the task, not stored                                                   |
+| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | Refused while a task that names it runs, and logged as `refused`                                               |
+| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | A saved store (`layerSaved`) comes back from the device; an outbox channel resends what was not confirmed      |
+| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its fibers stop with its scope                                      |
+| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, UI state and routes, each with its trace; time travel and forks in the devtools      |
 
 ### What each makes impossible
 
 - **Treflex:** an entity changing under an action while that action waits (the hold), and work
   stopping because its view went away.
-- **Spar:** state that changes outside a reducer, work that runs twice (one Effect in a
-  `FiberHandle` ignores or replaces a repeat), and an older answer landing over a newer one
-  (queries numbering their requests).
+- **Spar:** state that changes outside a reducer, a half-finished task (it changes the state once,
+  at its end, and has no finish command anyone could send early), a running flag that disagrees
+  with what runs, and an older answer landing over a newer one (queries numbering their requests).
 
 ### Where they differ in spirit
 
 Treflex makes the action the unit: it holds its entity, runs step by step, and the runtime can
 pause, cancel, record and restore it between steps. Spar makes the state the unit: every change is
-one command applied at once, and async work is a plain Effect that sends commands as it goes.
-Treflex queues a second click behind the first; in Spar the Effect says what a second click does,
-with Effect's own tools: a `FiberHandle` that ignores it or replaces the first run, or a
-`Semaphore` that queues it.
+one command applied at once, and slow work is a task that changes the state once, when it ends.
+Treflex queues a second click behind the first; in Spar the task says what a second click does
+(`switch`, `queue` or `concurrent`) and which commands wait for nobody but are refused while it
+runs. Both put the rule in one place, so it cannot be forgotten by a new command.
 
 
 # Diagnostics
@@ -4383,18 +4459,17 @@ export const Notes = NotesStore.with(NotesPanel)
 A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.
 
 ```ts
-import { Schema } from "effect"
+import { Duration, Effect, Schema } from "effect"
 import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
-  resetting: Schema.Boolean,
   resetDuration: Schema.Finite,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { count: 0, resetting: false, resetDuration: 2 }
+const initialState: State = { count: 0, resetDuration: 2 }
 
 export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
   state: State,
@@ -4408,20 +4483,19 @@ export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/R
       ...state,
       resetDuration: Math.max(0, seconds),
     })),
-    resetClicked: Store.action(Schema.Void, (state: State): State => ({
-      ...state,
-      resetting: true,
-    })),
-    resetCompleted: Store.action(Schema.Void, (state: State): State => ({
-      ...state,
-      count: 0,
-      resetting: false,
-    })),
   },
   selectors: {
     count: Store.selector(Schema.Finite, (state: State) => state.count),
-    resetting: Store.selector(Schema.Boolean, (state: State) => state.resetting),
     resetDuration: Store.selector(Schema.Finite, (state: State) => state.resetDuration),
+  },
+  tasks: {
+    reset: Store.task(Schema.Void, {
+      result: Schema.Void,
+      run: (_: void, state: State) => Effect.sleep(Duration.seconds(state.resetDuration)),
+      finish: (state: State): State => ({ ...state, count: 0 }),
+      mode: "switch",
+      refuses: ["incremented", "reset"],
+    }),
   },
 }) {}
 ```
@@ -4431,7 +4505,7 @@ export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/R
 Its component, composed with `withStore`. The buttons are never disabled; the store decides.
 
 ```tsx
-import { Duration, Effect, FiberHandle, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Reactive, UiState, compose, withKey, withStore } from "spar"
 import { ResetCounterStore } from "./ResetCounterStore.ts"
 
@@ -4449,32 +4523,16 @@ const withDelay = Effect.fnUntraced(function* () {
   }
 })
 
-const withReset = Effect.fnUntraced(function* () {
-  const store = yield* ResetCounterStore
-  const running = yield* FiberHandle.make()
-  const resetAfterDelay = Effect.gen(function* () {
-    const seconds = yield* store.select.resetDuration.get
-
-    yield* store.commands.resetClicked()
-    yield* Effect.sleep(Duration.seconds(seconds))
-    yield* store.commands.resetCompleted()
-  })
-
-  return {
-    onReset: Effect.asVoid(FiberHandle.run(running, resetAfterDelay, { onlyIfMissing: true })),
-  }
-})
-
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
     count: store.select.count,
-    status: Reactive.map(store.select.resetting, (resetting) =>
+    status: Reactive.map(store.running.reset, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
     onIncrement: store.commands.incremented(),
+    onReset: store.tasks.reset(),
   })),
   withDelay,
-  withReset,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -4501,8 +4559,8 @@ const ResetCounterPanel = compose(
       />
     </label>
     <p class="hint">
-      The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect,
-      run by a FiberHandle.
+      The + key adds 1 too. While the reset runs, the store refuses Add 1 and a second reset: the
+      reset is one task of the store, and it names what it refuses.
     </p>
   </section>
 ))
@@ -4591,18 +4649,19 @@ export const exportCsv = Effect.fn("People.exportCsv")(function* () {
 The people table, composed, its rows in a For.
 
 ```tsx
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { For, Reactive, compose, withHandlers, withQuery, withStore } from "spar"
-import type { Query } from "spar"
 import { PeopleStore, UsersQuery, exportCsv } from "./People.ts"
 
-const statusOf = (status: Query.Status): string =>
-  ({
-    waiting: "Waiting",
-    loading: "Loading",
-    loaded: "Loaded",
-    failed: "Could not load",
-  })[status]
+const statusOf = <A, E>(result: AsyncResult.AsyncResult<A, E>): string =>
+  result.waiting
+    ? "Loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "Waiting",
+        onFailure: () => "Could not load",
+        onSuccess: () => "Loaded",
+      })
 
 const withExport = Effect.fnUntraced(function* () {
   const services = yield* Effect.context<PeopleStore | UsersQuery>()
@@ -4613,7 +4672,9 @@ const withExport = Effect.fnUntraced(function* () {
 const PeoplePanel = compose(
   withQuery("users", UsersQuery, () => undefined),
   withHandlers((props) => ({
-    rows: Reactive.map(props.users.value, (loaded) => loaded ?? []),
+    rows: Reactive.map(props.users.result, (result) =>
+      Option.getOrElse(AsyncResult.value(result), () => []),
+    ),
   })),
   withStore(PeopleStore, (people) => ({
     selected: people.select.selected,
@@ -4628,7 +4689,7 @@ const PeoplePanel = compose(
   <section class="people" aria-label="People">
     <h2>People</h2>
     <p>
-      <output aria-label="People status">{Reactive.map(props.users.status, statusOf)}</output>,{" "}
+      <output aria-label="People status">{Reactive.map(props.users.result, statusOf)}</output>,{" "}
       <output aria-label="People selected">{props.count}</output>
     </p>
     <table>
@@ -4692,6 +4753,7 @@ Tests of the export: the file, what it says with nobody selected, one trace for 
 ```ts
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Ref } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
 import { State, Timeline } from "spar"
@@ -4732,7 +4794,7 @@ describe("people: server data in a store, used by another store's action", () =>
       const users = yield* Effect.provide(UsersQuery.ask(), built)
 
       yield* TestClock.adjust("40 millis")
-      expect(yield* users.value.get).toEqual(people)
+      expect(Option.getOrNull(AsyncResult.value(yield* users.result.get))).toEqual(people)
 
       yield* store.commands.toggled(123)
       yield* store.commands.toggled(124)
@@ -4800,10 +4862,13 @@ import {
   Tracer,
 } from "effect"
 import { SecureRandom } from "effect/crypto"
+import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Store, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
+import { resultOf } from "../src/internal/queryResult.ts"
+import { errorIn, statusIn, statusOf, valueIn, valueOf } from "./results.ts"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
 
 const User = Schema.Struct({ id: Schema.Int, email: Schema.String })
@@ -4943,8 +5008,29 @@ const opened = Effect.gen(function* () {
   }
 })
 
+const heldEntry = (
+  status: "loading" | "loaded" | "failed",
+  value: string | null,
+  error: string | null,
+) => ({
+  status,
+  value,
+  error,
+  loadedAt: 1,
+  request: 1,
+  input: null,
+  traceId: "",
+  spanId: "",
+  unusedSince: null,
+})
+
 const readings = <A, E>(handle: Query.Handle<A, E>) =>
-  Effect.all([handle.status.get, handle.value.get, handle.error.get, handle.loading.get])
+  Effect.map(handle.result.get, (result) => [
+    statusIn(result),
+    valueIn(result),
+    errorIn(result),
+    result.waiting,
+  ])
 
 const feedSays = (label: string) =>
   document.querySelector(`[aria-label="Feed ${label}"]`)?.textContent
@@ -4965,7 +5051,7 @@ const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new 
 const askedTogether = Effect.gen(function* () {
   const users = yield* Users.ask()
   const stock = yield* Stock.ask()
-  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const firstUser = Reactive.map(valueOf(users), (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
   const orders = yield* Orders.ask(firstUser)
 
   return { users, stock, orders }
@@ -4984,9 +5070,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
         expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
 
         yield* answer("stock", 40)
-        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* valueOf(declared.stock).get).toBe(40)
         expect(yield* whats).toEqual(["users", "stock"])
-        expect(yield* declared.orders.status.get).toBe("waiting")
+        expect(yield* statusOf(declared.orders).get).toBe("waiting")
 
         yield* answer("users", [ada, grace])
         yield* Effect.yieldNow
@@ -5032,23 +5118,25 @@ describe("the natural way: a value from one place feeds a query declared in anot
     }),
   )
 
-  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
-    Effect.gen(function* () {
-      const { built, answer } = yield* opened
-      const page = yield* SubscriptionRef.make(1)
-      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+  it.effect(
+    "while another input loads, the last value loaded is still the result, marked waiting",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const page = yield* SubscriptionRef.make(1)
+        const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
 
-      yield* Effect.yieldNow
-      expect(yield* orders.latest.get).toBeNull()
-      yield* answer("orders 1", ["tea"])
-      yield* SubscriptionRef.set(page, 2)
-      yield* Effect.yieldNow
-      yield* Effect.yieldNow
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+        yield* answer("orders 1", ["tea"])
+        yield* SubscriptionRef.set(page, 2)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+        expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
-      yield* answer("orders 2", ["ink"])
-      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
-    }),
+        yield* answer("orders 2", ["ink"])
+        expect(yield* readings(orders)).toEqual(["loaded", ["ink"], null, false])
+      }),
   )
 
   it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
@@ -5066,10 +5154,10 @@ describe("the natural way: a value from one place feeds a query declared in anot
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 1", "orders 2"])
-      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+      expect(yield* readings(orders)).toEqual(["loading", ["tea"], null, true])
 
       yield* answer("orders 2", ["ink"])
-      expect(yield* orders.value.get).toEqual(["ink"])
+      expect(yield* valueOf(orders).get).toEqual(["ink"])
 
       yield* SubscriptionRef.set(selected, 1)
       yield* Effect.yieldNow
@@ -5089,9 +5177,9 @@ describe("the natural way: a value from one place feeds a query declared in anot
 
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["orders 7"])
-      expect(yield* first.status.get).toBe("loading")
+      expect(yield* statusOf(first).get).toBe("loading")
       yield* answer("orders 7", ["pen"])
-      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+      expect([yield* valueOf(first).get, yield* valueOf(second).get]).toEqual([["pen"], ["pen"]])
     }),
   )
 
@@ -5200,8 +5288,8 @@ describe("the natural way: a value from one place feeds a query declared in anot
           const orders = yield* Orders.ask(userId)
 
           return {
-            status: orders.status,
-            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+            status: statusOf(orders),
+            count: Reactive.map(valueOf(orders), (loaded) => loaded?.length ?? 0),
           }
         }),
       )(OrdersView)
@@ -5316,7 +5404,7 @@ describe("server data in a store", () => {
         5000,
       ])
       yield* answer("users", [ada, grace])
-      expect(yield* later.value.get).toEqual([ada, grace])
+      expect(yield* valueOf(later).get).toEqual([ada, grace])
     }),
   )
 
@@ -5656,7 +5744,7 @@ describe("server data in a store", () => {
       yield* refuse("stock", "busy")
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["stock", "stock"])
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* answer("stock", 9)
       expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
     }),
@@ -5723,9 +5811,9 @@ describe("server data in a store", () => {
       const [key] = Object.keys((yield* users.state.get).entries)
 
       yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
-      expect(yield* shown.status.get).toBe("loading")
+      expect(yield* statusOf(shown).get).toBe("loading")
       expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
@@ -5744,7 +5832,7 @@ describe("server data in a store", () => {
       expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
 
       yield* answer("users", [grace])
-      expect(yield* shown.value.get).toEqual([grace])
+      expect(yield* valueOf(shown).get).toEqual([grace])
     }),
   )
 
@@ -5756,8 +5844,8 @@ describe("server data in a store", () => {
             const stock = yield* Stock.ask()
 
             return {
-              status: stock.status,
-              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+              status: statusOf(stock),
+              count: Reactive.map(valueOf(stock), (loaded) => loaded ?? 0),
             }
           }),
         )(OrdersView),
@@ -5778,11 +5866,83 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states are plain data with a Schema", () => {
+  it("its result is Effect's AsyncResult: nothing asked, loading, loaded, failed, each while waiting", () => {
     expect(
-      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
-    ).toEqual([true, true, true, true, false])
+      [
+        resultOf(undefined, null),
+        resultOf(heldEntry("loading", null, null), null),
+        resultOf(heldEntry("loading", null, null), "kept"),
+        resultOf(heldEntry("loaded", "tea", null), null),
+        resultOf(heldEntry("failed", null, "busy"), null),
+        resultOf(heldEntry("failed", "tea", "busy"), null),
+      ].map((result) => [statusIn(result), valueIn(result), errorIn(result)]),
+    ).toEqual([
+      ["waiting", null, null],
+      ["loading", null, null],
+      ["loading", "kept", null],
+      ["loaded", "tea", null],
+      ["failed", null, "busy"],
+      ["failed", "tea", "busy"],
+    ])
+
+    const loaded = resultOf(heldEntry("loaded", "tea", null), null)
+    const neverLoaded = resultOf({ ...heldEntry("loading", null, null), loadedAt: null }, "kept")
+
+    expect([
+      AsyncResult.isSuccess(loaded) ? loaded.timestamp : "no success",
+      AsyncResult.isSuccess(neverLoaded) ? neverLoaded.timestamp : "no success",
+    ]).toEqual([1, 0])
   })
+})
+
+class Plain extends Query.Tag<Plain>()("test/Plain", {
+  input: Schema.Int,
+  success: Schema.String,
+  failure: Schema.String,
+  load: (n: number) => Effect.succeed(String(n)),
+}) {}
+
+const malformed: ReadonlyArray<readonly [string, Schema.Json]> = [
+  ["requested", { key: "1" }],
+  ["loaded", { key: "1", request: 1, value: 7, at: 1 }],
+  ["failed", { key: "1", request: 1 }],
+  ["patched", { key: "1" }],
+  ["released", { key: "1" }],
+  ["held", {}],
+  ["dropped", { key: "1" }],
+  ["streamed", { entries: { 1: { status: "bogus" } } }],
+  ["loadedAhead", {}],
+  ["taken", {}],
+]
+
+describe("a query's commands, replayed from a log or the devtools", () => {
+  it.effect("refuse a payload their Schema does not accept, and change nothing", () =>
+    Effect.gen(function* () {
+      const inspected = yield* Ref.make<ReadonlyArray<Store.Inspected>>([])
+      const inspector = {
+        keepStates: 0,
+        register: (store: Store.Inspected) => Ref.update(inspected, (all) => [...all, store]),
+      }
+
+      yield* Effect.gen(function* () {
+        const [store] = yield* Ref.get(inspected)
+        const refused = yield* Effect.forEach(malformed, ([action, payload]) =>
+          Effect.map(
+            Effect.flip(Option.getOrThrow(Option.fromNullishOr(store)).run(action, payload)),
+            (error) => [action, error._tag],
+          ),
+        )
+
+        expect(refused).toEqual(malformed.map(([action]) => [action, "SchemaError"]))
+        expect(yield* Option.getOrThrow(Option.fromNullishOr(store)).encoded).toEqual({
+          entries: {},
+        })
+      }).pipe(
+        Effect.provide(Layer.provideMerge(Plain.live, State.layer)),
+        Effect.provideService(Store.Inspector, inspector),
+      )
+    }),
+  )
 })
 ```
 
@@ -5879,6 +6039,7 @@ Its components: each segment composed from small enhancers of its own, children 
 
 ```tsx
 import { Effect, Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Props, Reactive, Router, compose, withProps, withQuery } from "spar"
 import type { Query, View } from "spar"
 import type { Found, ServerUnreachable } from "./api.ts"
@@ -5900,7 +6061,20 @@ import {
 } from "./Deep.ts"
 import { DeepMissingView, SegmentView } from "./DeepView.tsx"
 
-const labelOf = (found: Found | null): string => found?.label ?? ""
+type Answer = AsyncResult.AsyncResult<Found, ServerUnreachable>
+
+const foundIn = (result: Answer): Found | null => Option.getOrNull(AsyncResult.value(result))
+
+const labelOf = (result: Answer): string => foundIn(result)?.label ?? ""
+
+const statusOf = (result: Answer): string =>
+  result.waiting
+    ? "loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "waiting",
+        onFailure: () => "failed",
+        onSuccess: () => "loaded",
+      })
 
 type Asked<R> = {
   readonly ask: (
@@ -5913,8 +6087,8 @@ const withSegment =
   (props: { readonly params: Reactive.Reactive<Params> }) =>
     Effect.map(query.ask(Reactive.map(props.params, pick)), (handle) => ({
       kind,
-      label: Reactive.map(handle.value, labelOf),
-      status: handle.status,
+      label: Reactive.map(handle.result, labelOf),
+      status: Reactive.map(handle.result, statusOf),
     }))
 
 const withInner =
@@ -5932,20 +6106,20 @@ const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
   withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
   withQuery("author", AuthorQuery, (props) =>
-    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
+    Reactive.map(props.report.result, (result) => Option.fromNullishOr(foundIn(result)?.authorId)),
   ),
 )((props) => (
   <section class="segment" aria-label="Report">
     <h1>
-      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+      <output aria-label="Report name">{Reactive.map(props.report.result, labelOf)}</output>
     </h1>
     <p>
-      <output aria-label="Report status">{props.report.status}</output>
+      <output aria-label="Report status">{Reactive.map(props.report.result, statusOf)}</output>
     </p>
     <p>
       Written by{" "}
-      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
-      <output aria-label="Author status">{props.author.status}</output>
+      <output aria-label="Author name">{Reactive.map(props.author.result, labelOf)}</output>{" "}
+      <output aria-label="Author status">{Reactive.map(props.author.result, statusOf)}</output>
     </p>
   </section>
 ))
@@ -5980,7 +6154,8 @@ export const OrgSegment = compose(
 A page: route params in, a failure recovered, a loading view, a child that calls the backend, and the notes unit, both written as JSX tags.
 
 ```tsx
-import { Effect, Option, Schedule, Schema, pipe } from "effect"
+import { Cause, Effect, Option, Schedule, Schema, pipe } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Query, Reactive, Router, View, compose, withProps, withQuery, withStore } from "spar"
 import { BoardStore } from "./BoardStore.ts"
 import type { Agent, Board } from "./domain.ts"
@@ -6009,22 +6184,25 @@ export class RecordQuery extends Query.Tag<RecordQuery>()("sidebar/Record", {
 
 const recordText = (
   name: string,
-  record: Started | null,
-  problem: NoRecord | ServerUnreachable | null,
-): string => {
-  if (record !== null) return `The server started this agent as ${record.key}.`
-  if (problem !== null) return problem.message
-
-  return `Asking the server about ${name}.`
-}
+  record: AsyncResult.AsyncResult<Started, NoRecord | ServerUnreachable>,
+): string =>
+  AsyncResult.match(record, {
+    onInitial: () => `Asking the server about ${name}.`,
+    onFailure: ({ cause }) =>
+      Option.match(Cause.findErrorOption(cause), {
+        onNone: () => `Asking the server about ${name}.`,
+        onSome: (problem) => problem.message,
+      }),
+    onSuccess: ({ value }) => `The server started this agent as ${value.key}.`,
+  })
 
 const withText = (props: {
   readonly name: string
   readonly record: Query.Handle<Started, NoRecord | ServerUnreachable>
 }) =>
-  Effect.map(Reactive.zip(props.record.value, props.record.error), (answer) => ({
-    text: Reactive.map(answer, ([found, problem]) => recordText(props.name, found, problem)),
-  }))
+  Effect.succeed({
+    text: Reactive.map(props.record.result, (record) => recordText(props.name, record)),
+  })
 
 const ServerRecordView = compose(
   withProps({ name: Schema.String }),

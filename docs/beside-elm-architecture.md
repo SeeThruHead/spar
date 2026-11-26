@@ -42,8 +42,6 @@ and the backend (`docs/devtools-compared.md`).
   Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
-- **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
-  as cases of their own. In Spar you read `status` and `value` together.
 - **Speed on a few list operations, depending on the run.** In the latest run of this repo's
   benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
   one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next

@@ -54,6 +54,50 @@ const Picker = compose(
   </section>
 ))
 
+const Saver = compose(
+  withUiState("saves", Schema.Int, 0),
+  withUiState("taps", Schema.Int, 0),
+  withHandlers(
+    (props: {
+      readonly saves: UiState.UiState<number>
+      readonly taps: UiState.UiState<number>
+    }) => ({
+      onSave: Effect.as(
+        Effect.sleep("100 millis"),
+        UiState.update(props.saves, (saves) => saves + 1),
+      ),
+      onTap: UiState.update(props.taps, (taps) => taps + 1),
+    }),
+  ),
+)((props) => (
+  <section>
+    <button onClick={props.onSave}>Save</button>
+    <button onClick={props.onTap}>Tap</button>
+    <output>
+      {props.saves} saves, {props.taps} taps
+    </output>
+  </section>
+))
+
+describe("a second click while the first click's work runs", () => {
+  it.live("is dropped, so slow work runs once per press, and quick work counts every click", () =>
+    Effect.gen(function* () {
+      yield* Testing.mount(Saver)
+
+      yield* Testing.click("button", "Save")
+      yield* Testing.click("button", "Save")
+      yield* Testing.click("button", "Tap")
+      yield* Testing.click("button", "Tap")
+      yield* Testing.findText("1 saves, 2 taps")
+      yield* Effect.sleep("150 millis")
+      yield* Testing.findText("1 saves, 2 taps")
+
+      yield* Testing.click("button", "Save")
+      yield* Testing.findText("2 saves, 2 taps")
+    }).pipe(Effect.scoped),
+  )
+})
+
 describe("an action can be an Effect that works out the action to run", () => {
   it.live("the action it returns runs, and returning nothing runs nothing", () =>
     Effect.gen(function* () {

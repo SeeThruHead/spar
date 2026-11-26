@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect"
+import { AsyncResult } from "effect/reactivity"
 import { Props, Reactive, Router, compose, withProps, withQuery } from "spar"
 import type { Query, View } from "spar"
 import type { Found, ServerUnreachable } from "./api.ts"
@@ -20,7 +21,20 @@ import {
 } from "./Deep.ts"
 import { DeepMissingView, SegmentView } from "./DeepView.tsx"
 
-const labelOf = (found: Found | null): string => found?.label ?? ""
+type Answer = AsyncResult.AsyncResult<Found, ServerUnreachable>
+
+const foundIn = (result: Answer): Found | null => Option.getOrNull(AsyncResult.value(result))
+
+const labelOf = (result: Answer): string => foundIn(result)?.label ?? ""
+
+const statusOf = (result: Answer): string =>
+  result.waiting
+    ? "loading"
+    : AsyncResult.match(result, {
+        onInitial: () => "waiting",
+        onFailure: () => "failed",
+        onSuccess: () => "loaded",
+      })
 
 type Asked<R> = {
   readonly ask: (
@@ -33,8 +47,8 @@ const withSegment =
   (props: { readonly params: Reactive.Reactive<Params> }) =>
     Effect.map(query.ask(Reactive.map(props.params, pick)), (handle) => ({
       kind,
-      label: Reactive.map(handle.value, labelOf),
-      status: handle.status,
+      label: Reactive.map(handle.result, labelOf),
+      status: Reactive.map(handle.result, statusOf),
     }))
 
 const withInner =
@@ -52,20 +66,20 @@ const ReportPage = compose(
   withProps({ params: Props.Reactive(Report) }),
   withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
   withQuery("author", AuthorQuery, (props) =>
-    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
+    Reactive.map(props.report.result, (result) => Option.fromNullishOr(foundIn(result)?.authorId)),
   ),
 )((props) => (
   <section class="segment" aria-label="Report">
     <h1>
-      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+      <output aria-label="Report name">{Reactive.map(props.report.result, labelOf)}</output>
     </h1>
     <p>
-      <output aria-label="Report status">{props.report.status}</output>
+      <output aria-label="Report status">{Reactive.map(props.report.result, statusOf)}</output>
     </p>
     <p>
       Written by{" "}
-      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
-      <output aria-label="Author status">{props.author.status}</output>
+      <output aria-label="Author name">{Reactive.map(props.author.result, labelOf)}</output>{" "}
+      <output aria-label="Author status">{Reactive.map(props.author.result, statusOf)}</output>
     </p>
   </section>
 ))

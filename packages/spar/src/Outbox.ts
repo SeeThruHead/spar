@@ -207,7 +207,11 @@ const make = Effect.fnUntraced(function* (options: Options) {
         onFailure: (cause) => bury(entry, Cause.pretty(cause)),
       }),
       Effect.withSpan("Outbox.deliver", {
-        attributes: { "outbox.key": entry.key, "outbox.channel": entry.channel },
+        attributes: {
+          "outbox.key": entry.key,
+          "outbox.channel": entry.channel,
+          "spar.background": "outbox",
+        },
         ...causedBy(entry),
       }),
     )

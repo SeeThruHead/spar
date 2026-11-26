@@ -3,7 +3,7 @@ import { fireEvent, screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { App, Router, State as OneState, Store, UiState, compose, uses } from "spar"
-import { install, uninstall } from "spar/devtools/client"
+import { install, reported, uninstall } from "spar/devtools/client"
 import { FetchHttpClient } from "effect/http"
 import * as Cell from "../src/internal/cell.ts"
 import { sparDevtools } from "spar/devtools/vite"
@@ -172,14 +172,83 @@ const spans = (): ReadonlyArray<string> =>
       item.getAttribute("data-where"),
       item.querySelector("strong")?.textContent,
       item.getAttribute("data-failed"),
-      item.querySelector("div")?.style.paddingLeft,
+      item.querySelector<HTMLElement>("[data-span-name]")?.style.paddingLeft,
     ].join(" "),
   )
 
 const listed = (): ReadonlyArray<string | null | undefined> =>
-  [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
-    (item) => item.querySelector("code")?.textContent,
+  [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map((item) =>
+    item.querySelector("[data-what]")?.textContent?.trim(),
   )
+
+const rowsScrubbed = (): number =>
+  document.querySelectorAll('[data-moment][data-scrubbed="yes"]').length
+
+const lanesSurface = (): Element => {
+  const found = document.querySelector("[data-lanes-surface]")
+  if (found === null) throw new Error("no lanes")
+
+  return found
+}
+
+describe("the lanes", () => {
+  it.live("dragging across them lights up an event, and letting go shows that moment", () =>
+    withTools(
+      Effect.gen(function* () {
+        yield* mounted
+        yield* Testing.click("button", "Devtools")
+        yield* Testing.fill("textbox", "Draft", "hi")
+        yield* Testing.click("button", "Add")
+        yield* Testing.eventually(() => expect(listed().length).toBeGreaterThan(1))
+
+        yield* Effect.sync(() => fireEvent.pointerMove(lanesSurface(), { clientX: 0 }))
+        expect(rowsScrubbed()).toBe(0)
+
+        yield* Effect.sync(() => fireEvent.pointerDown(lanesSurface(), { clientX: 0 }))
+        yield* Testing.eventually(() => expect(rowsScrubbed()).toBe(1))
+        yield* Effect.sync(() => fireEvent.pointerMove(lanesSurface(), { clientX: 0 }))
+        yield* Effect.sync(() => fireEvent.pointerUp(lanesSurface(), { clientX: 0 }))
+        yield* Testing.eventually(() => {
+          expect(rowsScrubbed()).toBe(0)
+          expect(
+            document.querySelector('[data-moment][aria-current="true"] [data-seq]')?.textContent,
+          ).toBe("1")
+        })
+        yield* Testing.click("button", "Back to now")
+      }).pipe(Effect.scoped),
+    ),
+  )
+
+  it.live("hide and show from the bar", () =>
+    withTools(
+      Effect.gen(function* () {
+        yield* mounted
+        yield* Testing.click("button", "Devtools")
+        yield* Testing.click("button", "Lanes")
+        yield* Testing.eventually(() =>
+          expect(document.querySelector('[aria-label="Lanes"]')?.hasAttribute("hidden")).toBe(true),
+        )
+      }).pipe(Effect.scoped),
+    ),
+  )
+
+  it.effect("a devtools start that fails is logged and still fails", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(reported(Effect.fail("no tools")))
+
+      expect(exit._tag).toBe("Failure")
+    }),
+  )
+})
+
+const shortcut = (code: string) =>
+  fireEvent.keyDown(document, { code, altKey: true, shiftKey: true })
+
+const toggle = () => screen.getByRole("button", { name: "Devtools" })
+
+const changedText = () => screen.getByLabelText("What the event changed").textContent ?? ""
+
+const lanesButton = () => screen.getByRole("button", { name: "Lanes", hidden: true })
 
 describe("devtools an app did not ask for", () => {
   it.live("once installed, an app that never mentions them gets the tools and the one log", () =>
@@ -204,6 +273,7 @@ describe("devtools an app did not ask for", () => {
 
         yield* Testing.click("button", "Jump to 1")
         yield* shows("0", "hi", "At 1")
+        yield* Testing.eventually(() => expect(changedText()).toMatch(/Desk \. draft.*"hi"/))
         expect(
           [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
             (item) => item.getAttribute("aria-current"),
@@ -226,11 +296,37 @@ describe("devtools an app did not ask for", () => {
         expect(traceShown()).toBe(first)
         yield* Testing.click("button", "Back to now")
         yield* shows("1", "later", "Now")
+        yield* Testing.eventually(() =>
+          expect(changedText()).toMatch(/Desk \. draft\s+"hi" → "later"/),
+        )
         yield* Testing.click("button", "Earlier")
         yield* shows("1", "later", "At 3")
         yield* Testing.click("button", "Later")
         yield* shows("1", "later", "Now")
         expect(screen.getByLabelText("test/Tally position").textContent).toBe("live")
+
+        fireEvent.keyDown(document, { code: "ArrowLeft" })
+        shortcut("KeyX")
+        yield* shows("1", "later", "Now")
+        shortcut("ArrowLeft")
+        yield* shows("1", "later", "At 3")
+        shortcut("ArrowRight")
+        yield* shows("1", "later", "Now")
+        shortcut("ArrowLeft")
+        shortcut("End")
+        yield* shows("1", "later", "Now")
+
+        const wasOpen = toggle().getAttribute("aria-expanded")
+        const lanesWere = lanesButton().getAttribute("aria-pressed")
+
+        shortcut("KeyD")
+        shortcut("KeyL")
+        yield* Testing.eventually(() =>
+          expect([
+            toggle().getAttribute("aria-expanded"),
+            lanesButton().getAttribute("aria-pressed"),
+          ]).toEqual([String(wasOpen !== "true"), String(lanesWere !== "true")]),
+        )
       }),
     ),
   )
@@ -352,7 +448,7 @@ describe("devtools an app did not ask for", () => {
           ...(screen
             .getByLabelText("Spans")
             .querySelector('li[data-where="page"]')
-            ?.querySelectorAll<HTMLElement>("div > div") ?? []),
+            ?.querySelectorAll<HTMLElement>("[data-wait], [data-fill]") ?? []),
         ]
 
         expect([
@@ -362,9 +458,9 @@ describe("devtools an app did not ask for", () => {
         ]).toEqual(["0.00%", bar?.style.left, "0.00%"])
         expect(bar?.style.left).toMatch(/^\d+\.\d\d%$/)
         expect(bar?.style.width).toMatch(/^\d+\.\d\d%$/)
-        expect(
-          screen.getByLabelText("Spans").querySelector("li small:nth-of-type(2)")?.textContent,
-        ).toMatch(/^\d+\.\d ms$/)
+        expect(screen.getByLabelText("Spans").querySelector("li [data-took]")?.textContent).toMatch(
+          /^\d+\.\d ms$/,
+        )
 
         expect(drawn.filter((span) => span.startsWith("page"))).toEqual([
           "page on click no 0px",
@@ -376,6 +472,15 @@ describe("devtools an app did not ask for", () => {
           "backend Tally.still no 12px",
         ])
         expect(screen.getByLabelText("Trace shown").textContent).toBe("4 spans")
+
+        const firstBar = screen.getByLabelText("Spans").querySelector("li")
+
+        yield* Effect.sync(() => firstBar !== null && fireEvent.click(firstBar))
+        yield* Testing.eventually(() =>
+          expect(screen.getByLabelText("The picked span").textContent).toMatch(
+            /^Tally\.add\nbackend · \d+\.\d ms · failed\nspan /,
+          ),
+        )
         expect(asked.read()).toEqual([
           "/@spar/backend/0/spans/",
           "/@spar/backend/1/spans/",

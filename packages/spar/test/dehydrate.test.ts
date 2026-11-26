@@ -7,6 +7,7 @@ import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { Seed } from "../src/internal/server.ts"
 import { RowsView } from "./graphics.tsx"
+import { statusOf, valueOf } from "./results.ts"
 import { NotFoundView } from "./routes.tsx"
 import { ShelfView } from "./shelf.tsx"
 import { OrdersView } from "./units.tsx"
@@ -114,7 +115,10 @@ const Noted = compose(
   Effect.fnUntraced(function* () {
     const note = yield* Note.ask()
 
-    return { status: note.status, count: Reactive.map(note.value, (found) => found?.length ?? 0) }
+    return {
+      status: statusOf(note),
+      count: Reactive.map(valueOf(note), (found) => found?.length ?? 0),
+    }
   }),
 )(OrdersView)
 
@@ -122,10 +126,10 @@ const Priced = compose(
   Effect.fnUntraced(function* () {
     const catalog = yield* Catalog.ask()
     const price = yield* Price.ask(
-      Reactive.map(catalog.value, (items) => Option.fromNullishOr(items?.[0])),
+      Reactive.map(valueOf(catalog), (items) => Option.fromNullishOr(items?.[0])),
     )
 
-    return { status: price.status, count: Reactive.map(price.value, (found) => found ?? 0) }
+    return { status: statusOf(price), count: Reactive.map(valueOf(price), (found) => found ?? 0) }
   }),
 )(OrdersView)
 
@@ -145,10 +149,10 @@ const ShelfPage = Shelf.with(
     Effect.fnUntraced(function* () {
       const shelf = yield* Shelf
       const catalog = yield* Catalog.ask()
-      const both = yield* Reactive.zip(catalog.value, shelf.select.items)
+      const both = yield* Reactive.zip(valueOf(catalog), shelf.select.items)
 
       return {
-        status: catalog.status,
+        status: statusOf(catalog),
         count: Reactive.map(both, ([items, kept]) => (items?.length ?? 0) + kept.length),
       }
     }),
@@ -229,7 +233,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
           Effect.gen(function* () {
             const first = yield* Note.ask()
 
-            expect([yield* first.value.get, yield* Ref.get(asked)]).toEqual(["kept", []])
+            expect([yield* valueOf(first).get, yield* Ref.get(asked)]).toEqual(["kept", []])
 
             yield* Note.ask()
             yield* Effect.sleep("10 millis")
@@ -253,9 +257,9 @@ describe("a page whose data comes from queries, drawn on the server", () => {
           yield* Effect.sleep("10 millis")
 
           return [
-            yield* catalog.status.get,
-            yield* catalog.value.get,
-            yield* price.value.get,
+            yield* statusOf(catalog).get,
+            yield* valueOf(catalog).get,
+            yield* valueOf(price).get,
             yield* Ref.get(asked),
           ]
         }),

@@ -16,6 +16,7 @@ import {
   withStore,
   withUiState,
 } from "spar"
+import { valueOf } from "./results.ts"
 
 const Counting = Schema.Struct({
   count: Schema.Int,
@@ -152,7 +153,7 @@ export const Orders = compose(
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
   <p aria-label="Orders">
-    {Reactive.map(props.orders.value, (found) => `${found?.length ?? 0} orders`)}
+    {Reactive.map(valueOf(props.orders), (found) => `${found?.length ?? 0} orders`)}
   </p>
 ))
 

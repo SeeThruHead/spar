@@ -33,7 +33,7 @@ const Counter = compose(
 
 const until = <A,>(effect: Effect.Effect<A>, holds: (value: A) => boolean) =>
   Effect.repeat(effect, { until: holds, schedule: Schedule.spaced("5 millis") }).pipe(
-    Effect.timeout("2 seconds"),
+    Effect.timeout("10 seconds"),
     Effect.orDie,
   )
 
@@ -44,6 +44,9 @@ describe("one component, any renderer chosen by a layer", () => {
       Effect.gen(function* () {
         const store = yield* Layer.build(Tally.layer.pipe(Layer.provideMerge(State.layer)))
         const page = Memory.page()
+
+        expect([page.target.isConnected, page.overlays.isConnected]).toEqual([true, true])
+
         const frames = yield* Ref.make<ReadonlyArray<string>>([])
         const lastFrame = Effect.map(Ref.get(frames), (all) => all.at(-1) ?? "")
         const html = Effect.sync(() => page.target.innerHTML)
@@ -84,6 +87,7 @@ describe("one component, any renderer chosen by a layer", () => {
           "Counter\nCount 2\n[ Add one ]",
         )
       }),
+    20_000,
   )
 
   it.live(

@@ -11,6 +11,7 @@ export const PickerView = View.make(
     note: Props.Reactive(Schema.String),
     onMeasure: Props.Action,
     onFocusMissing: Props.Action,
+    onFocusQuietly: Props.Action,
   },
   (props) => (
     <section aria-label="Picker">
@@ -20,6 +21,7 @@ export const PickerView = View.make(
       {props.options}
       <button onClick={props.onMeasure}>Measure</button>
       <button onClick={props.onFocusMissing}>Focus something missing</button>
+      <button onClick={props.onFocusQuietly}>Focus the picker without scrolling</button>
       <output aria-label="Note">{props.note}</output>
     </section>
   ),

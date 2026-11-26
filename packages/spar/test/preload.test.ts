@@ -4,6 +4,7 @@ import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Query, Reactive, Router, compose, withProps } from "spar"
 import * as Testing from "spar/testing"
+import { statusOf, valueOf } from "./results.ts"
 import { DoorView, HallView, OrdersView } from "./units.tsx"
 
 type Asked = {
@@ -63,8 +64,8 @@ const OrdersPage = compose(
     const orders = yield* Orders.ask(id)
 
     return {
-      status: orders.status,
-      count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+      status: statusOf(orders),
+      count: Reactive.map(valueOf(orders), (loaded) => loaded?.length ?? 0),
     }
   }),
 )(OrdersView)
