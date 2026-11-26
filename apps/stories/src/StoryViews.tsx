@@ -160,6 +160,20 @@ export const PopoverStoryView = View.make(
   ),
 )
 
+export const CalendarStoryView = View.make(
+  "CalendarStoryView",
+  { calendar: Props.Element, day: Props.Reactive(Schema.String) },
+  ({ calendar, day }) => (
+    <section>
+      <h1>Calendar</h1>
+      {calendar}
+      <p>
+        Picked: <output aria-label="Picked day">{day}</output>
+      </p>
+    </section>
+  ),
+)
+
 export const ComboboxStoryView = View.make(
   "ComboboxStoryView",
   { combobox: Props.Element, picked: Props.Reactive(Schema.String) },

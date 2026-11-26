@@ -1,7 +1,19 @@
 import { Effect, Schema, pipe } from "effect"
 import { Form, Reactive, Store, UiState, View, compose } from "spar"
-import { Combobox, Dialog, Listbox, Menu, Popover, Select, Tabs, Toast, Tooltip } from "@spar/ui"
 import {
+  Calendar,
+  Combobox,
+  Dialog,
+  Listbox,
+  Menu,
+  Popover,
+  Select,
+  Tabs,
+  Toast,
+  Tooltip,
+} from "@spar/ui"
+import {
+  CalendarStoryView,
   ComboboxStoryView,
   ControlsView,
   DialogStoryView,
@@ -158,6 +170,21 @@ export const PopoverStory = compose(
     }
   }),
 )(PopoverStoryView)
+
+export const CalendarStory = compose(
+  Effect.fnUntraced(function* () {
+    const day = yield* UiState.make("day", Schema.String, "2026-11-26")
+
+    return {
+      day,
+      calendar: yield* View.child(Calendar, {
+        label: "Due date",
+        value: day,
+        onChange: (picked) => UiState.set(day, picked),
+      }),
+    }
+  }),
+)(CalendarStoryView)
 
 export const ComboboxStory = compose(
   Effect.fnUntraced(function* () {

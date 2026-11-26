@@ -47,6 +47,12 @@ const shows = (page: Page, label: string, text: string): Promise<void> =>
 const focusIsOn = (page: Page, name: string): Promise<unknown> =>
   page.waitForFunction((expected) => document.activeElement?.textContent?.trim() === expected, name)
 
+const dayHasFocus = (page: Page, name: string): Promise<unknown> =>
+  page.waitForFunction(
+    (expected) => document.activeElement?.getAttribute("aria-label") === expected,
+    name,
+  )
+
 const staysOnScreen = async (page: Page, role: "tooltip" | "dialog" | "listbox"): Promise<void> => {
   const box = await page.getByRole(role).boundingBox()
   const view = page.viewportSize()
@@ -223,6 +229,23 @@ const stories: ReadonlyArray<Story> = [
       await typed("o")
       await page.getByRole("listbox", { name: "Fruit" }).waitFor()
       await staysOnScreen(page, "listbox")
+    },
+  },
+  {
+    path: "/calendar",
+    title: "Calendar",
+    play: async (page) => {
+      await page.getByRole("button", { name: "Thursday, November 26, 2026" }).focus()
+      await page.keyboard.press("ArrowRight")
+      await dayHasFocus(page, "Friday, November 27, 2026")
+      await page.keyboard.press("PageDown")
+      await page.getByRole("grid", { name: "December 2026" }).waitFor()
+      await dayHasFocus(page, "Sunday, December 27, 2026")
+      await page.keyboard.press("Enter")
+      await shows(page, "Picked day", "2026-12-27")
+      await page.getByRole("button", { name: "Previous month" }).click()
+      await page.getByRole("button", { name: "Monday, November 2, 2026" }).click()
+      await shows(page, "Picked day", "2026-11-02")
     },
   },
 ]

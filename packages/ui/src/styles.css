@@ -159,6 +159,70 @@
   outline-offset: 2px;
 }
 
+.spar-calendar {
+  display: inline-grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--spar-line);
+  border-radius: var(--spar-radius);
+  background: var(--spar-surface);
+}
+
+.spar-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.spar-calendar-title {
+  font-weight: 600;
+}
+
+.spar-calendar table {
+  border-collapse: collapse;
+}
+
+.spar-calendar th {
+  padding: 0.25rem;
+  color: var(--spar-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.spar-calendar td {
+  padding: 0.125rem;
+}
+
+.spar-day {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--spar-radius);
+  background: transparent;
+  color: var(--spar-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.spar-day:hover {
+  border-color: var(--spar-line);
+}
+
+.spar-day:focus-visible {
+  outline: 2px solid var(--spar-focus);
+  outline-offset: 1px;
+}
+
+.spar-day-outside {
+  color: var(--spar-muted);
+}
+
+[aria-selected="true"] > .spar-day {
+  background: var(--spar-accent);
+  color: var(--spar-on-accent);
+}
+
 .spar-field [aria-invalid="true"] {
   border-color: var(--spar-problem);
 }
