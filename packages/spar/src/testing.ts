@@ -5,6 +5,9 @@ import * as App from "./App.ts"
 import * as View from "./View.ts"
 import * as Diagnostics from "./internal/said.ts"
 
+export { NotOnPage, NotSettled, play } from "./internal/play.ts"
+export type { Play } from "./internal/play.ts"
+
 export class NotOnScreen extends Schema.TaggedError<
   NotOnScreen,
   { readonly brand: unique symbol }

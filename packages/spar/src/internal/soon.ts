@@ -1,4 +1,4 @@
-import { Scheduler } from "effect"
+import { Context, Scheduler } from "effect"
 
 export const soon = (task: () => void): (() => void) => {
   const channel = new MessageChannel()
@@ -22,3 +22,7 @@ export const soon = (task: () => void): (() => void) => {
 }
 
 export const browserScheduler = new Scheduler.MixedScheduler("async", soon)
+
+export const OnBrowserScheduler = Context.Reference<boolean>("spar/internal/OnBrowserScheduler", {
+  defaultValue: () => true,
+})

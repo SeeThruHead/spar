@@ -184,6 +184,22 @@ Fix: Check the role and name asked for against what the view draws, and that the
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_PLAY_NOT_SETTLED
+
+A Play test waited for the page to stop changing, and it kept changing.
+
+Fix: Look for work that never ends without waiting on time: a loop that writes on every round, or a stream that never pauses. Work that waits on time is moved with TestClock.adjust and does not keep a page from settling.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+### SPAR_PLAY_NOT_ON_PAGE
+
+A Play test asked for something by role and name, and the settled page did not have it.
+
+Fix: Check the role and name against what the view draws, and that the test's layer answers what the page needs. A Play waits only until the page settles; time that has to pass is moved with TestClock.adjust first.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_NEEDLESS_WAIT
 
 A query that takes no input was given one, such as a value made from another query. It would wait for that value for nothing, so it does not compile: the argument is not assignable to parameter of type 'void' (TS2345).
