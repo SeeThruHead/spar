@@ -16,7 +16,9 @@ import {
   Stream,
   Tracer,
 } from "effect"
+import type { SecureRandom } from "effect/crypto"
 import { AsyncResult } from "effect/reactivity"
+import * as Outbox from "./Outbox.ts"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { resultOf } from "./internal/queryResult.ts"
 import { OnServer } from "./internal/server.ts"
@@ -748,6 +750,41 @@ export const Tag =
         { discard: true },
       )
     })
+    const sending = Effect.fnUntraced(function* <P, PI, SE, SR>(
+      name: string,
+      payload: Schema.Codec<P, PI>,
+      change: {
+        readonly input: (payload: P) => I
+        readonly patch: (value: A, payload: P) => A
+        readonly send: (payload: P, idempotencyKey: string) => Effect.Effect<void, SE, SR>
+      },
+    ): Effect.fn.Return<
+      (payload: P) => Effect.Effect<void>,
+      never,
+      Self | Outbox.Outbox | SecureRandom.SecureRandom | Scope.Scope | SR
+    > {
+      const context = yield* Effect.context<Self>()
+      const reloaded = Effect.provideContext(invalidate, context)
+      const queued = yield* Outbox.channel(name, payload, (sent, idempotencyKey) =>
+        Effect.andThen(change.send(sent, idempotencyKey), reloaded),
+      )
+
+      yield* Effect.forkScoped(
+        Stream.runForEach(Outbox.givenUp(name), () => reloaded),
+        {
+          startImmediately: true,
+        },
+      )
+
+      return (sent: P) =>
+        Effect.andThen(
+          Effect.provideContext(
+            patched(change.input(sent), (value) => change.patch(value, sent)),
+            context,
+          ),
+          queued(sent),
+        )
+    })
     const adopted = Effect.fnUntraced(function* (store: Held) {
       const adopters = yield* Adopters
       const decode = Schema.decodeEffect(Schema.toCodecJson(state))
@@ -770,6 +807,7 @@ export const Tag =
       static readonly read = read
       static readonly invalidate = invalidate
       static readonly patch = patched
+      static readonly sending = sending
       static readonly pages = pages
     }
   }

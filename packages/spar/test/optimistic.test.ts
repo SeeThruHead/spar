@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema, Stream } from "effect"
+import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import { Outbox, Query, State } from "spar"
@@ -44,32 +44,14 @@ class Restocks extends Context.Service<
   ) =>
     Layer.effect(
       Restocks,
-      Effect.gen(function* () {
-        const stock = yield* Effect.context<Stock>()
-        const queued = yield* Outbox.channel(
-          restockedOn,
-          Schema.Struct({ to: Schema.Finite }),
-          ({ to }) => send(to),
-        )
-
-        yield* Effect.forkScoped(
-          Stream.runForEach(Outbox.givenUp(restockedOn), () =>
-            Effect.provideContext(Stock.invalidate, stock),
-          ),
-          { startImmediately: true },
-        )
-
-        return Restocks.of({
-          restock: (to) =>
-            Effect.andThen(
-              Effect.provideContext(
-                Stock.patch(undefined, () => to),
-                stock,
-              ),
-              queued({ to }),
-            ),
-        })
-      }),
+      Effect.map(
+        Stock.sending(restockedOn, Schema.Struct({ to: Schema.Finite }), {
+          input: () => undefined,
+          patch: (_, { to }) => to,
+          send: ({ to }) => send(to),
+        }),
+        (restocked) => Restocks.of({ restock: (to) => restocked({ to }) }),
+      ),
     )
 }
 
@@ -95,7 +77,6 @@ const layer = built(
 
       yield* Deferred.await(warehouse.open)
       yield* Ref.set(warehouse.stock, to + 1)
-      yield* Stock.invalidate
     }),
   ),
   Outbox.Outbox.layer,
