@@ -42,4 +42,69 @@ describe("small DOM helpers", () => {
     expect(Dom.cssName("--mainColor")).toBe("--mainColor")
     expect(Dom.cssName("-webkitLineClamp")).toBe("-webkit-line-clamp")
   })
+
+  it("a name that only starts or ends like an attribute name is still written as a property", () => {
+    const box = document.createElement("div")
+    const label = document.createElement("label")
+
+    Dom.setAttribute(box, "className", "wide")
+    Dom.setAttribute(label, "htmlFor", "email")
+    expect([box.className, box.hasAttribute("className")]).toEqual(["wide", false])
+    expect([label.htmlFor, label.hasAttribute("htmlfor")]).toEqual(["email", false])
+  })
+
+  it("writing the value a field already holds leaves the caret where the person put it", () => {
+    const field = document.body.appendChild(document.createElement("input"))
+
+    Dom.setAttribute(field, "value", "hello")
+    field.setSelectionRange(2, 2)
+    Dom.setAttribute(field, "value", "hello")
+    expect(field.selectionStart).toBe(2)
+    Dom.setAttribute(field, "value", "help")
+    expect(field.value).toBe("help")
+    field.remove()
+  })
+})
+
+const markedUp = (html: string): HTMLElement => {
+  const parent = document.createElement("div")
+
+  Dom.setMarkup(parent, html)
+
+  return parent
+}
+
+const shape = (parent: Node): ReadonlyArray<string> =>
+  [...parent.childNodes].map((node) =>
+    node instanceof Comment ? `<!--${node.data}-->` : (node.textContent ?? ""),
+  )
+
+describe("taking over server-drawn nodes", () => {
+  it("an element is claimed past the part marks, by its tag in any case, and only by its own tag", () => {
+    const parent = markedUp(`<!--${Dom.partStart}--><!--${Dom.partEnd}--><p>hi</p><b>x</b>`)
+    const cursor = Dom.cursorIn(parent)
+
+    expect(Dom.claimElement(cursor, "span")).toBeUndefined()
+    expect(Dom.claimElement(cursor, "P")?.textContent).toBe("hi")
+    expect(Dom.claimElement(cursor, "b")?.textContent).toBe("x")
+    expect(shape(parent)).toEqual(["hi", "x"])
+  })
+
+  it("text is claimed past the marks and a text break, or made empty where none was drawn", () => {
+    const parent = markedUp(`<!--${Dom.partStart}--><!--${Dom.textBreak}-->ready<i>x</i>`)
+    const cursor = Dom.cursorIn(parent)
+
+    expect(Dom.claimText(cursor, parent).data).toBe("ready")
+    expect(Dom.claimText(cursor, parent).data).toBe("")
+    expect(shape(parent)).toEqual(["ready", "", "x"])
+  })
+
+  it("a comment is claimed when it is the one asked for, and made where it is missing", () => {
+    const parent = markedUp(`<!--${Dom.partEnd}--><!--keep--><i>x</i>`)
+    const cursor = Dom.cursorIn(parent)
+
+    expect(Dom.claimComment(cursor, parent, "keep").data).toBe("keep")
+    expect(Dom.claimComment(cursor, parent, "new").data).toBe("new")
+    expect(shape(parent)).toEqual(["<!--keep-->", "<!--new-->", "x"])
+  })
 })
