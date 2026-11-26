@@ -337,6 +337,21 @@ const removeEntry = <A>(entry: Entry<A>): Effect.Effect<void> =>
     Effect.sync(() => Dom.removeSpan(entry)),
   )
 
+const removeAll = <A>(
+  entries: ReadonlyArray<Entry<A>>,
+  parent: Dom.Host,
+  anchor: Node,
+): Effect.Effect<void> => {
+  const first = entries.at(0)
+  const last = entries.at(-1)
+  if (first === undefined || last === undefined) return Effect.void
+
+  return Effect.andThen(
+    Effect.forEach(entries, closeEntry, { discard: true }),
+    Effect.sync(() => Dom.removeRun(parent, first, last, anchor)),
+  )
+}
+
 const mountEntry = <A>(
   rows: Mounted<A>,
   key: string,
@@ -542,11 +557,13 @@ const fillRows = Effect.fnUntraced(function* <A>(
 
       const kept = previous.filter((entry) => keys.has(entry.key))
 
-      yield* Effect.forEach(
-        previous.filter((entry) => !keys.has(entry.key)),
-        removeEntry,
-        { discard: true },
-      )
+      yield* kept.length === 0
+        ? removeAll(previous, place.parent, anchor)
+        : Effect.forEach(
+            previous.filter((entry) => !keys.has(entry.key)),
+            removeEntry,
+            { discard: true },
+          )
 
       if (onlyRemoved(previous, kept, nextKeys)) {
         kept.forEach((entry, index) => rewritten(entry, next[index]))
