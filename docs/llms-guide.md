@@ -201,6 +201,10 @@ with async work. The short version:
   changes the state once with what it returned, `mode` says what a second start does, and
   `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
   state; never store a flag. Every start, finish and refusal is in the log and the trace.
+- Never write slow work as a `phase` field that one command sets and a later command clears
+  (`resetClicked`, then `resetCompleted` from an Effect): if that Effect fails or never runs the
+  phase stays set for good, anyone can send the clearing command early, and every other action
+  must remember to check the phase. Make the work a task.
 - A task's `run` may use services (a server client, a query). The store's layer then needs them:
   write `TheStore.layer.pipe(Layer.provide(Server.layer))` once. Never `Effect.provide` a layer
   inside `run`, which builds a fresh service on every start.
