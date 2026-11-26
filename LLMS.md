@@ -201,6 +201,10 @@ with async work. The short version:
   changes the state once with what it returned, `mode` says what a second start does, and
   `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
   state; never store a flag. Every start, finish and refusal is in the log and the trace.
+- Never write slow work as a `phase` field that one command sets and a later command clears
+  (`resetClicked`, then `resetCompleted` from an Effect): if that Effect fails or never runs the
+  phase stays set for good, anyone can send the clearing command early, and every other action
+  must remember to check the phase. Make the work a task.
 - A task's `run` may use services (a server client, a query). The store's layer then needs them:
   write `TheStore.layer.pipe(Layer.provide(Server.layer))` once. Never `Effect.provide` a layer
   inside `run`, which builds a fresh service on every start.
@@ -1831,6 +1835,28 @@ What this rules out:
   the task, not stored in the state, so it cannot disagree with what is running.
 - **No check to repeat.** What the reset refuses is written once, on the task. An action does not
   check anything, so a new action cannot forget to.
+
+#### The trap: a phase that nothing ends
+
+The way to write this without a task is a `phase` field: a `resetClicked` command sets it to
+`"resetting"`, and an Effect somewhere waits and then sends `resetCompleted` to set it back. It
+looks the same in a demo. It is not the same:
+
+- **Nothing owns the end.** The phase is state, but the work that should end it is not. If that
+  Effect fails, is interrupted, or was never started (the component that ran it unmounted, a test
+  sent only the first command, a reload brought the phase back from storage), the store stays
+  `"resetting"` for good, and nothing in it says why.
+- **Anyone can end it.** `resetCompleted` is a command like any other, so a button, an agent or a
+  stray replay can send it early, halfway through the wait.
+- **Every command has to check.** The phase is a lock only if each action looks at it. Add an
+  action and forget the check, and it runs in the middle of the reset.
+- **A second start starts it again.** `resetClicked` during `"resetting"` starts a second timer
+  unless someone wrote a check for that too.
+
+Running work is not state. A task holds the work and the "is it running" together: the phase
+cannot outlive the fiber, there is no finish command to send, `refuses` is the one check, and
+`mode` says what a second start does. When you find a field that says work is under way, make
+the work a task and read `store.running.<task>` instead.
 
 A refused command changes nothing. It shows in the log and the devtools as `refused`, with the
 task it met. The task's start and its finish are in the log with what they carried, so a log
