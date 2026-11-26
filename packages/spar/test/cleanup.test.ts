@@ -109,8 +109,7 @@ describe("what a part of the page took is given back", () => {
     Effect.gen(function* () {
       const { items, shared, unmount } = yield* started
       const row = rowOf("Alpha")
-      const button = row.querySelector("button")
-      const clicks = balance(button ?? row)
+      const list = row.parentElement
 
       yield* SubscriptionRef.update(items, (all) => all.filter((item) => item.id !== "a"))
       yield* Testing.eventually(() => expect(screen.queryByText("Alpha")).toBeNull())
@@ -123,10 +122,16 @@ describe("what a part of the page took is given back", () => {
 
       expect(row.querySelector("em")?.textContent).toBe("first")
       expect(row.className).toBe("")
-      expect(clicks.removed().map((call) => call.type)).toEqual(["click"])
+
+      list?.append(row)
+      fireEvent.click(row.querySelector("button") ?? row)
+      yield* Effect.sleep("20 millis")
+      expect(screen.getByLabelText("Picks").textContent).toBe("0")
+
+      fireEvent.click(rowOf("Beta").querySelector("button") ?? row)
+      yield* Testing.eventually(() => expect(screen.getByLabelText("Picks").textContent).toBe("1"))
 
       yield* unmount
-      clicks.restore()
     }),
   )
 
@@ -155,7 +160,7 @@ describe("what a part of the page took is given back", () => {
       expect(section.parentElement).toBeNull()
       expect(holder?.isConnected).toBe(false)
       expect(document.querySelector("[data-spar-overlays]")).toBeNull()
-      expect(mark.removed().map((call) => call.type)).toEqual(["click"])
+      expect(mark.added()).toEqual([])
       expect(onWindow.removed()).toEqual(expect.arrayContaining(onWindow.added()))
       expect(onDocument.removed()).toEqual(expect.arrayContaining(onDocument.added()))
       expect(new Set(onDocument.added().map((call) => call.type))).toEqual(
