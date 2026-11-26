@@ -409,16 +409,13 @@ const step = Effect.fnUntraced(function* (
   )
 })
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
 const printed = (value: unknown): string => shortened(Formatter.formatJson(value))
 
 const fieldOf = (record: Readonly<Record<string, unknown>>, key: string): string =>
   Object.hasOwn(record, key) ? printed(record[key]) : "(absent)"
 
 export const fieldChanges = (prior: unknown, next: unknown): ReadonlyArray<string> => {
-  if (!isRecord(prior) || !isRecord(next)) {
+  if (!Predicate.isObject(prior) || !Predicate.isObject(next)) {
     return printed(prior) === printed(next) ? [] : [`${printed(prior)} → ${printed(next)}`]
   }
 

@@ -5,6 +5,8 @@ import type { Html, Live } from "../Renderer.ts"
 
 const isLive = (renderer: Live | Html): renderer is Live => renderer._tag === "Live"
 
+const isHtml = (renderer: Live | Html): renderer is Html => renderer._tag === "Html"
+
 export const live: Effect.Effect<Live, never, Renderer> = Effect.filterOrElse(
   Effect.service(Renderer),
   isLive,
@@ -16,13 +18,16 @@ export const live: Effect.Effect<Live, never, Renderer> = Effect.filterOrElse(
     ),
 )
 
+const html: Effect.Effect<Html, never, Renderer> = Effect.filterOrElse(
+  Effect.service(Renderer),
+  isHtml,
+  () =>
+    Effect.die(
+      new Error(
+        "Server.render draws a page as text: give it Renderer.html in its layer, not a renderer that draws into a document",
+      ),
+    ),
+)
+
 export const drawn = (child: unknown): Effect.Effect<string, never, Renderer | Scope.Scope> =>
-  Effect.flatMap(Effect.service(Renderer), (renderer) =>
-    isLive(renderer)
-      ? Effect.die(
-          new Error(
-            "Server.render draws a page as text: give it Renderer.html in its layer, not a renderer that draws into a document",
-          ),
-        )
-      : renderer.draw(child),
-  )
+  Effect.flatMap(html, (renderer) => renderer.draw(child))
