@@ -57,6 +57,7 @@ type Target = {
 type Later = Effect.Effect<void, never, Scope.Scope>
 
 type Place = Target & {
+  readonly root: Dom.Host
   readonly owner: Cell.Owner
   readonly later: Cell.Waiting<Later>
   readonly claim: Dom.Cursor | undefined
@@ -148,6 +149,7 @@ const listener = (place: Place, type: string, handler: unknown) => {
   const holds = oncePerPress.has(type)
 
   return (event: Event): void => {
+    if (!Cell.isOpen(place.owner)) return
     if (holds && busy.read()) return
 
     const action = traced(type, toAction(handler, event), event.currentTarget, place.view)
@@ -156,8 +158,12 @@ const listener = (place: Place, type: string, handler: unknown) => {
   }
 }
 
-const listen = (node: Dom.Host, type: string, handler: unknown, place: Place): void =>
+const listen = (node: Dom.Host, type: string, handler: unknown, place: Place): void => {
+  if (Dom.isDelegated(type))
+    return Dom.delegate(place.root, node, type, listener(place, type, handler))
+
   Cell.own(place.owner, Dom.listen(node, type, listener(place, type, handler)))
+}
 
 const childNamespace = (tag: string, namespace: Dom.Namespace): Dom.Namespace => {
   if (tag === "foreignObject") return "html"
@@ -620,6 +626,7 @@ const renderElement = (element: Element, place: Place): void => {
     return render(element.child, {
       ...place,
       parent: element.layer,
+      root: element.layer,
       before: null,
       namespace: "html",
       claim: undefined,
@@ -653,6 +660,7 @@ export const renderInto = Effect.fnUntraced(function* (
   yield* Effect.sync(() =>
     render(child, {
       ...target,
+      root: target.parent,
       owner,
       later,
       claim,

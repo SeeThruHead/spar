@@ -346,6 +346,79 @@ export const listen = (
   return () => node.removeEventListener(type, listener)
 }
 
+type Listener = (event: Event) => void
+
+const bubbling = new Set([
+  "auxclick",
+  "beforeinput",
+  "change",
+  "click",
+  "contextmenu",
+  "dblclick",
+  "focusin",
+  "focusout",
+  "input",
+  "keydown",
+  "keyup",
+  "mousedown",
+  "mouseup",
+  "pointerdown",
+  "pointerup",
+  "submit",
+])
+
+export const isDelegated = (type: string): boolean => bubbling.has(type)
+
+type Keyed<K, V> = {
+  readonly get: (key: K) => V | undefined
+  readonly set: (key: K, value: V) => unknown
+}
+
+const gotOrMade = <K, V>(held: Keyed<K, V>, key: K, make: () => V): V => {
+  const known = held.get(key)
+  if (known !== undefined) return known
+
+  const made = make()
+
+  held.set(key, made)
+
+  return made
+}
+
+const handlers = new Map<string, WeakMap<EventTarget, Listener>>()
+
+const heard = new WeakMap<EventTarget, Set<string>>()
+
+const handled = (event: Event, node: EventTarget, byNode: WeakMap<EventTarget, Listener>) => {
+  const listener = byNode.get(node)
+  if (listener === undefined) return false
+
+  Object.defineProperty(event, "currentTarget", { configurable: true, get: () => node })
+  listener(event)
+
+  return event.cancelBubble
+}
+
+const dispatcher =
+  (root: Host, byNode: WeakMap<EventTarget, Listener>): Listener =>
+  (event) => {
+    const path = event.composedPath()
+
+    path.slice(0, path.indexOf(root)).some((node) => handled(event, node, byNode))
+    Reflect.deleteProperty(event, "currentTarget")
+  }
+
+export const delegate = (root: Host, node: Host, type: string, listener: Listener): void => {
+  const byNode = gotOrMade(handlers, type, () => new WeakMap<EventTarget, Listener>())
+  const known = gotOrMade(heard, root, () => new Set<string>())
+
+  byNode.set(node, listener)
+  if (known.has(type)) return
+
+  known.add(type)
+  root.addEventListener(type, dispatcher(root, byNode))
+}
+
 export const listStart = "["
 
 export const listEnd = "]"

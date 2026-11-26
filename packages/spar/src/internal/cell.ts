@@ -107,6 +107,11 @@ export const owner = (): Owner => waiting()
 
 export const own: (held: Owner, stop: Stop) => void = defer
 
+const released = new WeakSet<Owner>()
+
 export const release = (held: Owner): void => {
+  released.add(held)
   take(held).forEach((stop) => stop())
 }
+
+export const isOpen = (held: Owner): boolean => !released.has(held)
