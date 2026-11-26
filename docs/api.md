@@ -20,7 +20,6 @@ props are inferred from them. Enhancers and the view run once, on mount.
 | `withEffectProps((props) => effect)`                      | The props an Effect makes from the props so far, for example `withEffectProps(Effect.fnUntraced(function* (props) { ... }))`. Use it rather than an untyped inline function. |
 | `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                                                                                               |
 | `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                                                                                      |
-| `withSpan(name, enhancer)`                                | Runs an enhancer inside a span with that name.                                                                                                                               |
 | `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one; `by` gives each row's key, a string or a number.                                                                         |
 | `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                                                                                  |
 | `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin.                               |
@@ -211,13 +210,9 @@ const rows =
 
 Every piece is kept in one tree, under its component's place: the names of the views from the root
 down, with a row's key in brackets (`Board / Note[a]`), and a number when two share a place
-(`Panel#2`). It is there while the component is mounted and gone when it leaves.
-`UiState.snapshot` reads the whole tree as plain JSON (each value encoded by its Schema),
-`UiState.changes` is the stream of what was added, set and removed, `UiState.put(path, name, value)`
-sets one piece from outside (refused when the value does not fit the Schema), and
-`UiState.restore(snapshot)` puts a whole snapshot back, keeping values for components that are not
-on screen until they mount. Give an app its own tree with
-`Layer.succeed(UiState.Tree, UiState.makeTree())`; a server render always has its own.
+(`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
+the same one state that stores live in, so the devtools and agents read, set and rewind UI state
+through it. Give an app or a test its own with `State.layer`; a server render always has its own.
 
 ```tsx
 <button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
@@ -225,41 +220,30 @@ on screen until they mount. Give an app its own tree with
 
 ## Store
 
-| Function                                                              | What it does                                                                                                                            |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                                     |
-| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                                   |
-| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                        |
-| `invariants`, `transitions` (on the definition)                       | Named rules for the whole store: what no state may be, and what no command may do. A command that would break one is refused by name.   |
-| `phases` (on the definition)                                          | The commands each state accepts, and the ones only the store's own effects may send. Anything not listed is refused by name.            |
-| `Store.during(state, effect)`                                         | An effect that runs while the store is in a state: started on entry, interrupted on exit.                                               |
-| `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                                            |
-| `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                          |
-| `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
-| `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                                         |
-| `Store.afterLatest(action, effect)`                                   | The same, keeping only the newest run: a new one stops the one before it. For a search, or anything where only the last answer matters. |
-| `Store.afterLeading(action, effect)`                                  | The same, keeping only the first run: while it runs, the store refuses that command again, with the reason. For Pay, Save, Send.        |
-| `Store.withRow(rows, index, row)`                                     | In a reducer, the rows with one replaced. A keyed list showing those rows then rewrites that row only, without walking the others.      |
-| `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                                          |
-| `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                                              |
+| Function                                                              | What it does                                                                                                                       |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                                |
+| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                              |
+| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                   |
+| `Self.layer`                                                          | The store for the whole app: provide it where the app is mounted.                                                                  |
+| `Self.layerFrom(effect)`                                              | The same, starting from what the Effect gives, such as data a server loaded.                                                       |
+| `Self.layerSaved`                                                     | The same, saved after each command and read back on start (needs a `KeyValueStore`). Other tabs that save it are followed.         |
+| `Self.with(component)`                                                | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                     |
+| `Store.withRow(rows, index, row)`                                     | In a reducer, the rows with one replaced. A keyed list showing those rows then rewrites that row only, without walking the others. |
 
-A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`, `viewing` and
-`travelTo(seq | null)`.
+A store service has `state`, `select.<name>` and `commands.<name>(payload)`. Its state is a slot
+in the one state, so every command is in the log and the trace with its payload, and the devtools
+step and fork the whole app.
 
 (`apps/sidebar/src/BoardStore.ts`)
 
-### A store that refuses
+### Work that takes time
 
-`Store.action(Schema, reduce, refusal)` takes a third argument, a guard: it is given the state and
-the payload and answers with a reason, or null when the command is accepted. A refused command
-changes nothing and is not added to the store's log. It is noted in the log of everything that
-happened as `refused` with the reason, its span carries `spar.refused`, and `store.refused` is the
-last refusal since the store last accepted a command. This is how a store is a state machine:
-a field names the state and each action's guard says in which states it applies
-(`apps/sidebar/src/ResetCounter.ts`, `docs/state-and-server-data.md`).
-
-`Store.after(action, (payload, state, send) => effect)`: `send(otherAction, payload)` commits
-another action of the same store, so async work started by one command reports back as another.
+A store accepts every command; there are no guards. Work that takes time is an Effect on a
+service, and Effect decides what happens to a repeat: `FiberHandle.run(handle, effect, {
+onlyIfMissing: true })` ignores a second run while the first is going, plain `FiberHandle.run`
+replaces it, a `Semaphore` makes it wait, and an `Outbox.channel` keeps it on the device until it
+is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
 
 ### A store beside its view
 
@@ -425,7 +409,7 @@ resting values (online, visible, no media query matching) and window listeners a
 There are no directives. The component is the same in both places, and the layers it is given
 decide where its data comes from. On the server a store starts from data loaded there,
 `Self.layerFrom(load)`, and a service reads the database directly. In the browser the same store
-is `Self.layer()`, which starts from the state the server sent, and the same service asks over
+is `Self.layer`, which starts from the state the server sent, and the same service asks over
 the network.
 
 `Server.renderToStream(Component, { layer, open, close, end })` sends the document in parts:
@@ -470,22 +454,22 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                                       | What it does                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed.                            |
-| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                                                 |
-| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                                               |
-| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                                           |
-| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                                                                                                            |
-| `Self.invalidate`, `Self.invalidatedBy(action)`                                | Load everything it holds again; a reaction for another store's layer that does so after that action.                                                                                                                                                                    |
-| `Self.patchedBy(action, input, patch)`                                         | A reaction for another store's layer: after that action, change the loaded value for `input(payload)` at once. With `Store.outbox` on the same action, an optimistic update; when the outbox gives up on that send, the query loads again, so the change is taken back. |
+| Function                                                                       | What it does                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed. |
+| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                      |
+| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                    |
+| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                |
+| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                                                                                 |
+| `Self.invalidate`                                                              | An Effect: load everything it holds again.                                                                                                                                                                                                   |
+| `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
 means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
 `loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
 input, for paging without a blank) and `refetch`, all reactive. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
-input at a time (a second is refused) and an answer to an earlier request is refused. Because
+input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
 and a query whose input comes from another query's value waits only for that value.
 While a component is using it, a query asks again for what has gone stale when the tab is shown
@@ -537,7 +521,7 @@ happened in.
 
 ## Diagnostics
 
-`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, refusal, types or tools),
+`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, types or tools),
 what happened and the fix; `Diagnostics.text(code, { said, in, at })` formats one report in the
 agent format. It is also importable as `spar/diagnostics`, the same list is written to
 `packages/spar/diagnostics.json`, and the reference page is

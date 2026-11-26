@@ -1,5 +1,5 @@
-import { Effect, Schema } from "effect"
-import { Store } from "spar"
+import { Context, Effect, Layer, Schema } from "effect"
+import { Outbox, Store } from "spar"
 import {
   Agent,
   AgentId,
@@ -109,13 +109,29 @@ export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
   },
 }) {}
 
-export const BoardStoreLive = BoardStore.layerDurable({}, [
-  Store.outbox(
-    BoardStore.actions.started,
-    Effect.fnUntraced(function* ({ name }, idempotencyKey) {
-      const server = yield* Server
+const Started = Schema.Struct({ name: Schema.String })
 
-      yield* server.start(name, idempotencyKey)
+export class AgentStarts extends Context.Service<
+  AgentStarts,
+  { readonly start: (name: string) => Effect.Effect<void> }
+>()("sidebar/AgentStarts") {
+  static readonly layer = Layer.effect(
+    AgentStarts,
+    Effect.gen(function* () {
+      const store = yield* BoardStore
+      const server = yield* Server
+      const queued = yield* Outbox.channel("sidebar/agents/started", Started, ({ name }, key) =>
+        server.start(name, key),
+      )
+
+      return AgentStarts.of({
+        start: Effect.fn("AgentStarts.start")(function* (name: string) {
+          yield* store.commands.started({ name })
+          yield* queued({ name })
+        }),
+      })
     }),
-  ),
-])
+  )
+}
+
+export const BoardStoreLive = AgentStarts.layer.pipe(Layer.provideMerge(BoardStore.layerSaved))

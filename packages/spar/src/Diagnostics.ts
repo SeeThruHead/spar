@@ -1,6 +1,6 @@
 import { atRun, described, type Diagnostic, type Where } from "./internal/said.ts"
 
-export { brief, guide, locationIn, type Diagnostic, type Kind } from "./internal/said.ts"
+export type { Diagnostic, Kind } from "./internal/said.ts"
 
 const atBuild = {
   SPAR_JSX_OUTSIDE_VIEW: {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Ref, Schedule, Schema, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
-import { Outbox, Query, Store } from "spar"
+import { Outbox, Query, State } from "spar"
 
 class Warehouse extends Context.Service<
   Warehouse,
@@ -32,30 +32,64 @@ class Stock extends Query.Tag<Stock>()("test/optimistic/Stock", {
     ),
 }) {}
 
-const State = Schema.Struct({ changes: Schema.Int })
+const restockedOn = "test/optimistic/restocked"
 
-type State = typeof State.Type
+class Restocks extends Context.Service<
+  Restocks,
+  { readonly restock: (to: number) => Effect.Effect<void> }
+>()("test/optimistic/Restocks") {
+  static readonly layerWith = (
+    send: (to: number) => Effect.Effect<void, string, Warehouse | Stock>,
+  ) =>
+    Layer.effect(
+      Restocks,
+      Effect.gen(function* () {
+        const stock = yield* Effect.context<Stock>()
+        const queued = yield* Outbox.channel(
+          restockedOn,
+          Schema.Struct({ to: Schema.Finite }),
+          ({ to }) => send(to),
+        )
 
-class Shelf extends Store.Tag<Shelf>()("test/optimistic/Shelf", {
-  state: State,
-  initialState: { changes: 0 },
-  actions: {
-    restocked: Store.action(Schema.Struct({ to: Schema.Finite }), (state: State): State => ({
-      changes: state.changes + 1,
-    })),
-  },
-  selectors: {},
-}) {}
+        yield* Effect.forkScoped(
+          Stream.runForEach(Outbox.givenUp(restockedOn), () =>
+            Effect.provideContext(Stock.invalidate, stock),
+          ),
+          { startImmediately: true },
+        )
 
-const layer = Shelf.layer([
-  Stock.patchedBy(
-    Shelf.actions.restocked,
-    () => undefined,
-    (_stock, { to }) => to,
-  ),
-  Store.outbox(
-    Shelf.actions.restocked,
-    Effect.fnUntraced(function* ({ to }) {
+        return Restocks.of({
+          restock: (to) =>
+            Effect.andThen(
+              Effect.provideContext(
+                Stock.patch(undefined, () => to),
+                stock,
+              ),
+              queued({ to }),
+            ),
+        })
+      }),
+    )
+}
+
+const built = (
+  restocks: Layer.Layer<
+    Restocks,
+    never,
+    Warehouse | Stock | Outbox.Outbox | SecureRandom.SecureRandom
+  >,
+  outbox: Layer.Layer<Outbox.Outbox, never, KeyValueStore.KeyValueStore>,
+) =>
+  restocks.pipe(
+    Layer.provideMerge(Stock.live),
+    Layer.provideMerge(Layer.mergeAll(Warehouse.layer, outbox, SecureRandom.layerWebCrypto)),
+    Layer.provideMerge(KeyValueStore.layerMemory),
+    Layer.provideMerge(State.layer),
+  )
+
+const layer = built(
+  Restocks.layerWith(
+    Effect.fnUntraced(function* (to) {
       const warehouse = yield* Warehouse
 
       yield* Deferred.await(warehouse.open)
@@ -63,31 +97,12 @@ const layer = Shelf.layer([
       yield* Stock.invalidate
     }),
   ),
-]).pipe(
-  Layer.provideMerge(Stock.live),
-  Layer.provideMerge(
-    Layer.mergeAll(Warehouse.layer, Outbox.Outbox.layer, SecureRandom.layerWebCrypto),
-  ),
-  Layer.provideMerge(KeyValueStore.layerMemory),
+  Outbox.Outbox.layer,
 )
 
-const refusing = Shelf.layer([
-  Stock.patchedBy(
-    Shelf.actions.restocked,
-    () => undefined,
-    (_stock, { to }) => to,
-  ),
-  Store.outbox(Shelf.actions.restocked, () => Effect.fail("the warehouse refuses")),
-]).pipe(
-  Layer.provideMerge(Stock.live),
-  Layer.provideMerge(
-    Layer.mergeAll(
-      Warehouse.layer,
-      Outbox.Outbox.layerWith({ maxAttempts: 1, attemptTimeout: "1 second" }),
-      SecureRandom.layerWebCrypto,
-    ),
-  ),
-  Layer.provideMerge(KeyValueStore.layerMemory),
+const refusing = built(
+  Restocks.layerWith(() => Effect.fail("the warehouse refuses")),
+  Outbox.Outbox.layerWith({ maxAttempts: 1, attemptTimeout: "1 second" }),
 )
 
 const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boolean) =>
@@ -96,12 +111,12 @@ const until = <A, E, R>(effect: Effect.Effect<A, E, R>, holds: (value: A) => boo
 describe("a change shown at once and sent through the outbox", () => {
   it.live("the query shows the change before the server has it, then what the server says", () =>
     Effect.gen(function* () {
-      const shelf = yield* Shelf
+      const restocks = yield* Restocks
       const warehouse = yield* Warehouse
       const stock = yield* Stock.ask()
 
       yield* until(stock.value.get, (value) => value === 3)
-      yield* shelf.commands.restocked({ to: 9 })
+      yield* restocks.restock(9)
       yield* until(stock.value.get, (value) => value === 9)
       expect([yield* Ref.get(warehouse.stock), yield* Ref.get(warehouse.asked)]).toEqual([3, 1])
 
@@ -115,13 +130,13 @@ describe("a change shown at once and sent through the outbox", () => {
     "a change whose send fails for good is taken back: the query loads what the server has",
     () =>
       Effect.gen(function* () {
-        const shelf = yield* Shelf
+        const restocks = yield* Restocks
         const warehouse = yield* Warehouse
         const outbox = yield* Outbox.Outbox
         const stock = yield* Stock.ask()
 
         yield* until(stock.value.get, (value) => value === 3)
-        yield* shelf.commands.restocked({ to: 9 })
+        yield* restocks.restock(9)
         yield* until(outbox.dead.get, (dead) => dead.length === 1)
         yield* until(stock.value.get, (value) => value === 3)
         yield* Effect.sleep("50 millis")

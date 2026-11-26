@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Diagnostics } from "spar"
+import { brief, locationIn } from "../src/internal/said.ts"
 import { readFileSync } from "node:fs"
 import { Schema } from "effect"
 
@@ -29,17 +30,13 @@ describe("where a view was made, read from a stack", () => {
       "@http://localhost:5173/src/PeopleView.tsx:12:27",
     ].join("\n")
 
-    expect(Diagnostics.locationIn(chromium, 1)).toBe("/src/PeopleView.tsx:12:27")
-    expect(Diagnostics.locationIn(firefox, 1)).toBe("/src/PeopleView.tsx:12:27")
-    expect(Diagnostics.locationIn("    at make (/repo/src/View.ts:1:2)", 0)).toBe(
-      "/repo/src/View.ts:1:2",
-    )
-    expect(Diagnostics.locationIn("    at make (/repo/src/View.ts:1:2)   ", 0)).toBe(
-      "/repo/src/View.ts:1:2",
-    )
-    expect(Diagnostics.locationIn("/repo/src/View.ts:1:2 is named here, not a frame", 0)).toBe("")
-    expect(Diagnostics.locationIn(chromium, 9)).toBe("")
-    expect(Diagnostics.locationIn(undefined, 0)).toBe("")
+    expect(locationIn(chromium, 1)).toBe("/src/PeopleView.tsx:12:27")
+    expect(locationIn(firefox, 1)).toBe("/src/PeopleView.tsx:12:27")
+    expect(locationIn("    at make (/repo/src/View.ts:1:2)", 0)).toBe("/repo/src/View.ts:1:2")
+    expect(locationIn("    at make (/repo/src/View.ts:1:2)   ", 0)).toBe("/repo/src/View.ts:1:2")
+    expect(locationIn("/repo/src/View.ts:1:2 is named here, not a frame", 0)).toBe("")
+    expect(locationIn(chromium, 9)).toBe("")
+    expect(locationIn(undefined, 0)).toBe("")
   })
 })
 
@@ -84,8 +81,8 @@ describe("diagnostics", () => {
       '  see: LLMS.md, section "SPAR_PART_CRASHED"',
     ])
     expect(Diagnostics.text("SPAR_PART_CRASHED", { in: [] }).split("\n")).toHaveLength(3)
-    expect(Diagnostics.brief("SPAR_LATE_ANSWER")).toBe(
-      "[SPAR_LATE_ANSWER] This answers an earlier request",
+    expect(brief("SPAR_DUPLICATE_KEY")).toBe(
+      "[SPAR_DUPLICATE_KEY] A keyed list has rows that share a key.",
     )
   })
 })

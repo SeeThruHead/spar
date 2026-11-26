@@ -49,27 +49,29 @@ That dependency is written down, so the trace viewer can draw it and name what w
 
 **What it removes.** Accidental request waterfalls, the same request made by every row of a list,
 and an old answer landing over a newer one: an answer carries the number of the request it answers
-and a late one is refused.
+and a late one is ignored.
 
-## A store accepts a command or refuses it, and says why
+## A store is an Effect over one state
 
-App state changes only through named commands. An action can have a guard, so a store can be a
-state machine: the rule lives in the store, not in a disabled button, and it holds for a keyboard
-shortcut or a websocket message as well.
+All app state lives in one place, and changes only through named commands. A store is a schema,
+pure actions and selectors over its part of that state. What takes time is a plain Effect: the
+reset below is one fiber, so pressing Reset again while it runs does nothing.
 
 ```ts
-incremented: Store.action(
-  Schema.Void,
-  (state: State): State => ({ ...state, count: state.count + 1 }),
-  (state) => (state.phase === "resetting" ? "a reset is in progress" : null),
-),
+const reset = Effect.gen(function* () {
+  yield* store.commands.resetClicked()
+  yield* Effect.sleep("2 seconds")
+  yield* store.commands.resetCompleted()
+})
+
+FiberHandle.run(running, reset, { onlyIfMissing: true })
 ```
 
-[[demo:refusals]]
+[[demo:store]]
 
-**What it removes.** State that was changed from somewhere nobody can find, and flows that break
-when two events arrive in an order the author did not think of. A refused command is in the log,
-in the trace and in `store.refused`.
+**What it removes.** State that was changed from somewhere nobody can find, and work that runs
+twice because two events arrived in an order the author did not think of. Every command is in the
+log and the trace, with what it carried.
 
 ## Everything that happens is logged and traced
 

@@ -41,16 +41,12 @@ const examples: ReadonlyArray<readonly [string, string]> = [
   ],
   [
     "apps/sidebar/src/People.ts",
-    "Server data in a query store, a second store for the selection, and Export CSV as an action that reads the people from the query store itself.",
+    "Server data in a query store, a second store for the selection, and Export CSV as an Effect that reads the people from the query store itself.",
   ],
   ["apps/sidebar/src/PeoplePanel.tsx", "The people table, composed, its rows in a For."],
   [
     "apps/sidebar/test/people.test.ts",
-    "Tests of the export: the file, the refusal with nobody selected, one trace for the request and the result.",
-  ],
-  [
-    "packages/spar/test/machine.test.ts",
-    "The race test: Add 1 during a reset, on a clock the test controls.",
+    "Tests of the export: the file, what it says with nobody selected, one trace for the click and the result.",
   ],
   [
     "packages/spar/test/query.test.ts",

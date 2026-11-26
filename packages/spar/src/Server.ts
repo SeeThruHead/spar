@@ -121,7 +121,7 @@ export const render = <R, LayerError = never>(
       html,
       state: {
         stores: Object.fromEntries(states),
-        ui: tree.snapshot(),
+        ui: tree.uiSnapshot(),
         trace: { traceId: span.traceId, spanId: span.spanId },
       },
     }
@@ -261,7 +261,7 @@ export const renderInPieces = <R, LayerError = never>(
         options.close,
         stateScript({
           stores: Object.fromEntries(states),
-          ui: tree.snapshot(),
+          ui: tree.uiSnapshot(),
           trace: { traceId: span.traceId, spanId: span.spanId },
           pieces: true,
         }),

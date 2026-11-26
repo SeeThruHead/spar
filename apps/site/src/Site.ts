@@ -14,7 +14,7 @@ import {
 import type { Heading, Hit, Page } from "./api.ts"
 import { Loads } from "./Loads.ts"
 import { groups } from "./nav.ts"
-import { Refusals } from "./Refusals.ts"
+import { StoreDemo } from "./StoreDemo.ts"
 import { DocParams, PageQuery, SearchQuery, docRoute, home } from "./Shelves.ts"
 import {
   DocView,
@@ -122,7 +122,7 @@ const Home = compose(
       between: Reactive.map(page.value, (shown) => partOf(shown, 1)),
       after: Reactive.map(page.value, (shown) => partOf(shown, 2)),
       loads: yield* View.child(Loads, {}),
-      refusals: yield* View.child(Refusals, {}),
+      store: yield* View.child(StoreDemo, {}),
       start: router.link(docRoute, { slug: "getting-started" }),
       principles: router.link(docRoute, { slug: "principles" }),
       onLink: router.followLinks,

@@ -3,7 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Effect, Layer, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
-import { Outbox, Props, Store, View, compose } from "spar"
+import { Outbox, Props, State as OneState, Store, View, compose } from "spar"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { jsx } from "spar/jsx-runtime"
@@ -25,9 +25,10 @@ class Tally extends Store.Tag<Tally>()("test/Tally", {
   selectors: { count: Store.selector(Schema.Finite, (state: State) => state.count) },
 }) {}
 
-const layer = Tally.layer().pipe(
+const layer = Tally.layer.pipe(
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
+  Layer.provideMerge(OneState.layer),
 )
 
 const Screen = compose(
@@ -174,27 +175,6 @@ describe("devtools", () => {
     }).pipe(Effect.provide(layer)),
   )
 
-  it.effect("actions restored from the device can be stepped to as well", () =>
-    Effect.gen(function* () {
-      const stored = yield* KeyValueStore.KeyValueStore
-      const kept = Tally.layerDurable().pipe(
-        Layer.provideMerge(Devtools.layer),
-        Layer.provide(SecureRandom.layerWebCrypto),
-        Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, stored)),
-      )
-
-      yield* Tally.use((tally) =>
-        Effect.andThen(tally.commands.added({ by: 2 }), tally.commands.added({ by: 20 })),
-      ).pipe(Effect.provide(kept))
-
-      const earlier = yield* Tally.use((tally) =>
-        Effect.andThen(tally.travelTo(1), tally.state.get),
-      ).pipe(Effect.provide(kept))
-
-      expect(earlier).toEqual({ count: 2 })
-    }).pipe(Effect.provide(KeyValueStore.layerMemory)),
-  )
-
   it.effect(
     "a store can be asked by name to carry out an action, and refuses what it does not know",
     () =>
@@ -264,17 +244,5 @@ describe("devtools", () => {
         ),
       ),
     ),
-  )
-
-  it.effect("travelling to an action that is no longer kept shows the live state", () =>
-    Effect.gen(function* () {
-      const tally = yield* Tally
-
-      yield* tally.commands.added({ by: 5 })
-      yield* tally.travelTo(99)
-
-      expect(yield* tally.state.get).toEqual({ count: 5 })
-      expect(yield* tally.viewing.get).toBe(99)
-    }).pipe(Effect.provide(layer)),
   )
 })

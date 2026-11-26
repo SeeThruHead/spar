@@ -6,6 +6,7 @@ import {
   Function,
   Layer,
   Option,
+  Ref,
   Schedule,
   Schema,
   Stream,
@@ -14,8 +15,10 @@ import {
   Tracer,
 } from "effect"
 import type { Scope } from "effect"
+import { SecureRandom } from "effect/crypto"
 import { KeyValueStore } from "effect/persistence"
 import * as Events from "./Events.ts"
+import { newIn } from "./internal/givenUp.ts"
 import { events, on } from "./internal/listen.ts"
 import { fromSubscriptionRef, succeed } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
@@ -273,6 +276,53 @@ export class Outbox extends Context.Service<
   static readonly layer = Outbox.layerWith(defaults)
 }
 
+const lastSeq = (entries: ReadonlyArray<Entry>): number =>
+  entries.reduce((most, entry) => Math.max(most, entry.seq), 0)
+
+export const channel = Effect.fnUntraced(function* <A, I, E, R>(
+  name: string,
+  schema: Schema.Codec<A, I>,
+  send: (payload: A, idempotencyKey: string) => Effect.Effect<void, E, R>,
+): Effect.fn.Return<
+  (payload: A) => Effect.Effect<void>,
+  never,
+  Outbox | SecureRandom.SecureRandom | R | Scope.Scope
+> {
+  const outbox = yield* Outbox
+  const random = yield* SecureRandom.SecureRandom
+  const codec = Schema.toCodecJson(schema)
+  const decode = Schema.decodeUnknownEffect(codec)
+  const encode = Schema.encodeEffect(codec)
+
+  const waiting = yield* outbox.persisted(name)
+  const next = yield* Ref.make(lastSeq(waiting))
+
+  yield* outbox.register(name, (entry) =>
+    Effect.flatMap(Effect.orDie(decode(entry.payload)), (payload) => send(payload, entry.key)),
+  )
+
+  return Effect.fnUntraced(function* (payload: A) {
+    const json = yield* Effect.orDie(encode(payload))
+    const seq = yield* Ref.updateAndGet(next, (last) => last + 1)
+    const key = yield* random.uuidV7()
+
+    yield* outbox.persist({ key, channel: name, payload: json, seq })
+  })
+})
+
+export const givenUp = (name: string): Stream.Stream<void, never, Outbox> =>
+  Stream.unwrap(
+    Effect.map(Effect.service(Outbox), (outbox) =>
+      outbox.dead.changes.pipe(
+        Stream.mapAccum(
+          (): ReadonlySet<string> => new Set(),
+          (seen, now: ReadonlyArray<Dead>) => newIn(seen, now, name),
+        ),
+        Stream.map(Function.constVoid),
+      ),
+    ),
+  )
+
 const holdLock = (locks: LockManager): Effect.Effect<void, never, Scope.Scope> =>
   Effect.asVoid(
     Effect.acquireRelease(
@@ -303,7 +353,7 @@ export const layerBrowser = Layer.effect(
     const online = yield* Events.online
     const peers = yield* Effect.acquireRelease(
       Effect.sync(() => new BroadcastChannel(sharedName)),
-      (channel) => Effect.sync(() => channel.close()),
+      (opened) => Effect.sync(() => opened.close()),
     )
 
     return {

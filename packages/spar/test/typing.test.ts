@@ -1,8 +1,9 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Effect, Layer, Option, Ref, Schema } from "effect"
-import { Timeline, UiState, compose } from "spar"
+import { Effect, Option, Ref, Schema } from "effect"
+import { State, Timeline, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
+import * as Dom from "../src/internal/dom.ts"
 import { DraftView } from "./typing.tsx"
 
 const Draft = compose(
@@ -21,6 +22,19 @@ const Draft = compose(
     }
   }),
 )(DraftView)
+
+const typedIn = (
+  tag: string,
+  attributes: ReadonlyArray<readonly [string, string]>,
+): HTMLElement => {
+  const node = document.createElement(tag)
+
+  attributes.forEach(([name, value]) => node.setAttribute(name, value))
+  document.body.append(node)
+  node.dispatchEvent(new Event("input", { bubbles: true }))
+
+  return node
+}
 
 const field = () => screen.getByRole<HTMLInputElement>("textbox", { name: "Draft" })
 
@@ -61,6 +75,23 @@ describe("a field the user is typing in", () => {
       yield* Testing.click("button", "Load")
       yield* Effect.sleep("40 millis")
       expect((yield* notices).length).toBe(1)
-    }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
+    }).pipe(Effect.provide(State.layer)),
   )
+
+  it("counts only text entry as typing: a select or a checkbox given a value is not reported", () => {
+    Dom.watchTyping(document)
+
+    expect(
+      [
+        typedIn("input", []),
+        typedIn("input", [["type", "search"]]),
+        typedIn("textarea", []),
+        typedIn("select", []),
+        typedIn("input", [["type", "checkbox"]]),
+      ].map((node) => Dom.typingReplaced(node, "value", "from elsewhere", Option.some(0))),
+    ).toEqual([true, true, true, false, false])
+    expect(Dom.typingReplaced(typedIn("input", []), "value", "from elsewhere", Option.none())).toBe(
+      false,
+    )
+  })
 })

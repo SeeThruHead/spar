@@ -15,7 +15,7 @@ import * as Events from "./Events.ts"
 import type { Fields } from "./Props.ts"
 import type * as Query from "./Query.ts"
 import * as UiState from "./UiState.ts"
-import { component, inViewScope, noticed } from "./View.ts"
+import { component, inViewScope, noticed } from "./internal/viewParts.ts"
 import type { Component, Declared, View } from "./View.ts"
 
 export type Enhancer<In, Add, E = never, R = never> = ((props: In) => Effect.Effect<Add, E, R>) & {
@@ -421,11 +421,6 @@ export const withEffect =
   ): Enhancer<In, unknown, never, R | Scope.Scope> =>
   (props) =>
     Effect.as(Effect.forkScoped(run(props)), {})
-
-export const withSpan =
-  <In, Add, E, R>(name: string, inner: Enhancer<In, Add, E, R>): Enhancer<In, Add, E, R> =>
-  (props) =>
-    Effect.withSpan(inner(props), name, { captureStackTrace: false })
 
 export const For = <A>(props: {
   readonly each: Reactive<ReadonlyArray<A>> | ReadonlyArray<A>

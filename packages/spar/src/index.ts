@@ -10,7 +10,6 @@ export {
   withKey,
   withProps,
   withQuery,
-  withSpan,
   withStore,
   withUiState,
 } from "./Compose.ts"
@@ -28,6 +27,7 @@ export * as Reactive from "./Reactive.ts"
 export * as Router from "./Router.ts"
 export * as Server from "./Server.ts"
 export * as Store from "./Store.ts"
+export * as State from "./State.ts"
 export * as Tabs from "./Tabs.ts"
 export * as Diagnostics from "./Diagnostics.ts"
 export * as Timeline from "./Timeline.ts"

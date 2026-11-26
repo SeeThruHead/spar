@@ -36,7 +36,7 @@ Three rules that break the build most often:
    list of actions: `onReset: [UiState.set(props.name, ""), UiState.set(props.open, false)]`.
 3. A handler (an event prop, a `withKey` action) takes an `Effect<void>` with no error and no
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
-   already fits: a refusal shows in the store, not as an error.
+   already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
 
 ## The shape of an app
@@ -91,20 +91,20 @@ in an enhancer and pass `props.shown` instead.
 | Use a child component                     | Write it in JSX in the view: `<Dropdown label="Sort" onPick={pick} />`                                                                  | Passing elements down as props                                                                                 |
 | Hold data the app cares about             | A `Store.Tag` with actions and selectors                                                                                                | UI state seeded from a store, a service with a Ref                                                             |
 | Put a store where one component uses it   | `SomeStore.with(Component)`, then mount the result                                                                                      | Wiring a layer at the root for a store one screen owns                                                         |
-| Share a store across the app              | `SomeStore.layer()` in the layers given to `App.mount`                                                                                  | A global                                                                                                       |
+| Share a store across the app              | `SomeStore.layer` in the layers given to `App.mount`                                                                                    | A global                                                                                                       |
 | Change app state                          | `store.commands.<action>(payload)`                                                                                                      | Writing to state anywhere else                                                                                 |
 | Change UI state                           | `UiState.set` or `UiState.update` in a handler                                                                                          | Writing UI state from a command, a stream or a service                                                         |
 | Show a list                               | `<For each={props.items} by={(item) => item.id}>{(item) => <li>...</li>}</For>`                                                         | `.map` inside JSX                                                                                              |
 | Show a tree (a component inside itself)   | `const Row: View.Component<Props> = compose(...)(... <Row node={child} /> ...)`, a `Schema.suspend` Schema                              | Flattening the tree by hand; leaving the type off                                                              |
 | Show one thing or another                 | `<Show when={props.open}>...</Show>`                                                                                                    | A ternary inside JSX                                                                                           |
 | Load data from the server                 | A `Query.Tag`, and `withQuery(name, TheQuery, (props) => input)` where it is needed                                                     | Fetching in a component and passing the result down                                                            |
-| Use loaded data in an action              | Read the query store in the action's `Store.after` effect, then `send` the result                                                       | Props or arguments that carry server data                                                                      |
-| Stop a command that is wrong right now    | A guard as the third argument of `Store.action`, returning the reason                                                                   | Disabling the button and hoping nothing else sends it                                                          |
-| Run a flow with a wait in it              | A state field, an action that starts it, `Store.after` that waits and `send`s the finish                                                | A lock, a queue, a flag in UI state                                                                            |
+| Use loaded data in an action              | An Effect that reads `TheQuery.read(input)` and then sends a command with the result                                                    | Props or arguments that carry server data                                                                      |
+| Stop a second run while one is going      | Run the work with `FiberHandle.run(handle, effect, { onlyIfMissing: true })`                                                            | Disabling the button and hoping nothing else starts it                                                         |
+| Run a flow with a wait in it              | One Effect: a command, `Effect.sleep` or the call, a command with the result                                                            | A lock, a queue, a flag in UI state                                                                            |
 | Call your backend                         | `Backend.rpc(Group, url)` and call the client                                                                                           | `fetch`, axios, tRPC, a hand-rolled client                                                                     |
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                        | `fetch`, `FetchHttpClient.layer`                                                                               |
-| Send something that must not be lost      | `Store.outbox(action, send)`: saved on the device, retried with an idempotency key                                                      | Calling the server from a handler and hoping                                                                   |
-| Do something after an action              | `Store.after(action, effect)`                                                                                                           | An Effect inside a reducer                                                                                     |
+| Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                              | Calling the server from a handler and hoping                                                                   |
+| Keep a store across a reload              | `SomeStore.layerSaved`, with a `KeyValueStore`; other tabs that save it are followed                                                    | Writing to `localStorage` by hand                                                                              |
 | Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                                                                               | `catchAll` that hides it; leaving it (compile error)                                                           |
 | Show something while a component loads    | `View.pending(LoadingView)`                                                                                                             | A loading flag in UI state                                                                                     |
 | Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)`                                                  | `location.href`, string paths                                                                                  |
@@ -170,23 +170,20 @@ its own state, each registered in the same root registry the devtools read. So i
 view, update: one registry, one log, every change an action. It only does not look like it,
 because the store and its view sit in the same file.
 
-## Flows, refusals and server data
+## Flows and server data
 
 Read the "State, events that interleave, and server data" part below before writing any store
 with async work. The short version:
 
-- A store is plain unless some commands are wrong in some states. Then give it a state field and
-  give those actions a guard. A refused command is visible in the log, the trace and
-  `store.refused`. Never guard only in the view.
-- Async work is always three steps in a store: a command records the intent, a `Store.after`
-  effect does the work, and it `send`s a command with the result.
-- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an action
-  that needs it reads the query store itself.
-- There is no way to make a command wait for another to finish, on purpose.
-- When only the newest answer matters (a search box, a filter), use `Store.afterLatest` instead of
-  `Store.after`, or a Query. With `Store.after` an older answer can land last.
-- When a second press must not start the work again (Pay, Save, Send), use `Store.afterLeading`:
-  the store refuses the repeat while the first run lasts, and says why.
+- A store accepts every command; there are no guards. Work that takes time is an Effect on a
+  service (or an enhancer): it sends a command, does the work, and sends a command with the
+  result. Every command is in the log and the trace.
+- Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
+  that needs it reads `TheQuery.read(input)` itself.
+- When only the newest run matters (a search box, a filter), run it with
+  `FiberHandle.run(handle, effect)`, which stops the one before; or load it with a Query.
+- When a second press must not start the work again (Pay, Save, Send), run it with
+  `FiberHandle.run(handle, effect, { onlyIfMissing: true })`, which ignores the repeat.
 - To change one row of a long list in a reducer, return `Store.withRow(state.rows, index, row)`:
   the list rewrites that row only.
 - A query's `value` is null while a new input loads. To keep the last rows on screen while the
@@ -194,8 +191,8 @@ with async work. The short version:
 - A query with no input is asked for with no argument, `yield* TheQuery.ask()`. Giving it an
   input, such as one made from another query's value, does not compile (`SPAR_NEEDLESS_WAIT`).
 - A draft the user is typing is never overwritten with a saved or loaded value. Keep both.
-- Spar reports four timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
-  `SPAR_OLDER_ANSWER`, `SPAR_SENT_AGAIN`, `SPAR_TYPING_REPLACED`). After a
+- Spar reports two timing mistakes while the app runs (`SPAR_DUPLICATE_CALL`,
+  `SPAR_TYPING_REPLACED`). After a
   change, run the app and read the log for `noticed` and `waited` entries; each names its fix.
 - A store's layer needs no `SecureRandom` from you. A UI write (`UiState.set`, `update`) can be
   yielded inside `Effect.gen`. Give every reducer its state type: `(state: State, payload) => ...`.
@@ -445,7 +442,7 @@ panel, lenses show one kind at a time:
 | --------- | -------------------------------------------------------------------------------------- |
 | Rendering | Components mounting, and each event a component handled (`on click`, with its view)    |
 | Data      | Queries: each request, its call, its answer, and what a dependent one's input was from |
-| Stores    | Store commands and refusals                                                            |
+| Stores    | Store commands                                                                         |
 | Backend   | Spans the backend recorded                                                             |
 
 A request that waited for another query's value draws that wait as a line before its bar, from
@@ -748,14 +745,14 @@ Every backend call goes through `Backend`. Effect RPC is the way to talk to a ba
 HttpApi and JSON clients plug into the same client; everything that would go around it is refused
 by the build. A call the framework cannot see is a call missing from the trace.
 
-### 18a. A store says which commands it accepts, and server data is a store
+### 18a. Work that takes time is an Effect, and server data is a store
 
-Events interleave: anything can arrive while a multi-step flow is waiting. Spar has no holding or
-queueing primitive. A flow is states in a store, and each action's guard says in which states it
-applies; a command that does not apply is refused with a reason that the log, the trace and the
-view can all show. The rule is in the model, so a button, a key and an agent get the same answer.
-Server data is no exception: a query is a store with typed loading, loaded and failed states, and
-any other store's action reads it directly, so no prop carries server data.
+Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
+command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
+`FiberHandle` that ignores or replaces it, a `Semaphore` that queues it). The rule is in that one
+Effect, so a button, a key and an agent get the same behaviour, and every command it sends is in
+the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
+and failed states, and any Effect reads it directly, so no prop carries server data.
 
 ### 18. The past can be walked and branched
 
@@ -805,7 +802,6 @@ props are inferred from them. Enhancers and the view run once, on mount.
 | `withEffectProps((props) => effect)`                      | The props an Effect makes from the props so far, for example `withEffectProps(Effect.fnUntraced(function* (props) { ... }))`. Use it rather than an untyped inline function. |
 | `withKey(key, (props) => action)`                         | Runs an action when a key is pressed, for as long as the component is mounted.                                                                                               |
 | `withEffect((props) => effect)`                           | Runs an Effect for as long as the component is mounted.                                                                                                                      |
-| `withSpan(name, enhancer)`                                | Runs an enhancer inside a span with that name.                                                                                                                               |
 | `<For each={list} by={key}>{(item, key) => <li />}</For>` | A keyed list. `each` is an array or a reactive one; `by` gives each row's key, a string or a number.                                                                         |
 | `<Show when={reactiveBoolean}>...</Show>`                 | Shows its children while the value is true.                                                                                                                                  |
 | `uses(["Service", ...])`                                  | Nothing to the props: tells the inspector which services the component uses. The dev plugin adds it for you; write it only without the plugin.                               |
@@ -996,13 +992,9 @@ const rows =
 
 Every piece is kept in one tree, under its component's place: the names of the views from the root
 down, with a row's key in brackets (`Board / Note[a]`), and a number when two share a place
-(`Panel#2`). It is there while the component is mounted and gone when it leaves.
-`UiState.snapshot` reads the whole tree as plain JSON (each value encoded by its Schema),
-`UiState.changes` is the stream of what was added, set and removed, `UiState.put(path, name, value)`
-sets one piece from outside (refused when the value does not fit the Schema), and
-`UiState.restore(snapshot)` puts a whole snapshot back, keeping values for components that are not
-on screen until they mount. Give an app its own tree with
-`Layer.succeed(UiState.Tree, UiState.makeTree())`; a server render always has its own.
+(`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
+the same one state that stores live in, so the devtools and agents read, set and rewind UI state
+through it. Give an app or a test its own with `State.layer`; a server render always has its own.
 
 ```tsx
 <button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
@@ -1010,41 +1002,30 @@ on screen until they mount. Give an app its own tree with
 
 ### Store
 
-| Function                                                              | What it does                                                                                                                            |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                                     |
-| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                                   |
-| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                        |
-| `invariants`, `transitions` (on the definition)                       | Named rules for the whole store: what no state may be, and what no command may do. A command that would break one is refused by name.   |
-| `phases` (on the definition)                                          | The commands each state accepts, and the ones only the store's own effects may send. Anything not listed is refused by name.            |
-| `Store.during(state, effect)`                                         | An effect that runs while the store is in a state: started on entry, interrupted on exit.                                               |
-| `Self.layer(reactions?)`                                              | The store in memory, for the whole app: provide it where the app is mounted.                                                            |
-| `Self.with(component, reactions?)`                                    | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                          |
-| `Self.layerDurable({ compactAfter? }, reactions?)`                    | The store kept on the device (needs a `KeyValueStore`). Fails with `Store.Unreadable` if saved data no longer decodes.                  |
-| `Store.after(action, effect)`                                         | Runs an Effect after an action.                                                                                                         |
-| `Store.afterLatest(action, effect)`                                   | The same, keeping only the newest run: a new one stops the one before it. For a search, or anything where only the last answer matters. |
-| `Store.afterLeading(action, effect)`                                  | The same, keeping only the first run: while it runs, the store refuses that command again, with the reason. For Pay, Save, Send.        |
-| `Store.withRow(rows, index, row)`                                     | In a reducer, the rows with one replaced. A keyed list showing those rows then rewrites that row only, without walking the others.      |
-| `Store.outbox(action, send)`                                          | Sends the action's payload through the outbox.                                                                                          |
-| `Store.replay(definition, entries)`                                   | Rebuilds state from a log.                                                                                                              |
+| Function                                                              | What it does                                                                                                                       |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `Store.Tag<Self>()(key, { state, initialState, actions, selectors })` | Defines a store as a service class.                                                                                                |
+| `Store.selector(Schema, select)`                                      | One named reading of the state, with a Schema for what it gives. A plain function is a compile error.                              |
+| `Store.action(Schema, reduce)`                                        | One action: a payload Schema and a pure reducer.                                                                                   |
+| `Self.layer`                                                          | The store for the whole app: provide it where the app is mounted.                                                                  |
+| `Self.layerFrom(effect)`                                              | The same, starting from what the Effect gives, such as data a server loaded.                                                       |
+| `Self.layerSaved`                                                     | The same, saved after each command and read back on start (needs a `KeyValueStore`). Other tabs that save it are followed.         |
+| `Self.with(component)`                                                | The store beside one component: mounting the result makes the store, and each place it is mounted has its own.                     |
+| `Store.withRow(rows, index, row)`                                     | In a reducer, the rows with one replaced. A keyed list showing those rows then rewrites that row only, without walking the others. |
 
-A store service has `state`, `log`, `select.<name>`, `commands.<name>(payload)`, `viewing` and
-`travelTo(seq | null)`.
+A store service has `state`, `select.<name>` and `commands.<name>(payload)`. Its state is a slot
+in the one state, so every command is in the log and the trace with its payload, and the devtools
+step and fork the whole app.
 
 (`apps/sidebar/src/BoardStore.ts`)
 
-#### A store that refuses
+#### Work that takes time
 
-`Store.action(Schema, reduce, refusal)` takes a third argument, a guard: it is given the state and
-the payload and answers with a reason, or null when the command is accepted. A refused command
-changes nothing and is not added to the store's log. It is noted in the log of everything that
-happened as `refused` with the reason, its span carries `spar.refused`, and `store.refused` is the
-last refusal since the store last accepted a command. This is how a store is a state machine:
-a field names the state and each action's guard says in which states it applies
-(`apps/sidebar/src/ResetCounter.ts`, `docs/state-and-server-data.md`).
-
-`Store.after(action, (payload, state, send) => effect)`: `send(otherAction, payload)` commits
-another action of the same store, so async work started by one command reports back as another.
+A store accepts every command; there are no guards. Work that takes time is an Effect on a
+service, and Effect decides what happens to a repeat: `FiberHandle.run(handle, effect, {
+onlyIfMissing: true })` ignores a second run while the first is going, plain `FiberHandle.run`
+replaces it, a `Semaphore` makes it wait, and an `Outbox.channel` keeps it on the device until it
+is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
 
 #### A store beside its view
 
@@ -1210,7 +1191,7 @@ resting values (online, visible, no media query matching) and window listeners a
 There are no directives. The component is the same in both places, and the layers it is given
 decide where its data comes from. On the server a store starts from data loaded there,
 `Self.layerFrom(load)`, and a service reads the database directly. In the browser the same store
-is `Self.layer()`, which starts from the state the server sent, and the same service asks over
+is `Self.layer`, which starts from the state the server sent, and the same service asks over
 the network.
 
 `Server.renderToStream(Component, { layer, open, close, end })` sends the document in parts:
@@ -1255,22 +1236,22 @@ both in a real browser.)
 Server data lives in a store. `Query.Tag` declares one: it is a `Store.Tag` underneath, so it is
 in the log, the devtools and the traces like any other.
 
-| Function                                                                       | What it does                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed.                            |
-| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                                                 |
-| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                                               |
-| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                                           |
-| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                                                                                                            |
-| `Self.invalidate`, `Self.invalidatedBy(action)`                                | Load everything it holds again; a reaction for another store's layer that does so after that action.                                                                                                                                                                    |
-| `Self.patchedBy(action, input, patch)`                                         | A reaction for another store's layer: after that action, change the loaded value for `input(payload)` at once. With `Store.outbox` on the same action, an optimistic update; when the outbox gives up on that send, the query loads again, so the change is taken back. |
+| Function                                                                       | What it does                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter, retry })` | Declares the query: Schemas for its input, what it loads and how it fails, `load(input)`, how long an answer stays fresh (500 ms unless set; `"0 millis"` asks again every time), and a schedule to try again on before it counts as failed. |
+| `Self.ask(input)`                                                              | Declares, in a component's Effect, that this input is needed. Returns a handle at once.                                                                                                                                                      |
+| `Self.read(input)`                                                             | The loaded value for an input, or null. For another store's after-effect.                                                                                                                                                                    |
+| `Self.live`                                                                    | Its layer, for the whole app.                                                                                                                                                                                                                |
+| `Self.beside(component)`                                                       | The query beside one component, as `.with` does for a store.                                                                                                                                                                                 |
+| `Self.invalidate`                                                              | An Effect: load everything it holds again.                                                                                                                                                                                                   |
+| `Self.patch(input, change)`                                                    | An Effect: change the loaded value for `input` at once. Followed by an `Outbox.channel` send, an optimistic update; run `Self.invalidate` on `Outbox.givenUp(channel)` so the change is taken back when the outbox gives up on it.           |
 
 `ask` takes a plain value, a reactive value, or a reactive `Option` (`Schema.Void` as the input
 means no argument). The handle has `status` (`waiting` while the input is none, then `loading`,
 `loaded` or `failed`), `value`, `error`, `loading`, `latest` (the last value loaded under any
 input, for paging without a blank) and `refetch`, all reactive. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
-input at a time (a second is refused) and an answer to an earlier request is refused. Because
+input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
 and a query whose input comes from another query's value waits only for that value.
 While a component is using it, a query asks again for what has gone stale when the tab is shown
@@ -1322,7 +1303,7 @@ happened in.
 
 ### Diagnostics
 
-`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, refusal, types or tools),
+`Diagnostics.all` lists every `SPAR_` code with its kind (build, run, types or tools),
 what happened and the fix; `Diagnostics.text(code, { said, in, at })` formats one report in the
 agent format. It is also importable as `spar/diagnostics`, the same list is written to
 `packages/spar/diagnostics.json`, and the reference page is
@@ -1453,178 +1434,39 @@ ever need to read it or change it, it is store state. The selection in the peopl
 state because "Export CSV" reads it. The text in a search box is UI state until something else
 needs it.
 
-### A store can be a state machine, or not
+### What takes time is an Effect
 
-Both are the same thing, a `Store.Tag` with a Schema, actions and selectors. The difference is
-whether some commands are wrong at some times.
+A store is a Schema, pure actions and selectors over its part of the one state. It accepts every
+command at any time; there are no guards, phases or refusals. Work that takes time is a plain
+Effect on a service, and Effect's own tools decide what happens when events interleave.
 
-**A plain store** accepts every command at any time. A list of notes, a set of collapsed
-sections, a selection. Each action is a reducer and that is all.
-
-**A state machine** has states in which some commands do not apply. Give the state a field that
-names the state, and give each action that depends on it a guard. The guard is the third argument
-of `Store.action` and answers with a reason, or null when the command is accepted:
+A reset that takes two seconds is three steps: start, wait, finish. Written as one Effect and run
+by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothing, from a button,
+a key or an agent alike:
 
 ```ts
-incremented: Store.action(
-  Schema.Void,
-  (state: State): State => ({ ...state, count: state.count + 1 }),
-  (state) => (state.phase === "resetting" ? "A reset is in progress" : null),
-),
+const reset = Effect.gen(function* () {
+  yield* store.commands.resetClicked()
+  yield* Effect.sleep("2 seconds")
+  yield* store.commands.resetCompleted()
+})
+
+FiberHandle.run(running, reset, { onlyIfMissing: true })
 ```
 
-Use a state machine when there is a multi-step flow (start, wait, finish), when the server's
-answer can arrive after the user has moved on, or when a command would corrupt something if it
-ran at the wrong time. There is no state machine library and no chart: the states are a
-`Schema.Literals` field and the transitions are the guards, in the same file as the reducers.
+The same tools cover the other cases:
 
-A refused command changes nothing and is not added to the store's log, so replaying the log gives
-the same state. It is not silent either:
+| What should happen to a repeat | How it is written                                                   |
+| ------------------------------ | ------------------------------------------------------------------- |
+| Ignored while the first runs   | `FiberHandle.run(handle, effect, { onlyIfMissing: true })`          |
+| Replaces the first             | `FiberHandle.run(handle, effect)`, which interrupts the earlier run |
+| Waits its turn                 | A `Semaphore` with one permit around the effect                     |
+| One per key                    | A `FiberMap` keyed by what the work is about                        |
+| Survives a reload and retries  | An `Outbox.channel`, which keeps it on the device until it is sent  |
 
-- it is an entry in the one log of everything that happened, kind `refused`, with the payload
-  and the reason, so the devtools and an agent see it;
-- its span in the trace carries `spar.refused` with the reason;
-- the store's `refused` is the last refusal since the store last accepted a command, as a
-  reactive value a view can show.
-
-#### Rules declared once
-
-A guard belongs to one action. A rule belongs to the store. `invariants` name what no state may
-be, and `transitions` name what no command may do, given the state before, the state after, the
-action's name and its payload. They are checked after every command, whoever sent it. A command
-that would break one is refused like any other refusal, and the reason names the rule:
-`it would break the rule NothingChangesDuringAReset`.
-
-```ts
-export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
-  state: State,
-  initialState,
-  actions: { incremented, resetClicked, resetCompleted },
-  selectors: { count, resetting },
-  invariants: {
-    CountIsNeverNegative: (state) => state.count >= 0,
-  },
-  transitions: {
-    NothingChangesDuringAReset: ({ before, after, action }) =>
-      before.phase !== "resetting" || action === "resetCompleted" || after === before,
-  },
-}) {}
-```
-
-With that one transition, no action of this counter needs a guard. Use a guard when the reason
-should be a sentence for the user, and a rule for what must hold whatever is added later. Rules
-are checked while the app runs; they are not proved.
-
-(`packages/spar/test/rules.test.ts`)
-
-#### Commands declared for each state
-
-A guard has to be remembered on every action, and one forgotten guard is a hole: a second
-"reset" that starts the flow again, or a stray "reset completed" that ends it early. For a store
-with states, say instead which commands each state accepts. Anything not listed is refused, by
-name, with nothing to remember.
-
-```ts
-export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
-  state: State,
-  initialState,
-  actions: { incremented, resetClicked, resetCompleted },
-  selectors: { count, resetting },
-  phases: {
-    of: (state) => state.phase,
-    accepts: {
-      idle: ["incremented", "resetClicked"],
-      resetting: ["resetCompleted"],
-    },
-    internal: ["resetCompleted"],
-  },
-}) {}
-
-export const resetAfterDelay = Store.during("resetting", (_state: State, send) =>
-  Effect.andThen(
-    Effect.sleep(Duration.seconds(2)),
-    send(CounterStore.actions.resetCompleted, undefined),
-  ),
-)
-```
-
-- `accepts` lists the actions each state takes. A command sent in a state that does not list it
-  is refused: `resetClicked: it is not accepted while resetting`.
-- `internal` names actions only the store's own effects may send. From a view, a key or another
-  store they are refused in every state, so a completion cannot arrive from outside.
-- `Store.during(state, effect)` is an effect that belongs to a state: it starts when the store
-  enters the state, including when the store opens already in it, and is interrupted when the
-  store leaves. There is never a second timer, and nothing is left running after the state ends.
-
-The action names and the state names are both checked by the compiler. The states are the keys
-of `accepts`, and `of` may only return one of them, so a state that `of` can reach but `accepts`
-leaves out does not compile (`Type '"idle" | "sending" | "sent"' is not assignable to type
-'"idle" | "sending"'`), and every state says what it takes, even if that is nothing
-(`sent: []`). This needs the state's type known, so give `initialState` its type
-(`const initialState: State = ...`), as the reducers have theirs.
-
-(`packages/spar/test/phases.test.ts`)
-
-### Four mistakes Spar reports while the app runs
-
-A fifth used to be here: giving a query that takes no input a value from another query, so it
-waited for nothing. That no longer compiles (`SPAR_NEEDLESS_WAIT`).
-
-None of these can be refused by the compiler, because each is ordinary code that is wrong only in
-how its timing works out. Spar notices them while the app runs, writes a warning in the agent
-format (code, what, where, fix) and puts a `noticed` or `waited` entry in the log, which the
-devtools and the agents' server show. Run the app, do the thing, and read the log.
-
-| Code                   | What was done                                                                                    | Do this instead                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `SPAR_DUPLICATE_CALL`  | The same GET was made again through `Backend` while the first was still on its way               | One `Query.Tag`; every component that needs it asks for it. Never fetch in each row                        |
-| `SPAR_OLDER_ANSWER`    | A `Store.after` run started by an earlier command answered after a later one's, on the same part | `Store.afterLatest`, or load it with a Query, which refuses an answer to an earlier request                |
-| `SPAR_SENT_AGAIN`      | The same command with the same payload, while what the first one started was still running       | A guard on the action that refuses it while in progress, or `form.submit`, which ignores a second submit   |
-| `SPAR_TYPING_REPLACED` | A field the user typed in was given a value by something that began before their last keystroke  | Keep the draft as its own state and the server's copy beside it. Never write an answer back into the draft |
-
-Each has its own entry, with the full text, in the list of diagnostics.
-
-### When events interleave
-
-The problem, as Treflex's author put it about Elm-style frameworks: every message can arrive at
-any point. A reset that takes two seconds is three steps (start, wait, finish). If "Add 1" arrives
-during the wait, what happens? In the Foldkit demo the buttons are disabled while resetting, which
-guards the buttons. A keyboard shortcut or a subscription that sends the same message is not
-guarded by a disabled button.
-
-|                              | Foldkit                                                                                                     | Treflex                                                                                                                                | Spar                                                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| The model                    | One Model; `update` takes a Message and returns the next Model and Commands                                 | Entities; an action is a generator dispatched on one entity                                                                            | Stores; an action is a reducer with an optional guard                                                         |
-| A multi-step flow            | A field such as `isResetting`, a Command that sleeps, a Message when it completes                           | One generator: write, wait, write                                                                                                      | A state field such as `phase`, an after-effect that sleeps, a command when it completes                       |
-| What arrives during the wait | Is handled at once by `update`. Whether it is safe is up to each branch of `update`, or to whoever sends it | Waits. The action holds its entity until it ends, so other work on it queues                                                           | Is handled at once by the store. The guard of that action decides: accepted, or refused with a reason         |
-| Letting something in         | Nothing to do, everything gets in                                                                           | Mark the wait `open(...)`; the draft may not be touched during it and must be checked again after                                      | Nothing to do: an action without a guard is accepted in every state                                           |
-| A repeat of the same action  | Handled like any other Message                                                                              | Queues, or is dropped when the action is marked `leading`                                                                              | Refused by its own guard ("A reset is already in progress")                                                   |
-| Where the rule lives         | In `update` if written there; in the demo, in the view (disabled buttons)                                   | In the runtime: holding is the default                                                                                                 | In the store, beside the reducer. A button, a key and an agent all get the same answer                        |
-| What a blocked sender sees   | Nothing, unless `update` records it                                                                         | The dispatch resolves later, or resolves `undefined` when dropped; a record of the dropped action                                      | A `refused` entry in the log with the reason, the same on the trace, and `store.refused` for the view         |
-| Testing a race               | `foldkit/story` tests send Messages and answer Commands by hand                                             | Effects are answered by stubs whose promises the test resolves, so the order is chosen; `settled()` waits for everything that can move | `TestClock` and `Deferred` choose when async work answers; the test reads the state, the log and the refusals |
-
-Said plainly: **Treflex makes holding the default, so nothing interleaves unless you open a
-wait. Spar makes the states explicit, so everything interleaves and each action says in which
-states it applies.** Foldkit can do what Spar does, by writing the same check in `update`; it
-does not make you, and its own demo puts the check in the view.
-
-What each costs:
-
-- Treflex: you never forget a guard, because there is none to write. In exchange a held entity
-  queues work the user cannot see waiting, long work has to be moved to a child entity so it does
-  not hold the parent, and code after an open wait has to re-check what it read.
-- Spar: nothing waits and nothing is hidden, and the rule is data in the model. In exchange you
-  have to write the guard, and a store with many states has many guards. Spar does not check that
-  every action has thought about every state.
-- Foldkit: the least machinery. In exchange the rule is wherever you put it.
-
-Spar deliberately has no holding or queueing primitive. A command that should wait for a flow to
-finish is a command the store refuses and the user sends again, or a state the store moves to.
-
-The counter that started the argument is in the showcase, `apps/sidebar/src/ResetCounter.ts`. Its
-buttons are never disabled and the + key adds 1 too. The test that Add 1 during a reset is
-refused and the reset still lands is `packages/spar/test/machine.test.ts`, on a clock the test
-controls.
+Every command is in the log and the trace with what it carried, so the order things happened in
+is never a guess. The counter in the showcase, `apps/sidebar/src/ResetCounter.tsx`, keeps its
+buttons enabled and its + key working; its reset is the Effect above.
 
 ### Server data lives in a store
 
@@ -1696,24 +1538,24 @@ an input, but it cannot change and it does not know where it came from.
 
 Each of these is an entry in the log and a span in the trace.
 
-| React Query                                | Spar                                                                                                                                                                                                                 |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                               |
-| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                                        |
-| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                                    |
-| `staleTime`                                | `staleAfter`                                                                                                                                                                                                         |
-| `refetch()`                                | The handle's `refetch`                                                                                                                                                                                               |
-| Deduping identical requests                | One request for each input at a time. A second while loading is refused, visibly                                                                                                                                     |
-| A late answer overwriting a newer one      | Refused: an answer carries the number of the request it answers                                                                                                                                                      |
-| `invalidateQueries` after a mutation       | `TheQuery.invalidatedBy(SomeStore.actions.saved)` in that store's reactions                                                                                                                                          |
-| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                                       |
-| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                                    |
-| Optimistic update                          | `TheQuery.patchedBy(action, input, patch)` shows the change at once; `Store.outbox` on the same action sends it and ends with `TheQuery.invalidate`; if the send fails for good, the query loads what the server has |
-| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                                   |
-| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                                |
-| Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                                 |
-| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                                    |
-| Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log                    |
+| React Query                                | Spar                                                                                                                                                                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useQuery` in a component                  | `yield* TheQuery.ask(input)` in the component's Effect                                                                                                                                                      |
+| `status`, `data`, `error`                  | The handle's `status` (`waiting`, `loading`, `loaded`, `failed`), `value`, `error`, `loading`                                                                                                               |
+| Query keys                                 | The input, with a Schema. The cache is keyed by its encoded value                                                                                                                                           |
+| `staleTime`                                | `staleAfter`                                                                                                                                                                                                |
+| `refetch()`                                | The handle's `refetch`                                                                                                                                                                                      |
+| Deduping identical requests                | One request for each input at a time. A second while loading is not sent                                                                                                                                    |
+| A late answer overwriting a newer one      | Ignored: an answer carries the number of the request it answers                                                                                                                                             |
+| `invalidateQueries` after a mutation       | `TheQuery.invalidate` after the save, in the service method that saves                                                                                                                                      |
+| Keeps old data while loading               | For the same input, yes: `value` stays while it is refetched. For a new input `value` is null until that input's answer arrives; show `latest` to keep the last rows on screen                              |
+| `enabled: !!id` for a dependent query      | Pass a reactive `Option`: the query is `waiting` while it is none                                                                                                                                           |
+| Optimistic update                          | `TheQuery.patch(input, change)` shows the change at once; an `Outbox.channel` sends it and ends with `TheQuery.invalidate`; `Outbox.givenUp(channel)` runs `TheQuery.invalidate` if the send fails for good |
+| Refetch on focus and reconnect             | Yes, for what has gone stale, while a component is using the query                                                                                                                                          |
+| Keeping the last page while the next loads | The handle's `latest`                                                                                                                                                                                       |
+| Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
+| Retries                                    | `retry`, a schedule; the status stays `loading` until it gives up                                                                                                                                           |
+| Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
 
 #### A list read a page at a time
 
@@ -1761,27 +1603,28 @@ ship it with the view that shows it.
 #### Another store's action reads it directly
 
 Because the data is in a store, nothing has to carry it. In the showcase the people table loads,
-rows are selected, and "Export CSV" is one command with no arguments:
+rows are selected, and "Export CSV" is one Effect with no arguments:
 
 ```ts
-export const exportsCsv = Store.after(
-  PeopleStore.actions.exportRequested,
-  Effect.fnUntraced(function* (_payload, state: State, send) {
-    const loaded = yield* UsersQuery.read()
+export const exportCsv = Effect.fn("People.exportCsv")(function* () {
+  const people = yield* PeopleStore
+  const selected = yield* people.select.selected.get
 
-    yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
-  }),
-)
+  if (selected.length === 0) return yield* people.commands.nothingToExport()
+
+  const loaded = yield* UsersQuery.read()
+
+  yield* people.commands.exported(csvOf(loaded ?? [], selected))
+})
 ```
 
-The view calls `people.commands.exportRequested()`. The store takes the selection from its own
-state and the emails from the users query. No prop carries a user, and the view never sees an
-email it does not draw. The request and the result are one trace
+It takes the selection from the store and the emails from the users query. No prop carries a
+user, and the view never sees an email it does not draw. The click and the result are one trace
 (`apps/sidebar/src/People.ts`, `apps/sidebar/test/people.test.ts`).
 
-A reducer stays pure, so reading another store happens in the action's after-effect, which then
-reports back with a command. That is the general shape for all async work in a store: a command
-records the intent, an effect does the work, a command records the result.
+A reducer stays pure, so reading another store happens in an Effect, which then records the
+result with a command. That is the general shape for all async work: an Effect does the work, a
+command records what came of it.
 
 #### Beside Foldkit
 
@@ -1795,18 +1638,18 @@ plain "API Cache" example does the same by hand with `AsyncData` fields in the M
 | Declaring one           | `Query.define({ name, data, error, execute })`, with `args` for a keyed one                                        | `Query.Tag<Self>()(key, { input, success, failure, load, staleAfter })`                  |
 | States                  | `AsyncData`: `Idle`, `Loading`, `Refreshing(data)`, `Failure(error)`, `Stale(error, data)`, `Success(data)`        | `status` of `waiting`, `loading`, `loaded`, `failed`, with `value` and `error` beside it |
 | Wiring it in            | The parent adds the submodel to its Model, lifts the query's update into its own, and folds the completion Message | Provide the layer, or use `.beside(component)`. Nothing is folded by hand                |
-| Asking for data         | `loadIfMissing`, `revalidate`, `revalidateOrLoad` return the next Model and a Command from `update`                | `ask(input)` in the component that needs it; `invalidatedBy` ties it to another store    |
-| A late answer           | A generation number on each fetch                                                                                  | A request number on each answer, refused when it is not the current one                  |
+| Asking for data         | `loadIfMissing`, `revalidate`, `revalidateOrLoad` return the next Model and a Command from `update`                | `ask(input)` in the component that needs it; `invalidate` after a save                   |
+| A late answer           | A generation number on each fetch                                                                                  | A request number on each answer, ignored when it is not the current one                  |
 | Stale time              | Not in the query's config as shipped: revalidation is asked for                                                    | `staleAfter`                                                                             |
 | Keyed by arguments      | Yes (`KeyedQuery`)                                                                                                 | Yes: the input                                                                           |
 | A dependent query       | The `update` branch that handles the first answer starts the second                                                | The second query's input is made from the first one's value; it waits by itself          |
-| Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An action's after-effect calls `TheQuery.read(input)`                                    |
+| Reading it elsewhere    | Any `update` branch has the whole Model, so it reads the query's data directly                                     | An Effect calls `TheQuery.read(input)`                                                   |
 
 Where Foldkit is ahead: `AsyncData` tells "refreshing with old data" and "failed but still
 holding old data" apart as states of their own, where Spar leaves you to read `status` and
 `value` together. Its query API is marked experimental. Where Spar is ahead: nothing is lifted or
-folded by hand, a stale time is declared, a dependent query needs no code, and a refused request
-or a late answer is visible in the log.
+folded by hand, a stale time is declared, a dependent query needs no code, and every request and
+answer is in the log.
 
 
 # Getting started
@@ -1947,7 +1790,7 @@ const program = Effect.gen(function* () {
 
   return yield* App.mount(Counter, {
     target,
-    layer: CounterStore.layer(),
+    layer: CounterStore.layer,
   })
 })
 
@@ -1975,7 +1818,7 @@ it.live("the counter counts", () =>
     const count = yield* Testing.find("status", "Count")
 
     yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(CounterStore.layer())),
+  }).pipe(Effect.provide(CounterStore.layer)),
 )
 ```
 
@@ -2044,20 +1887,33 @@ yield *
 
 ### Work that must reach the server
 
-Declare it beside the store. The item is saved before the state changes, sent with one idempotency
-key, and retried until it lands.
+Queue it on an outbox channel from the service that changes the store. The item is saved on the
+device, sent with one idempotency key, and retried until it lands; the store is saved too, so a
+reload loses nothing.
 
 ```ts
-export const BoardStoreLive = BoardStore.layerDurable({}, [
-  Store.outbox(
-    BoardStore.actions.started,
-    Effect.fnUntraced(function* ({ name }, idempotencyKey) {
+export class AgentStarts extends Context.Service<
+  AgentStarts,
+  { readonly start: (name: string) => Effect.Effect<void> }
+>()("sidebar/AgentStarts") {
+  static readonly layer = Layer.effect(
+    AgentStarts,
+    Effect.gen(function* () {
+      const store = yield* BoardStore
       const server = yield* Server
+      const queued = yield* Outbox.channel("sidebar/agents/started", Started, ({ name }, key) =>
+        server.start(name, key),
+      )
 
-      yield* server.start(name, idempotencyKey)
+      return AgentStarts.of({
+        start: Effect.fn("AgentStarts.start")(function* (name: string) {
+          yield* store.commands.started({ name })
+          yield* queued({ name })
+        }),
+      })
     }),
-  ),
-])
+  )
+}
 ```
 
 Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.
@@ -2126,7 +1982,7 @@ outbox, or a form's submit (which ignores a second submit while the first is run
 | Suspense                                          | `View.pending(Placeholder)`                                                                  |
 | Portals                                           | `View.portal`                                                                                |
 | React Router                                      | `Router.route`, `Router.outlet`, `router.link`                                               |
-| Redux and middleware                              | `Store.Tag`, `Store.after`, `Store.afterLatest`, `Store.afterLeading`, `Store.outbox`        |
+| Redux and middleware                              | `Store.Tag`, with async work as Effects on a service, and `Outbox.channel`                   |
 | Testing Library                                   | `spar/testing` (it uses the same queries by role)                                            |
 
 ### Things that will feel different
@@ -2153,7 +2009,7 @@ Both are built on Effect and both keep app state changes explicit and replayable
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | One Model for the whole app, described by a Schema   | Stores for app state, `UiState` for a component's own state (open menus, what was typed) |
 | Messages and one `update`                            | Store actions with a reducer each; commands are `store.commands.<name>(payload)`         |
-| Commands returned from `update`                      | `Store.after(action, effect)` and `Store.outbox(action, send)` beside the store          |
+| Commands returned from `update`                      | An Effect on a service that sends commands, and `Outbox.channel` for what must be sent   |
 | `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                    |
 | `h.div([...], [...])`                                | JSX                                                                                      |
 | Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                  |
@@ -2300,11 +2156,11 @@ independent pieces load side by side.
 - Typed failure and typed requirements. A query's failure is a Schema and its services are in its
   type; a component cannot be mounted without the layers its queries need.
 - A cache with a key and a stale time, in the framework.
-- One log. Every request, answer and refusal is an action in the same log as every store command
+- One log. Every request and answer is an entry in the same log as every store command
   and UI state change, so the app can be rewound and forked with its server data.
 - Traces without a collector: one navigation is one trace, with lenses and the wait of a
   dependent query drawn.
-- Stores as state machines, where a command that does not apply is refused with a reason.
+- One state for everything: stores, components' own state and queries are slots in one tree.
 - An outbox that keeps what was sent across a reload and sends it again.
 
 ### Finding a waterfall
@@ -2341,7 +2197,7 @@ column, and points an agent at a skill file with a section for each code. Spar n
 in its own terms: `docs/diagnostics.md`. A crashed part and a component that held its children back
 are reported with the path of owning components and the file, line and column where the view was
 made. What Spar's reports still lack next to Solid's: a location for anything finer than a view
-(a binding, an effect), and an owner path on a store's refusal, which has no component.
+(a binding, an effect), and an owner path on a store command, which has no component.
 
 ### Routing and preloading
 
@@ -2370,40 +2226,40 @@ page sets its model beside Spar's, from Treflex's own README and reference (`act
 `restart-and-records.md`). Both keep work out of components; they differ in where the work lives
 and how two pieces of work on the same thing relate.
 
-| Question                      | Treflex                                                                                                           | Spar                                                                                                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | On a store (`Store.Tag`): a reducer per action, and reactions (`Store.after`) for the async work                                                                                           |
-| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; reactions send further actions                                                                                                                 |
-| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the reaction's requirements, provided as layers; a test provides other layers                                                                                           |
-| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other, on purpose; each command is decided at once against the current state                                                                                           |
-| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `Store.afterLeading` refuses the repeat with a reason; `Store.afterLatest` stops the one running                                                                                           |
-| Is it running?                | `inFlight(action, owner)`                                                                                         | A phase in the state (`phases`, `Store.during`), so "busy" is state the view and the reducers can read                                                                                     |
-| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | A guard or a phase refuses it, says why, and the refusal is in the log and on `store.refused`                                                                                              |
-| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | Durable stores replay their log on the device; a command recorded just before a reload is carried out by the next tab, or reported as abandoned; the outbox resends what was not confirmed |
-| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its reactions stop with its scope                                                                                                               |
-| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, refusals, UI state and routes, each with its trace; time travel and forks in the devtools                                                                        |
+| Question                      | Treflex                                                                                                           | Spar                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Where work lives              | On an entity in the state tree (an object with an `$Id`); it runs while no view shows it                          | In an Effect on a service; the store (`Store.Tag`) holds the state, a reducer per action                  |
+| How state changes             | An action is a generator that writes the entity's draft directly                                                  | An action's reducer returns the next state; an Effect sends commands as its work goes                     |
+| Reaching the outside world    | Yields declared effects; the runtime calls the implementation, or a stub in a test                                | Effect services in the Effect's requirements, provided as layers; a test provides other layers            |
+| Two actions on one entity     | Take turns: an action holds its entity until it finishes, so a second one waits                                   | Never wait for each other unless the Effect says so (a `Semaphore`); each command applies at once         |
+| A repeat while the first runs | `leading` drops the repeat; `latest` stops the one running                                                        | `FiberHandle.run` with `onlyIfMissing` ignores the repeat; plain `FiberHandle.run` stops the one running  |
+| Is it running?                | `inFlight(action, owner)`                                                                                         | A field in the state that the Effect sets at its start and end, so the view can read it                   |
+| A command that does not fit   | Written as code in the action; Treflex's refusals are for code that breaks its rules (a write outside the action) | Written as code in the Effect, before it sends the command                                                |
+| Surviving a reload            | State, timers and connections save to one JSON string; cut-off work is reported                                   | A saved store (`layerSaved`) comes back from the device; an outbox channel resends what was not confirmed |
+| Removing the owner            | Removing an entity stops its work, timers and connections                                                         | A store beside a component closes with it; its fibers stop with its scope                                 |
+| Seeing what happened          | A record stream and an activity log                                                                               | One timeline of commands, UI state and routes, each with its trace; time travel and forks in the devtools |
 
 ### What each makes impossible
 
 - **Treflex:** an entity changing under an action while that action waits (the hold), and work
   stopping because its view went away.
-- **Spar:** a command that waits on another (there is no way to write one), state that changes
-  outside a reducer, a busy flag nobody resets (busy is a phase the state machine leaves), and an
-  older answer landing over a newer one (`Store.afterLatest`, queries numbering their requests).
+- **Spar:** state that changes outside a reducer, work that runs twice (one Effect in a
+  `FiberHandle` ignores or replaces a repeat), and an older answer landing over a newer one
+  (queries numbering their requests).
 
 ### Where they differ in spirit
 
 Treflex makes the action the unit: it holds its entity, runs step by step, and the runtime can
 pause, cancel, record and restore it between steps. Spar makes the state the unit: every change is
-one action that the reducer accepts or refuses at once, and async work is a reaction that reports
-back as more actions. Treflex queues a second click behind the first; Spar answers it at once,
-either by refusing it (with the reason shown) or by letting the state machine's current phase
-decide what it means.
+one command applied at once, and async work is a plain Effect that sends commands as it goes.
+Treflex queues a second click behind the first; in Spar the Effect says what a second click does,
+with Effect's own tools: a `FiberHandle` that ignores it or replaces the first run, or a
+`Semaphore` that queues it.
 
 
 # Diagnostics
 
-Every error, refusal and lint finding Spar reports has a code that does not change. A report is
+Every error and lint finding Spar reports has a code that does not change. A report is
 the code and what happened, where it happened when that is known, the fix, and a pointer to its
 section here:
 
@@ -2515,22 +2371,6 @@ Fix: Read the defect that follows. If the part is wrapped in View.crash the rest
 
 Reported by: The running app: an error's message, or an entry in the log.
 
-#### SPAR_SENT_AGAIN
-
-The same command, with the same payload, was sent again while the work the first one started was still running.
-
-Fix: If the second send is a mistake, such as a second press of Pay, declare the reaction with Store.afterLeading, which refuses the command while the first run lasts, or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
-#### SPAR_OLDER_ANSWER
-
-What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.
-
-Fix: If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
 #### SPAR_DUPLICATE_CALL
 
 The same request was made again while an identical one was still on its way.
@@ -2563,22 +2403,6 @@ Fix: Load the log into the version of the store that wrote it, or add the action
 
 Reported by: The running app: an error's message, or an entry in the log.
 
-#### SPAR_UNREADABLE_SAVE
-
-What was saved for a store on this device could not be read.
-
-Fix: Clear the saved data, or read it with the version that wrote it. If the state's Schema changed, give the store's durable options a new version.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
-#### SPAR_ABANDONED_ACTION
-
-An earlier tab asked a store for an action and closed before it was done, and this version cannot carry it out, so it was dropped.
-
-Fix: Nothing to do for the dropped action. To keep such actions across versions, keep the action's name and payload Schema readable by the new version.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
 #### SPAR_COMPONENT_OUTSIDE_A_VIEW
 
 A component was written in JSX that is not drawn by a component, so it has no services to run with.
@@ -2602,30 +2426,6 @@ A test expected something and the screen never showed it.
 Fix: Check the role and name asked for against what the view draws, and that the data it needs was provided in the test's layer.
 
 Reported by: The running app: an error's message, or an entry in the log.
-
-#### SPAR_ALREADY_LOADING
-
-It is already loading
-
-Fix: Nothing: one request runs for each input at a time, and the second was not needed.
-
-Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
-
-#### SPAR_LATE_ANSWER
-
-This answers an earlier request
-
-Fix: Nothing: a newer request was made for the same input, and its answer is the one kept.
-
-Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
-
-#### SPAR_IN_USE_AGAIN
-
-It is in use again
-
-Fix: Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.
-
-Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
 
 #### SPAR_NEEDLESS_WAIT
 
@@ -3075,8 +2875,8 @@ export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema
 An app-wide store: state Schema, actions, selectors, and an outbox for what must reach the server.
 
 ```ts
-import { Effect, Schema } from "effect"
-import { Store } from "spar"
+import { Context, Effect, Layer, Schema } from "effect"
+import { Outbox, Store } from "spar"
 import {
   Agent,
   AgentId,
@@ -3186,16 +2986,32 @@ export class BoardStore extends Store.Tag<BoardStore>()("sidebar/BoardStore", {
   },
 }) {}
 
-export const BoardStoreLive = BoardStore.layerDurable({}, [
-  Store.outbox(
-    BoardStore.actions.started,
-    Effect.fnUntraced(function* ({ name }, idempotencyKey) {
-      const server = yield* Server
+const Started = Schema.Struct({ name: Schema.String })
 
-      yield* server.start(name, idempotencyKey)
+export class AgentStarts extends Context.Service<
+  AgentStarts,
+  { readonly start: (name: string) => Effect.Effect<void> }
+>()("sidebar/AgentStarts") {
+  static readonly layer = Layer.effect(
+    AgentStarts,
+    Effect.gen(function* () {
+      const store = yield* BoardStore
+      const server = yield* Server
+      const queued = yield* Outbox.channel("sidebar/agents/started", Started, ({ name }, key) =>
+        server.start(name, key),
+      )
+
+      return AgentStarts.of({
+        start: Effect.fn("AgentStarts.start")(function* (name: string) {
+          yield* store.commands.started({ name })
+          yield* queued({ name })
+        }),
+      })
     }),
-  ),
-])
+  )
+}
+
+export const BoardStoreLive = AgentStarts.layer.pipe(Layer.provideMerge(BoardStore.layerSaved))
 ```
 
 ## apps/sidebar/src/Notes.tsx
@@ -3283,70 +3099,47 @@ export const Notes = NotesStore.with(NotesPanel)
 A store that is a state machine: Foldkit's counter with a delayed reset. Add 1 is refused while resetting, whoever sends it.
 
 ```ts
-import { Duration, Effect, Option, Schema } from "effect"
+import { Schema } from "effect"
 import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Finite,
-  phase: Schema.Literals(["idle", "resetting"]),
+  resetting: Schema.Boolean,
   resetDuration: Schema.Finite,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { count: 0, phase: "idle", resetDuration: 2 }
-
-const whileResetting =
-  (reason: string) =>
-  (state: State): string | null =>
-    state.phase === "resetting" ? reason : null
+const initialState: State = { count: 0, resetting: false, resetDuration: 2 }
 
 export class ResetCounterStore extends Store.Tag<ResetCounterStore>()("sidebar/ResetCounter", {
   state: State,
   initialState,
   actions: {
-    incremented: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, count: state.count + 1 }),
-      whileResetting("A reset is in progress"),
-    ),
-    resetDurationChanged: Store.action(
-      Schema.Finite,
-      (state: State, seconds: number): State => ({ ...state, resetDuration: Math.max(0, seconds) }),
-      whileResetting("The delay cannot change during a reset"),
-    ),
-    resetClicked: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, phase: "resetting" }),
-      whileResetting("A reset is already in progress"),
-    ),
-    resetCompleted: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, count: 0, phase: "idle" }),
-      (state) => (state.phase === "idle" ? "No reset is in progress" : null),
-    ),
+    incremented: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      count: state.count + 1,
+    })),
+    resetDurationChanged: Store.action(Schema.Finite, (state: State, seconds: number): State => ({
+      ...state,
+      resetDuration: Math.max(0, seconds),
+    })),
+    resetClicked: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      resetting: true,
+    })),
+    resetCompleted: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      count: 0,
+      resetting: false,
+    })),
   },
   selectors: {
     count: Store.selector(Schema.Finite, (state: State) => state.count),
-    resetting: Store.selector(Schema.Boolean, (state: State) => state.phase === "resetting"),
+    resetting: Store.selector(Schema.Boolean, (state: State) => state.resetting),
     resetDuration: Store.selector(Schema.Finite, (state: State) => state.resetDuration),
   },
 }) {}
-
-export const resetAfterDelay = Store.after(
-  ResetCounterStore.actions.resetClicked,
-  (_payload, state: State, send) =>
-    Effect.andThen(
-      Effect.sleep(Duration.seconds(state.resetDuration)),
-      send(ResetCounterStore.actions.resetCompleted, undefined),
-    ),
-)
-
-export const told = (refused: Option.Option<Store.Refusal>): string =>
-  Option.match(refused, {
-    onNone: () => "Nothing has been refused",
-    onSome: (refusal) => `${refusal.action} was not accepted: ${refusal.reason}`,
-  })
 ```
 
 ## apps/sidebar/src/ResetCounter.tsx
@@ -3354,9 +3147,9 @@ export const told = (refused: Option.Option<Store.Refusal>): string =>
 Its component, composed with `withStore`. The buttons are never disabled; the store decides.
 
 ```tsx
-import { Effect, Schema } from "effect"
+import { Duration, Effect, FiberHandle, Schema } from "effect"
 import { Reactive, UiState, compose, withKey, withStore } from "spar"
-import { ResetCounterStore, resetAfterDelay, told } from "./ResetCounterStore.ts"
+import { ResetCounterStore } from "./ResetCounterStore.ts"
 
 const withDelay = Effect.fnUntraced(function* () {
   const store = yield* ResetCounterStore
@@ -3372,17 +3165,32 @@ const withDelay = Effect.fnUntraced(function* () {
   }
 })
 
+const withReset = Effect.fnUntraced(function* () {
+  const store = yield* ResetCounterStore
+  const running = yield* FiberHandle.make()
+  const resetAfterDelay = Effect.gen(function* () {
+    const seconds = yield* store.select.resetDuration.get
+
+    yield* store.commands.resetClicked()
+    yield* Effect.sleep(Duration.seconds(seconds))
+    yield* store.commands.resetCompleted()
+  })
+
+  return {
+    onReset: Effect.asVoid(FiberHandle.run(running, resetAfterDelay, { onlyIfMissing: true })),
+  }
+})
+
 const ResetCounterPanel = compose(
   withStore(ResetCounterStore, (store) => ({
     count: store.select.count,
     status: Reactive.map(store.select.resetting, (resetting) =>
       resetting ? "Resetting" : "Counting",
     ),
-    refused: Reactive.map(store.refused, told),
     onIncrement: store.commands.incremented(),
-    onReset: store.commands.resetClicked(),
   })),
   withDelay,
+  withReset,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section class="reset-counter" aria-label="Counter">
@@ -3408,19 +3216,19 @@ const ResetCounterPanel = compose(
         onInput={(event) => props.onDelay(event.currentTarget.value)}
       />
     </label>
-    <p>
-      <output aria-label="Last refusal">{props.refused}</output>
+    <p class="hint">
+      The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect,
+      run by a FiberHandle.
     </p>
-    <p class="hint">Both buttons stay enabled, and the + key adds 1 too. The store decides.</p>
   </section>
 ))
 
-export const ResetCounter = ResetCounterStore.with(ResetCounterPanel, [resetAfterDelay])
+export const ResetCounter = ResetCounterStore.with(ResetCounterPanel)
 ```
 
 ## apps/sidebar/src/People.ts
 
-Server data in a query store, a second store for the selection, and Export CSV as an action that reads the people from the query store itself.
+Server data in a query store, a second store for the selection, and Export CSV as an Effect that reads the people from the query store itself.
 
 ```ts
 import { Effect, Schema } from "effect"
@@ -3439,11 +3247,12 @@ export class UsersQuery extends Query.Tag<UsersQuery>()("sidebar/Users", {
 const State = Schema.Struct({
   selected: Schema.Array(Schema.Int),
   csv: Schema.NullOr(Schema.String),
+  problem: Schema.String,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { selected: [], csv: null }
+const initialState: State = { selected: [], csv: null, problem: "" }
 
 const toggled = (selected: ReadonlyArray<number>, id: number): ReadonlyArray<number> =>
   selected.includes(id) ? selected.filter((other) => other !== id) : [...selected, id]
@@ -3456,18 +3265,19 @@ export class PeopleStore extends Store.Tag<PeopleStore>()("sidebar/People", {
       ...state,
       selected: toggled(state.selected, id),
     })),
-    exportRequested: Store.action(
-      Schema.Void,
-      (state: State): State => state,
-      (state) => (state.selected.length === 0 ? "Select at least one person first" : null),
-    ),
+    nothingToExport: Store.action(Schema.Void, (state: State): State => ({
+      ...state,
+      problem: "Select at least one person first",
+    })),
     exported: Store.action(Schema.String, (state: State, csv: string): State => ({
       ...state,
       csv,
+      problem: "",
     })),
   },
   selectors: {
     selected: Store.selector(Schema.Array(Schema.Int), (state: State) => state.selected),
+    problem: Store.selector(Schema.String, (state: State) => state.problem),
     csv: Store.selector(Schema.String, (state: State) => state.csv ?? ""),
     download: Store.selector(Schema.String, (state: State) =>
       state.csv === null ? "" : `data:text/csv;charset=utf-8,${encodeURIComponent(state.csv)}`,
@@ -3480,14 +3290,16 @@ export const csvOf = (users: ReadonlyArray<User>, selected: ReadonlyArray<number
 
 const lineOf = (user: User): string => `${user.name},${user.email}`
 
-export const exportsCsv = Store.after(
-  PeopleStore.actions.exportRequested,
-  Effect.fnUntraced(function* (_payload, state: State, send) {
-    const loaded = yield* UsersQuery.read()
+export const exportCsv = Effect.fn("People.exportCsv")(function* () {
+  const people = yield* PeopleStore
+  const selected = yield* people.select.selected.get
 
-    yield* send(PeopleStore.actions.exported, csvOf(loaded ?? [], state.selected))
-  }),
-)
+  if (selected.length === 0) return yield* people.commands.nothingToExport()
+
+  const loaded = yield* UsersQuery.read()
+
+  yield* people.commands.exported(csvOf(loaded ?? [], selected))
+})
 ```
 
 ## apps/sidebar/src/PeoplePanel.tsx
@@ -3495,10 +3307,10 @@ export const exportsCsv = Store.after(
 The people table, composed, its rows in a For.
 
 ```tsx
-import { Option } from "effect"
+import { Effect } from "effect"
 import { For, Reactive, compose, withHandlers, withQuery, withStore } from "spar"
-import type { Query, Store } from "spar"
-import { PeopleStore, UsersQuery, exportsCsv } from "./People.ts"
+import type { Query } from "spar"
+import { PeopleStore, UsersQuery, exportCsv } from "./People.ts"
 
 const statusOf = (status: Query.Status): string =>
   ({
@@ -3508,8 +3320,11 @@ const statusOf = (status: Query.Status): string =>
     failed: "Could not load",
   })[status]
 
-const told = (refused: Option.Option<Store.Refusal>): string =>
-  Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
+const withExport = Effect.fnUntraced(function* () {
+  const services = yield* Effect.context<PeopleStore | UsersQuery>()
+
+  return { onExport: Effect.provideContext(exportCsv(), services) }
+})
 
 const PeoplePanel = compose(
   withQuery("users", UsersQuery, () => undefined),
@@ -3521,10 +3336,10 @@ const PeoplePanel = compose(
     count: Reactive.map(people.select.selected, (selected) => `${selected.length} selected`),
     csv: people.select.csv,
     download: people.select.download,
-    refused: Reactive.map(people.refused, told),
+    problem: people.select.problem,
     onToggle: (id: number) => people.commands.toggled(id),
-    onExport: people.commands.exportRequested(),
   })),
+  withExport,
 )((props) => (
   <section class="people" aria-label="People">
     <h2>People</h2>
@@ -3570,7 +3385,7 @@ const PeoplePanel = compose(
       </button>
     </p>
     <p>
-      <output aria-label="Export problem">{props.refused}</output>
+      <output aria-label="Export problem">{props.problem}</output>
     </p>
     <output class="csv" aria-label="Exported CSV">
       {props.csv}
@@ -3583,28 +3398,29 @@ const PeoplePanel = compose(
   </section>
 ))
 
-export const People = UsersQuery.beside(PeopleStore.with(PeoplePanel, [exportsCsv]))
+export const People = UsersQuery.beside(PeopleStore.with(PeoplePanel))
 ```
 
 ## apps/sidebar/test/people.test.ts
 
-Tests of the export: the file, the refusal with nobody selected, one trace for the request and the result.
+Tests of the export: the file, what it says with nobody selected, one trace for the click and the result.
 
 ```ts
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Ref } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Timeline } from "spar"
-import { PeopleStore, UsersQuery, csvOf, exportsCsv } from "../src/People.ts"
+import { State, Timeline } from "spar"
+import { PeopleStore, UsersQuery, csvOf, exportCsv } from "../src/People.ts"
 import { people } from "../src/api.ts"
 import { Server } from "../src/server/Server.ts"
 
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    PeopleStore.layer([exportsCsv]).pipe(
+    PeopleStore.layer.pipe(
       Layer.provideMerge(UsersQuery.live),
+      Layer.provideMerge(State.layer),
       Layer.provide(
         Layer.mergeAll(
           Server.layer,
@@ -3638,8 +3454,12 @@ describe("people: server data in a store, used by another store's action", () =>
       yield* store.commands.toggled(124)
       yield* store.commands.toggled(121)
       yield* store.commands.toggled(124)
-      yield* Effect.withSpan(store.commands.exportRequested(), "a click on Export CSV")
-      yield* Effect.yieldNow
+      const clicked = yield* Effect.withSpan(
+        Effect.flatMap(Effect.currentSpan, (span) =>
+          Effect.as(Effect.provide(exportCsv(), built), span.traceId),
+        ),
+        "a click on Export CSV",
+      )
 
       expect(yield* store.select.csv.get).toBe(
         "name,email\nAda Lovelace,ada@example.com\nAlan Turing,alan@example.com",
@@ -3647,28 +3467,20 @@ describe("people: server data in a store, used by another store's action", () =>
       expect(yield* store.select.download.get).toContain("data:text/csv;charset=utf-8,name%2Cemail")
 
       const moments = yield* Ref.get(noted)
-      const asked = moments.find((seen) => seen.name === "sidebar/People/exportRequested")
       const made = moments.find((seen) => seen.name === "sidebar/People/exported")
 
-      expect(asked?.traceId).toHaveLength(32)
-      expect(made?.traceId).toBe(asked?.traceId)
+      expect(clicked).toHaveLength(32)
+      expect(made?.traceId).toBe(clicked)
     }),
   )
 
-  it.effect("with nobody selected the export is refused, and nothing is produced", () =>
+  it.effect("with nobody selected the export says so, and nothing is produced", () =>
     Effect.gen(function* () {
-      const { store } = yield* opened
+      const { built, store } = yield* opened
 
-      yield* store.commands.exportRequested()
-      yield* Effect.yieldNow
+      yield* Effect.provide(exportCsv(), built)
 
-      expect(yield* store.refused.get).toEqual(
-        Option.some({
-          action: "exportRequested",
-          reason: "Select at least one person first",
-          payload: null,
-        }),
-      )
+      expect(yield* store.select.problem.get).toBe("Select at least one person first")
       expect([yield* store.select.csv.get, yield* store.select.download.get]).toEqual(["", ""])
     }),
   )
@@ -3679,167 +3491,6 @@ describe("people: server data in a store, used by another store's action", () =>
       "name,email\nGrace Hopper,grace@example.com\nEdsger Dijkstra,edsger@example.com",
     )
   })
-})
-```
-
-## packages/spar/test/machine.test.ts
-
-The race test: Add 1 during a reset, on a clock the test controls.
-
-```ts
-import { describe, expect, it } from "@effect/vitest"
-import { Duration, Effect, Layer, Option, Ref, Schema } from "effect"
-import { SecureRandom } from "effect/crypto"
-import { TestClock } from "effect/testing"
-import { Store, Timeline } from "spar"
-
-const State = Schema.Struct({
-  count: Schema.Finite,
-  phase: Schema.Literals(["idle", "resetting"]),
-  resetDuration: Schema.Finite,
-})
-
-type State = typeof State.Type
-
-const initialState: State = { count: 0, phase: "idle", resetDuration: 2 }
-
-class Counter extends Store.Tag<Counter>()("test/Counter", {
-  state: State,
-  initialState,
-  actions: {
-    incremented: Store.action(
-      Schema.Void,
-      (state: State) => ({ ...state, count: state.count + 1 }),
-      (state) => (state.phase === "resetting" ? "A reset is in progress" : null),
-    ),
-    resetClicked: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, phase: "resetting" }),
-      (state) => (state.phase === "resetting" ? "A reset is already in progress" : null),
-    ),
-    resetCompleted: Store.action(
-      Schema.Void,
-      (state: State): State => ({ ...state, count: 0, phase: "idle" }),
-      (state) => (state.phase === "idle" ? "No reset is in progress" : null),
-    ),
-  },
-  selectors: {
-    count: Store.selector(Schema.Finite, (state: State) => state.count),
-    phase: Store.selector(State.fields.phase, (state: State) => state.phase),
-  },
-}) {}
-
-const reset = Store.after(Counter.actions.resetClicked, (_payload, state: State, send) =>
-  Effect.andThen(
-    Effect.sleep(Duration.seconds(state.resetDuration)),
-    send(Counter.actions.resetCompleted, undefined),
-  ),
-)
-
-const counting = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
-  Layer.provide(
-    Counter.layer([reset]),
-    Layer.mergeAll(
-      SecureRandom.layerWebCrypto,
-      Layer.succeed(
-        Timeline.Recorder,
-        Option.some((seen: Timeline.Noted) => Ref.update(noted, (all) => [...all, seen])),
-      ),
-    ),
-  )
-
-const started = Effect.gen(function* () {
-  const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
-  const built = yield* Layer.build(counting(noted))
-
-  return { counter: yield* Effect.provide(Effect.service(Counter), built), noted }
-})
-
-describe("a store that is a state machine", () => {
-  it.effect("Add 1 sent during a reset is refused, whoever sends it, and the reset lands", () =>
-    Effect.gen(function* () {
-      const { counter, noted } = yield* started
-
-      yield* counter.commands.incremented()
-      yield* counter.commands.incremented()
-      yield* counter.commands.resetClicked()
-      yield* TestClock.adjust("1 second")
-      yield* counter.commands.incremented()
-
-      expect(yield* counter.state.get).toEqual({ count: 2, phase: "resetting", resetDuration: 2 })
-      expect(yield* counter.refused.get).toEqual(
-        Option.some({
-          action: "incremented",
-          reason: "A reset is in progress",
-          payload: null,
-        }),
-      )
-
-      yield* TestClock.adjust("1 second")
-
-      expect(yield* counter.state.get).toEqual({ count: 0, phase: "idle", resetDuration: 2 })
-      expect((yield* counter.log.get).map((entry) => entry.action)).toEqual([
-        "incremented",
-        "incremented",
-        "resetClicked",
-        "resetCompleted",
-      ])
-      expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name, seen.detail])).toEqual([
-        ["command", "test/Counter/incremented", null],
-        ["command", "test/Counter/incremented", null],
-        ["command", "test/Counter/resetClicked", null],
-        [
-          "refused",
-          "test/Counter/incremented",
-          { payload: null, reason: "A reset is in progress" },
-        ],
-        ["command", "test/Counter/resetCompleted", null],
-      ])
-
-      expect(Option.isNone(yield* counter.refused.get)).toBe(true)
-      yield* counter.commands.incremented()
-      expect(yield* counter.select.count.get).toBe(1)
-    }),
-  )
-
-  it.effect("a second reset during a reset is refused, so only one lands", () =>
-    Effect.gen(function* () {
-      const { counter } = yield* started
-
-      yield* counter.commands.resetClicked()
-      yield* counter.commands.resetClicked()
-      yield* TestClock.adjust("2 seconds")
-      yield* counter.commands.incremented()
-      yield* TestClock.adjust("2 seconds")
-
-      expect(yield* counter.state.get).toEqual({ count: 1, phase: "idle", resetDuration: 2 })
-      expect((yield* counter.log.get).map((entry) => entry.action)).toEqual([
-        "resetClicked",
-        "resetCompleted",
-        "incremented",
-      ])
-    }),
-  )
-
-  it.effect("a refused command is not in the log, so a replay gives the same state", () =>
-    Effect.gen(function* () {
-      const { counter } = yield* started
-
-      yield* counter.commands.incremented()
-      yield* counter.commands.resetCompleted()
-
-      const log = yield* counter.log.get
-
-      expect(log.map((entry) => entry.action)).toEqual(["incremented"])
-      expect(yield* Store.replay(Counter.definition, log)).toEqual(yield* counter.state.get)
-      expect(
-        yield* Store.replay(Counter.definition, [
-          ...log,
-          { id: "x", action: "resetCompleted", payload: null, seq: 2 },
-        ]),
-      ).toEqual(yield* counter.state.get)
-    }),
-  )
 })
 ```
 
@@ -3866,7 +3517,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, Store, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
@@ -3967,23 +3618,6 @@ class Patient extends Query.Tag<Patient>()("test/Patient", {
   retry: Schedule.recurs(1),
 }) {}
 
-const RosterState = Schema.Struct({ renamed: Schema.Int })
-
-type RosterState = typeof RosterState.Type
-
-class Roster extends Store.Tag<Roster>()("test/Roster", {
-  state: RosterState,
-  initialState: { renamed: 0 },
-  actions: {
-    renamed: Store.action(Schema.Void, (state: RosterState) => ({ renamed: state.renamed + 1 })),
-    restocked: Store.action(
-      Schema.Struct({ to: Schema.Finite }),
-      (state: RosterState): RosterState => state,
-    ),
-  },
-  selectors: {},
-}) {}
-
 const ada: User = { id: 1, email: "ada@example.com" }
 
 const grace: User = { id: 2, email: "grace@example.com" }
@@ -3997,17 +3631,10 @@ const recording = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    Roster.layer([
-      Users.invalidatedBy(Roster.actions.renamed),
-      Stock.patchedBy(
-        Roster.actions.restocked,
-        () => undefined,
-        (_stock, { to }) => to,
-      ),
-    ]).pipe(
-      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live)),
+    Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live).pipe(
       Layer.provideMerge(Directory.layer),
       Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
+      Layer.provideMerge(State.layer),
     ),
   )
   const found = yield* Effect.provide(directory, built)
@@ -4025,7 +3652,6 @@ const opened = Effect.gen(function* () {
     noted,
     whats,
     users: yield* Effect.provide(Effect.service(Users), built),
-    roster: yield* Effect.provide(Effect.service(Roster), built),
     answer: (what: string, value: unknown) =>
       settle(what, (waiting) => Deferred.succeed(waiting.answer, value)),
     refuse: (what: string, reason: string) =>
@@ -4103,24 +3729,26 @@ describe("the natural way: a value from one place feeds a query declared in anot
       }),
   )
 
-  it.effect(
-    "another store's command can change what a query holds at once, before the server is asked",
-    () =>
-      Effect.gen(function* () {
-        const { built, whats, answer, roster } = yield* opened
-        const stock = yield* Effect.provide(Stock.ask(), built)
+  it.effect("a patch changes what a query holds at once, before the server is asked", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const stock = yield* Effect.provide(Stock.ask(), built)
+      const restocked = Effect.provide(
+        Stock.patch(undefined, () => 9),
+        built,
+      )
 
-        yield* Effect.yieldNow
-        yield* roster.commands.restocked({ to: 9 })
-        yield* Effect.yieldNow
-        expect(yield* readings(stock)).toEqual(["loading", null, null, true])
+      yield* Effect.yieldNow
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loading", null, null, true])
 
-        yield* answer("stock", 3)
-        yield* roster.commands.restocked({ to: 9 })
-        yield* Effect.yieldNow
-        expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
-        expect(yield* whats).toEqual(["stock"])
-      }),
+      yield* answer("stock", 3)
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
+      expect(yield* whats).toEqual(["stock"])
+    }),
   )
 
   it.effect("while another input loads, the last value that was loaded can still be shown", () =>
@@ -4370,19 +3998,16 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("asking again while it loads is refused and seen, not sent twice", () =>
+  it.effect("asking again while it loads is not sent twice", () =>
     Effect.gen(function* () {
-      const { built, noted, users, whats } = yield* opened
+      const { built, noted, whats } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
 
       yield* shown.refetch
       yield* Effect.yieldNow
 
       expect(yield* whats).toEqual(["users"])
-      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_ALREADY_LOADING] It is already loading"),
-      )
-      expect((yield* Ref.get(noted)).map((seen) => seen.kind)).toEqual(["command", "refused"])
+      expect((yield* Ref.get(noted)).map((seen) => seen.name)).toEqual(["test/Users/requested"])
     }),
   )
 
@@ -4601,9 +4226,6 @@ describe("server data in a store", () => {
       yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
       yield* TestClock.adjust("5 minutes")
       expect(Object.keys((yield* orders.state.get).entries)).toEqual(["1"])
-      expect(Option.map(yield* orders.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_IN_USE_AGAIN] It is in use again"),
-      )
       expect(
         (yield* Ref.get(noted)).filter((seen) => seen.name === "test/Orders/held").length,
       ).toBe(1)
@@ -4813,7 +4435,7 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("an answer to an earlier request, or to nothing that was asked, is refused", () =>
+  it.effect("an answer to an earlier request, or to nothing that was asked, is ignored", () =>
     Effect.gen(function* () {
       const { built, users } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
@@ -4823,20 +4445,18 @@ describe("server data in a store", () => {
       expect(yield* shown.status.get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
       expect(yield* shown.status.get).toBe("loading")
-      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_LATE_ANSWER] This answers an earlier request"),
-      )
+      expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
 
-  it.effect("a command in another store invalidates it, and it loads again at once", () =>
+  it.effect("invalidating it loads it again at once", () =>
     Effect.gen(function* () {
-      const { built, roster, whats, answer } = yield* opened
+      const { built, whats, answer } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
 
       yield* Effect.yieldNow
       yield* answer("users", [ada])
-      yield* roster.commands.renamed()
+      yield* Effect.provide(Users.invalidate, built)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["users", "users"])
@@ -4877,18 +4497,10 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states and a refusal are plain data with a Schema", () => {
+  it("its states are plain data with a Schema", () => {
     expect(
       ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
     ).toEqual([true, true, true, true, false])
-    expect(
-      Schema.is(Store.Refusal)({
-        action: "requested",
-        reason: "[SPAR_ALREADY_LOADING] It is already loading",
-        payload: null,
-      }),
-    ).toBe(true)
-    expect(Schema.is(Store.Refusal)({ action: "requested" })).toBe(false)
   })
 })
 ```
@@ -5547,7 +5159,8 @@ Tests of a store beside its view: no layer at the root, one state for each place
 ```ts
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Ref, Schema } from "effect"
-import { Store, UiState, View, compose, withProps } from "spar"
+import { Store, View, compose, withProps } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { PairView, TallyView } from "./units.tsx"
 
@@ -5601,11 +5214,11 @@ describe("a store declared beside its view", () => {
   it.live("needs no layer at the root, and each place it is used has its own state", () =>
     Effect.gen(function* () {
       const seen = yield* Ref.make<ReadonlyArray<string>>([])
-      const tree = UiState.makeTree()
+      const tree = Trees.makeTree()
 
       yield* Testing.mount(Pair).pipe(
         Effect.provideService(Store.Inspector, registering(seen)),
-        Effect.provideService(UiState.Tree, tree),
+        Effect.provideService(Trees.Tree, tree),
       )
       yield* Testing.click("button", "Add to pears")
       yield* Testing.click("button", "Add to pears")
@@ -5622,9 +5235,9 @@ describe("a store declared beside its view", () => {
 
   it.live("gives its place back when it is unmounted", () =>
     Effect.gen(function* () {
-      const tree = UiState.makeTree()
+      const tree = Trees.makeTree()
 
-      yield* Effect.scoped(Testing.mount(Pair).pipe(Effect.provideService(UiState.Tree, tree)))
+      yield* Effect.scoped(Testing.mount(Pair).pipe(Effect.provideService(Trees.Tree, tree)))
 
       expect([...tree.taken]).toEqual([])
     }),

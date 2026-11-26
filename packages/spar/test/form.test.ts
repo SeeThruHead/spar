@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Deferred, Effect, Layer, Option, Ref, Schema, SubscriptionRef } from "effect"
-import { Form, Reactive, Timeline, UiState, compose } from "spar"
+import { Form, Reactive, Timeline, compose } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { SignupView } from "./signup.tsx"
 
@@ -113,7 +114,7 @@ describe("a form's state is the component's UI state", () => {
       yield* shows("Email problem", "Enter an email address")
       yield* leave("Email")
 
-      const before = yield* UiState.snapshot
+      const before = yield* Trees.snapshot
 
       expect(JSON.stringify(before)).toContain('"email":"ada"')
       expect(yield* names).toEqual([
@@ -127,11 +128,11 @@ describe("a form's state is the component's UI state", () => {
       yield* shows("Age problem", "You must be 18 or older")
       expect((yield* names).length).toBe(4)
 
-      yield* UiState.restore(before)
+      yield* Trees.restore(before)
       yield* shows("Email problem", "Enter an email address")
       yield* shows("Age problem", "")
       expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Email" }).value).toBe("ada")
-    }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
+    }).pipe(Effect.provide(Layer.sync(Trees.Tree, Trees.makeTree))),
   )
 
   it.live("two forms in one component keep their state apart", () =>
@@ -140,10 +141,10 @@ describe("a form's state is the component's UI state", () => {
       yield* Testing.fill("textbox", "Email", "first@example.com")
       yield* Testing.fill("textbox", "Age", "second")
 
-      expect(JSON.stringify(yield* UiState.snapshot)).toMatch(
+      expect(JSON.stringify(yield* Trees.snapshot)).toMatch(
         /"name":"form \(email, age, terms\)".*"email":"first@example\.com".*"name":"form 2 \(email, age, terms\)".*"email":"second"/,
       )
-    }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
+    }).pipe(Effect.provide(Layer.sync(Trees.Tree, Trees.makeTree))),
   )
 })
 

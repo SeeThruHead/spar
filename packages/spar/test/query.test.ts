@@ -16,7 +16,7 @@ import {
 } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { TestClock } from "effect/testing"
-import { Props, Query, Reactive, Store, Timeline, View, compose, withProps } from "spar"
+import { Props, Query, Reactive, State, Timeline, View, compose, withProps } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { FeedView, OrdersView, ShelfView } from "./units.tsx"
@@ -117,23 +117,6 @@ class Patient extends Query.Tag<Patient>()("test/Patient", {
   retry: Schedule.recurs(1),
 }) {}
 
-const RosterState = Schema.Struct({ renamed: Schema.Int })
-
-type RosterState = typeof RosterState.Type
-
-class Roster extends Store.Tag<Roster>()("test/Roster", {
-  state: RosterState,
-  initialState: { renamed: 0 },
-  actions: {
-    renamed: Store.action(Schema.Void, (state: RosterState) => ({ renamed: state.renamed + 1 })),
-    restocked: Store.action(
-      Schema.Struct({ to: Schema.Finite }),
-      (state: RosterState): RosterState => state,
-    ),
-  },
-  selectors: {},
-}) {}
-
 const ada: User = { id: 1, email: "ada@example.com" }
 
 const grace: User = { id: 2, email: "grace@example.com" }
@@ -147,17 +130,10 @@ const recording = (noted: Ref.Ref<ReadonlyArray<Timeline.Noted>>) =>
 const opened = Effect.gen(function* () {
   const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
   const built = yield* Layer.build(
-    Roster.layer([
-      Users.invalidatedBy(Roster.actions.renamed),
-      Stock.patchedBy(
-        Roster.actions.restocked,
-        () => undefined,
-        (_stock, { to }) => to,
-      ),
-    ]).pipe(
-      Layer.provideMerge(Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live)),
+    Layer.mergeAll(Users.live, Stock.live, Orders.live, Few.live).pipe(
       Layer.provideMerge(Directory.layer),
       Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, recording(noted))),
+      Layer.provideMerge(State.layer),
     ),
   )
   const found = yield* Effect.provide(directory, built)
@@ -175,7 +151,6 @@ const opened = Effect.gen(function* () {
     noted,
     whats,
     users: yield* Effect.provide(Effect.service(Users), built),
-    roster: yield* Effect.provide(Effect.service(Roster), built),
     answer: (what: string, value: unknown) =>
       settle(what, (waiting) => Deferred.succeed(waiting.answer, value)),
     refuse: (what: string, reason: string) =>
@@ -253,24 +228,26 @@ describe("the natural way: a value from one place feeds a query declared in anot
       }),
   )
 
-  it.effect(
-    "another store's command can change what a query holds at once, before the server is asked",
-    () =>
-      Effect.gen(function* () {
-        const { built, whats, answer, roster } = yield* opened
-        const stock = yield* Effect.provide(Stock.ask(), built)
+  it.effect("a patch changes what a query holds at once, before the server is asked", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const stock = yield* Effect.provide(Stock.ask(), built)
+      const restocked = Effect.provide(
+        Stock.patch(undefined, () => 9),
+        built,
+      )
 
-        yield* Effect.yieldNow
-        yield* roster.commands.restocked({ to: 9 })
-        yield* Effect.yieldNow
-        expect(yield* readings(stock)).toEqual(["loading", null, null, true])
+      yield* Effect.yieldNow
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loading", null, null, true])
 
-        yield* answer("stock", 3)
-        yield* roster.commands.restocked({ to: 9 })
-        yield* Effect.yieldNow
-        expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
-        expect(yield* whats).toEqual(["stock"])
-      }),
+      yield* answer("stock", 3)
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
+      expect(yield* whats).toEqual(["stock"])
+    }),
   )
 
   it.effect("while another input loads, the last value that was loaded can still be shown", () =>
@@ -520,19 +497,16 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("asking again while it loads is refused and seen, not sent twice", () =>
+  it.effect("asking again while it loads is not sent twice", () =>
     Effect.gen(function* () {
-      const { built, noted, users, whats } = yield* opened
+      const { built, noted, whats } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
 
       yield* shown.refetch
       yield* Effect.yieldNow
 
       expect(yield* whats).toEqual(["users"])
-      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_ALREADY_LOADING] It is already loading"),
-      )
-      expect((yield* Ref.get(noted)).map((seen) => seen.kind)).toEqual(["command", "refused"])
+      expect((yield* Ref.get(noted)).map((seen) => seen.name)).toEqual(["test/Users/requested"])
     }),
   )
 
@@ -751,9 +725,6 @@ describe("server data in a store", () => {
       yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
       yield* TestClock.adjust("5 minutes")
       expect(Object.keys((yield* orders.state.get).entries)).toEqual(["1"])
-      expect(Option.map(yield* orders.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_IN_USE_AGAIN] It is in use again"),
-      )
       expect(
         (yield* Ref.get(noted)).filter((seen) => seen.name === "test/Orders/held").length,
       ).toBe(1)
@@ -963,7 +934,7 @@ describe("server data in a store", () => {
     }),
   )
 
-  it.effect("an answer to an earlier request, or to nothing that was asked, is refused", () =>
+  it.effect("an answer to an earlier request, or to nothing that was asked, is ignored", () =>
     Effect.gen(function* () {
       const { built, users } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
@@ -973,20 +944,18 @@ describe("server data in a store", () => {
       expect(yield* shown.status.get).toBe("loading")
       yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
       expect(yield* shown.status.get).toBe("loading")
-      expect(Option.map(yield* users.refused.get, (refusal) => refusal.reason)).toEqual(
-        Option.some("[SPAR_LATE_ANSWER] This answers an earlier request"),
-      )
+      expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
     }),
   )
 
-  it.effect("a command in another store invalidates it, and it loads again at once", () =>
+  it.effect("invalidating it loads it again at once", () =>
     Effect.gen(function* () {
-      const { built, roster, whats, answer } = yield* opened
+      const { built, whats, answer } = yield* opened
       const shown = yield* Effect.provide(Users.ask(), built)
 
       yield* Effect.yieldNow
       yield* answer("users", [ada])
-      yield* roster.commands.renamed()
+      yield* Effect.provide(Users.invalidate, built)
       yield* Effect.yieldNow
       yield* Effect.yieldNow
       expect(yield* whats).toEqual(["users", "users"])
@@ -1027,17 +996,9 @@ describe("server data in a store", () => {
     }).pipe(Effect.provide(Directory.layer)),
   )
 
-  it("its states and a refusal are plain data with a Schema", () => {
+  it("its states are plain data with a Schema", () => {
     expect(
       ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
     ).toEqual([true, true, true, true, false])
-    expect(
-      Schema.is(Store.Refusal)({
-        action: "requested",
-        reason: "[SPAR_ALREADY_LOADING] It is already loading",
-        payload: null,
-      }),
-    ).toBe(true)
-    expect(Schema.is(Store.Refusal)({ action: "requested" })).toBe(false)
   })
 })

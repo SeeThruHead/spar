@@ -3,6 +3,7 @@ import { screen } from "@testing-library/dom"
 import { Effect, Layer, Ref, Schedule, Schema } from "effect"
 import { SecureRandom } from "effect/crypto"
 import { Reactive, Router, Store, Timeline, UiState, View, compose } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Devtools from "spar/devtools"
 import * as Testing from "spar/testing"
 import { DeskView } from "./timeline.tsx"
@@ -38,10 +39,10 @@ const Desk = compose(
   }),
 )(DeskView)
 
-const layer = Layer.mergeAll(Tally.layer(), Router.Router.layerMemory("/")).pipe(
+const layer = Layer.mergeAll(Tally.layer, Router.Router.layerMemory("/")).pipe(
   Layer.provideMerge(Devtools.layer),
   Layer.provide(SecureRandom.layerWebCrypto),
-  Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+  Layer.provideMerge(Layer.sync(Trees.Tree, Trees.makeTree)),
   Layer.provideMerge(Layer.succeed(View.SlowAfter, Number.POSITIVE_INFINITY)),
 )
 
@@ -81,9 +82,10 @@ const branches = Effect.flatMap(Effect.service(Devtools.Registry), (registry) =>
 
 const keeping = (keepStates: number, seen: Ref.Ref<ReadonlyArray<Store.Inspected>>) =>
   Layer.provide(
-    Tally.layer(),
+    Tally.layer,
     Layer.mergeAll(
       SecureRandom.layerWebCrypto,
+      Layer.sync(Trees.Tree, Trees.makeTree),
       Layer.succeed(Store.Inspector, {
         keepStates,
         register: (store) => Ref.update(seen, (all) => [...all, store]),
@@ -104,6 +106,17 @@ const addedTwice = Effect.fnUntraced(function* (keepStates: number) {
 })
 
 describe("a store asked to fork", () => {
+  it.effect("from before anything was written starts again from its first state", () =>
+    Effect.gen(function* () {
+      const { tally, inspected } = yield* addedTwice(10)
+
+      yield* inspected.forkAt(0)
+      expect(yield* tally.select.count.get).toBe(0)
+      yield* tally.commands.added({ by: 3 })
+      expect(yield* tally.select.count.get).toBe(3)
+    }),
+  )
+
   it.effect("carries on from the state it had then, and can be put back", () =>
     Effect.gen(function* () {
       const { tally, inspected } = yield* addedTwice(10)
@@ -118,7 +131,7 @@ describe("a store asked to fork", () => {
 
       yield* inspected.forkAt(1)
       expect(yield* tally.select.count.get).toBe(1)
-      expect((yield* tally.log.get).map((entry) => entry.seq)).toEqual([1])
+      expect((yield* inspected.log.get).map((entry) => entry.seq)).toEqual([1, 2])
       yield* inspected.travelTo(2)
       expect(yield* tally.select.count.get).toBe(1)
       yield* inspected.travelTo(0)
@@ -129,15 +142,6 @@ describe("a store asked to fork", () => {
       yield* tally.commands.added({ by: 5 })
       expect(yield* tally.select.count.get).toBe(6)
       yield* back
-      expect(yield* tally.select.count.get).toBe(2)
-    }),
-  )
-
-  it.effect("stays as it is when it no longer has the state it had then", () =>
-    Effect.gen(function* () {
-      const { tally, inspected } = yield* addedTwice(0)
-
-      yield* inspected.forkAt(1)
       expect(yield* tally.select.count.get).toBe(2)
     }),
   )

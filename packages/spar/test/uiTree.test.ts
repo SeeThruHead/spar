@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Effect, Fiber, Layer, Schema, Stream, SubscriptionRef, pipe } from "effect"
 import { Reactive, Server, UiState, View, compose, withProps } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { BoardView, NoteView, PanelView, TwiceView } from "./tree.tsx"
 
@@ -66,7 +67,7 @@ const board = Effect.fnUntraced(function* () {
 })
 
 const ownTree = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.provideService(effect, UiState.Tree, UiState.makeTree())
+  Effect.provideService(effect, Trees.Tree, Trees.makeTree())
 
 const notes = (): ReadonlyArray<string | null> =>
   screen.getAllByRole("status", { name: "Note" }).map((note) => note.textContent)
@@ -77,7 +78,7 @@ describe("one tree of all UI state", () => {
       Effect.gen(function* () {
         yield* board()
 
-        expect(sorted(yield* UiState.snapshot)).toEqual([
+        expect(sorted(yield* Trees.snapshot)).toEqual([
           'BoardView . title = "Board"',
           'BoardView / Note[a] . text = "new"',
           'BoardView / Note[b] . text = "new"',
@@ -93,11 +94,11 @@ describe("one tree of all UI state", () => {
       Effect.gen(function* () {
         yield* board()
 
-        expect(yield* UiState.put(["BoardView"], "title", "Renamed")).toBe(true)
+        expect(yield* Trees.put(["BoardView"], "title", "Renamed")).toBe(true)
         yield* Testing.find("heading", "Renamed")
-        expect(yield* UiState.put(["BoardView"], "title", 7)).toBe(false)
-        expect(yield* UiState.put(["BoardView"], "missing", "x")).toBe(false)
-        expect(yield* UiState.put(["Nowhere"], "title", "x")).toBe(false)
+        expect(yield* Trees.put(["BoardView"], "title", 7)).toBe(false)
+        expect(yield* Trees.put(["BoardView"], "missing", "x")).toBe(false)
+        expect(yield* Trees.put(["Nowhere"], "title", "x")).toBe(false)
         expect(screen.getByRole("heading").textContent).toBe("Renamed")
       }),
     ),
@@ -112,7 +113,7 @@ describe("one tree of all UI state", () => {
         yield* SubscriptionRef.set(shown, false)
         yield* Testing.eventually(() => expect(notes()).toHaveLength(1))
         yield* Testing.eventually(() => expect(screen.getAllByText("Panel")).toHaveLength(1))
-        expect(sorted(yield* UiState.snapshot)).toEqual([
+        expect(sorted(yield* Trees.snapshot)).toEqual([
           'BoardView . title = "Board"',
           'BoardView / Note[b] . text = "new"',
           "BoardView / Panel . open = false",
@@ -120,7 +121,7 @@ describe("one tree of all UI state", () => {
 
         yield* SubscriptionRef.set(shown, true)
         yield* Testing.eventually(() => expect(screen.getAllByText("Panel")).toHaveLength(2))
-        expect(sorted(yield* UiState.snapshot)).toContain("BoardView / Panel#2 . open = false")
+        expect(sorted(yield* Trees.snapshot)).toContain("BoardView / Panel#2 . open = false")
       }),
     ),
   )
@@ -128,7 +129,7 @@ describe("one tree of all UI state", () => {
   it.live("every change is told: added, set and removed", () =>
     ownTree(
       Effect.gen(function* () {
-        const seen = yield* Effect.forkScoped(Stream.runCollect(Stream.take(UiState.changes, 8)), {
+        const seen = yield* Effect.forkScoped(Stream.runCollect(Stream.take(Trees.changes, 8)), {
           startImmediately: true,
         })
 
@@ -163,18 +164,18 @@ describe("one tree of all UI state", () => {
     ownTree(
       Effect.gen(function* () {
         const { items } = yield* board()
-        const before = yield* UiState.snapshot
+        const before = yield* Trees.snapshot
 
         yield* Testing.click("button", "Clear a")
-        yield* UiState.put(["BoardView"], "title", "Later")
+        yield* Trees.put(["BoardView"], "title", "Later")
         yield* Testing.find("heading", "Later")
-        yield* UiState.restore(before)
+        yield* Trees.restore(before)
         yield* Testing.find("heading", "Board")
         expect(notes()).toEqual(["new", "new"])
 
         yield* SubscriptionRef.set(items, [{ id: "b" }])
         yield* Testing.eventually(() => expect(notes()).toHaveLength(1))
-        yield* UiState.restore([
+        yield* Trees.restore([
           { path: ["BoardView", "Note[a]"], name: "text", value: "kept" },
           { path: ["BoardView", "Note[b]"], name: "text", value: "seen" },
         ])
@@ -187,8 +188,8 @@ describe("one tree of all UI state", () => {
         yield* SubscriptionRef.set(items, [{ id: "a" }, { id: "b" }])
         yield* Testing.eventually(() => expect(notes()).toEqual(["new", "seen"]))
 
-        yield* UiState.restore([{ path: ["BoardView", "Note[c]"], name: "text", value: "old" }])
-        yield* UiState.restore([])
+        yield* Trees.restore([{ path: ["BoardView", "Note[c]"], name: "text", value: "old" }])
+        yield* Trees.restore([])
         yield* SubscriptionRef.set(items, [{ id: "c" }])
         yield* Testing.eventually(() => expect(notes()).toEqual(["new"]))
       }),
@@ -201,7 +202,7 @@ describe("one tree of all UI state", () => {
         yield* Testing.mount(Twice)
         yield* Testing.findText("one")
 
-        expect(sorted(yield* UiState.snapshot)).toEqual([
+        expect(sorted(yield* Trees.snapshot)).toEqual([
           'Twice . same = "one"',
           'Twice . same#2 = "two"',
         ])
@@ -218,7 +219,7 @@ describe("one tree of all UI state", () => {
         )
 
         expect(html).toContain("<h1>Board</h1>")
-        expect(yield* UiState.snapshot).toEqual([])
+        expect(yield* Trees.snapshot).toEqual([])
       }),
     ),
   )

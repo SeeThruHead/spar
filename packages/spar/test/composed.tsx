@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Option, Ref, Schema } from "effect"
+import { Context, Duration, Effect, FiberHandle, Ref, Schema } from "effect"
 import {
   For,
   Props,
@@ -13,7 +13,6 @@ import {
   withKey,
   withProps,
   withQuery,
-  withSpan,
   withStore,
   withUiState,
 } from "spar"
@@ -43,38 +42,36 @@ export class CounterStore extends Store.Tag<CounterStore>()("composed/Counter", 
   },
   selectors: {
     count: Store.selector(Schema.Int, (state: Counting) => state.count),
-  },
-  phases: {
-    of: (state) => state.phase,
-    accepts: { idle: ["incremented", "resetClicked"], resetting: ["resetCompleted"] },
-    internal: ["resetCompleted"],
+    phase: Store.selector(Schema.String, (state: Counting) => state.phase),
   },
 }) {}
 
-export const resetAfterDelay = Store.during("resetting", (_state: Counting, send) =>
-  Effect.andThen(
-    Effect.sleep(Duration.millis(50)),
-    send(CounterStore.actions.resetCompleted, undefined),
-  ),
-)
+const withReset = Effect.fnUntraced(function* () {
+  const store = yield* CounterStore
+  const running = yield* FiberHandle.make()
+  const reset = Effect.gen(function* () {
+    yield* store.commands.resetClicked()
+    yield* Effect.sleep(Duration.millis(50))
+    yield* store.commands.resetCompleted()
+  })
 
-const told = (refused: Option.Option<Store.Refusal>): string =>
-  Option.match(refused, { onNone: () => "", onSome: (refusal) => refusal.reason })
+  return { onReset: Effect.asVoid(FiberHandle.run(running, reset, { onlyIfMissing: true })) }
+})
 
 export const ResetCounter = compose(
   withStore(CounterStore, (store) => ({
     count: store.select.count,
-    refused: Reactive.map(store.refused, told),
+    phase: store.select.phase,
     onIncrement: store.commands.incremented(),
-    onReset: store.commands.resetClicked(),
   })),
+  withReset,
   withKey("+", (props) => props.onIncrement),
 )((props) => (
   <section aria-label="Counter">
     <output aria-label="Count">{props.count}</output>
+    <output aria-label="Phase">{props.phase}</output>
     <button onClick={props.onIncrement}>Add 1</button>
     <button onClick={props.onReset}>Reset after a delay</button>
-    <p role="alert">{props.refused}</p>
   </section>
 ))
 
@@ -212,14 +209,11 @@ export const Avatar = compose(
 
 export const Ticker = compose(
   withUiState("ticks", Schema.Int, 0),
-  withSpan(
-    "ticking",
-    withEffect(
-      Effect.fnUntraced(function* (props: { readonly ticks: UiState.UiState<number> }) {
-        yield* Effect.sleep("10 millis")
-        yield* UiState.set(props.ticks, 1)
-      }),
-    ),
+  withEffect(
+    Effect.fn("ticking")(function* (props: { readonly ticks: UiState.UiState<number> }) {
+      yield* Effect.sleep("10 millis")
+      yield* UiState.set(props.ticks, 1)
+    }),
   ),
 )((props) => <output aria-label="Ticks">{props.ticks}</output>)
 

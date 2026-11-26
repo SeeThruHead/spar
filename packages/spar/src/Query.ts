@@ -1,7 +1,9 @@
 import {
   Clock,
+  Context,
   Duration,
   Effect,
+  FiberMap,
   Formatter,
   Layer,
   Array,
@@ -14,21 +16,18 @@ import {
   Stream,
   Tracer,
 } from "effect"
-import { GivenUpSends, newIn } from "./internal/givenUp.ts"
-import type { GivenUp } from "./internal/givenUp.ts"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { OnServer } from "./internal/server.ts"
 import { Adopters, Expected } from "./internal/pieces.ts"
-import type { Action, Entry as Logged } from "./internal/journal.ts"
 import * as Cell from "./internal/cell.ts"
 import { fromCell, isReactive, map, observed, succeed, zip } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import * as Events from "./Events.ts"
-import * as Store from "./Store.ts"
+import * as Store from "./internal/store.ts"
 import * as Timeline from "./Timeline.ts"
 import * as UiState from "./UiState.ts"
 import type { Mountable } from "./View.ts"
-import * as Diagnostics from "./internal/said.ts"
+import { within } from "./internal/viewParts.ts"
 
 export const Status = Schema.Literals(["waiting", "loading", "loaded", "failed"])
 
@@ -129,13 +128,12 @@ const counted = (users: Users, name: string, by: number): number => {
   return next
 }
 
-const answersAnother = <A, E>(
+const answered = <A, E>(
   state: State<A, E>,
   answer: { readonly key: string; readonly request: number },
-): string | null =>
-  state.entries[answer.key]?.request === answer.request
-    ? null
-    : Diagnostics.brief("SPAR_LATE_ANSWER")
+  change: (before: Entry<A, E>) => Entry<A, E>,
+): State<A, E> =>
+  state.entries[answer.key]?.request === answer.request ? settled(state, answer.key, change) : state
 
 const settled = <A, E>(
   state: State<A, E>,
@@ -178,6 +176,12 @@ const optional = <I>(given: I | Option.Option<I>): Option.Option<I> =>
 const optionalOf = (given: unknown): Reactive<Option.Option<unknown>> =>
   isReactive(given) ? map(given, optional) : succeed(Option.some(given))
 
+const forkedIn = <A, E>(
+  fibers: FiberMap.FiberMap<string>,
+  key: string,
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<void> => Effect.asVoid(Effect.exit(FiberMap.run(fibers, key, effect)))
+
 const statusOf = <A, E>(entry: Entry<A, E> | undefined): Status =>
   entry === undefined ? "waiting" : entry.status
 
@@ -218,7 +222,7 @@ export const Tag =
       ahead: Schema.optionalKey(Schema.Array(Schema.String)),
     })
     const initialState: State<A, E> = { entries: {} }
-    const base = Store.Tag<Self>()(key, {
+    const definition = {
       state,
       initialState,
       actions: {
@@ -247,10 +251,6 @@ export const Tag =
               },
             },
           }),
-          (before, asked) =>
-            before.entries[asked.key]?.status === "loading"
-              ? Diagnostics.brief("SPAR_ALREADY_LOADING")
-              : null,
         ),
         loaded: Store.action(
           Schema.Struct({
@@ -260,24 +260,22 @@ export const Tag =
             at: Schema.Finite,
           }),
           (before: State<A, E>, answer): State<A, E> =>
-            settled(before, answer.key, (held) => ({
+            answered(before, answer, (held) => ({
               ...held,
               status: "loaded",
               value: answer.value,
               error: null,
               loadedAt: answer.at,
             })),
-          answersAnother,
         ),
         failed: Store.action(
           Schema.Struct({ key: Schema.String, request: Schema.Int, error: options.failure }),
           (before: State<A, E>, answer): State<A, E> =>
-            settled(before, answer.key, (held) => ({
+            answered(before, answer, (held) => ({
               ...held,
               status: "failed",
               error: answer.error,
             })),
-          answersAnother,
         ),
         patched: Store.action(
           Schema.Struct({ key: Schema.String, value: options.success }),
@@ -296,14 +294,10 @@ export const Tag =
         ),
         dropped: Store.action(
           Schema.Struct({ key: Schema.String, since: Schema.Finite }),
-          (before: State<A, E>, { key: name }): State<A, E> => ({
-            ...before,
-            entries: Record.remove(before.entries, name),
-          }),
-          (before, { key: name, since }) =>
+          (before: State<A, E>, { key: name, since }): State<A, E> =>
             before.entries[name]?.unusedSince === since
-              ? null
-              : Diagnostics.brief("SPAR_IN_USE_AGAIN"),
+              ? { ...before, entries: Record.remove(before.entries, name) }
+              : before,
         ),
         streamed: Store.action(state, (before: State<A, E>, sent): State<A, E> => ({
           ...before,
@@ -334,52 +328,85 @@ export const Tag =
           (now: State<A, E>) => now.entries,
         ),
       },
-    })
-    const loads = Store.unwatched(
-      Store.after(base.actions.requested, (asked, now: State<A, E>, send) =>
-        Effect.forEach(
-          Option.toArray(Option.fromNullishOr(now.entries[asked.key])),
-          ({ request }) =>
-            Effect.annotateSpans(answered(asked, request, send), "spar.kind", "data"),
-          { discard: true },
-        ),
-      ),
-    )
-    const drops = Store.afterDetached(
-      base.actions.released,
-      ({ key: name, at }, _now, send) =>
-        Effect.andThen(
-          Effect.sleep(dropAfter),
-          send(base.actions.dropped, { key: name, since: at }),
-        ),
-      (released) => released.key,
-    )
-    const trims = Store.unwatched(
-      Store.after(base.actions.released, (_released, now: State<A, E>, send) =>
-        Effect.forEach(
-          oldestUnused(now).slice(0, Math.max(Object.keys(now.entries).length - keepAtMost, 0)),
-          ([name, since]) => send(base.actions.dropped, { key: name, since }),
-          { discard: true },
-        ),
-      ),
-    )
-    const answered = (
-      asked: { readonly key: string; readonly input: Schema.Json },
-      request: number,
-      send: Store.Send<State<A, E>>,
-    ) =>
+    }
+    const base = Store.Tag<Self>()(key, definition)
+    type Held = Store.Shape<State<A, E>, typeof definition.actions, typeof definition.selectors>
+    type Runner = {
+      readonly loads: FiberMap.FiberMap<string>
+      readonly drops: FiberMap.FiberMap<string>
+      readonly context: Context.Context<R>
+      readonly tracer: Tracer.Tracer
+    }
+    const runners = new WeakMap<object, Runner>()
+    const runnerOf = (store: Held): Effect.Effect<Runner> =>
+      Effect.fromNullishOr(runners.get(store)).pipe(Effect.orDie)
+    const fetched = (store: Held, asked: Asked, request: number) =>
       Effect.matchEffect(
         Effect.flatMap(Effect.orDie(Schema.decodeEffect(inputJson)(asked.input)), (input) =>
           Effect.retry(options.load(input), options.retry ?? Schedule.recurs(0)),
         ),
         {
-          onFailure: (error) => send(base.actions.failed, { key: asked.key, request, error }),
+          onFailure: (error) => store.commands.failed({ key: asked.key, request, error }),
           onSuccess: (value) =>
             Effect.flatMap(Clock.currentTimeMillis, (at) =>
-              send(base.actions.loaded, { key: asked.key, request, value, at }),
+              store.commands.loaded({ key: asked.key, request, value, at }),
             ),
         },
       )
+    const begun = Effect.fnUntraced(function* (
+      store: Held,
+      asked: Asked,
+      after: string | null,
+      from: { readonly traceId: string; readonly spanId: string },
+    ) {
+      const before = yield* store.state.get
+      if (before.entries[asked.key]?.status === "loading") return
+
+      const request = (before.entries[asked.key]?.request ?? 0) + 1
+      const runner = yield* runnerOf(store)
+
+      yield* store.commands.requested({ ...asked, after, ...from })
+
+      yield* forkedIn(
+        runner.loads,
+        asked.key,
+        Effect.provide(
+          Effect.annotateSpans(fetched(store, asked, request), "spar.kind", "data"),
+          runner.context,
+        ),
+      )
+    })
+    const released = Effect.fnUntraced(function* (store: Held, name: string, at: number) {
+      const runner = yield* runnerOf(store)
+
+      yield* store.commands.released({ key: name, at })
+      yield* forkedIn(
+        runner.drops,
+        name,
+        Effect.withTracer(
+          Effect.andThen(Effect.sleep(dropAfter), store.commands.dropped({ key: name, since: at })),
+          runner.tracer,
+        ),
+      )
+
+      const now = yield* store.state.get
+
+      yield* Effect.forEach(
+        oldestUnused(now).slice(0, Math.max(Object.keys(now.entries).length - keepAtMost, 0)),
+        ([other, since]) => store.commands.dropped({ key: other, since }),
+        { discard: true },
+      )
+    })
+    const running = Effect.fnUntraced(function* (store: Held) {
+      const loads = yield* FiberMap.make<string>()
+      const drops = yield* FiberMap.make<string>()
+      const context = yield* Effect.context<R>()
+      const tracer = yield* Effect.tracer
+
+      runners.set(store, { loads, drops, context, tracer })
+
+      return store
+    })
     const askedFor = (input: Option.Option<unknown>): Option.Option<Asked> =>
       Option.map(Option.flatMap(input, Schema.encodeUnknownOption(inputJson)), (encoded) => ({
         key: Formatter.formatJson(encoded),
@@ -407,7 +434,7 @@ export const Tag =
           const known = held.entries[wanted.key]
           const request = Effect.annotateSpans(
             Effect.andThen(
-              store.commands.requested({ ...wanted, after, ...from }),
+              begun(store, wanted, after, from),
               onServer ? store.commands.loadedAhead({ key: wanted.key }) : Effect.void,
             ),
             {
@@ -463,9 +490,7 @@ export const Tag =
           Option.toArray(asked),
           (target) =>
             counted(users, target.key, -1) === 0
-              ? Effect.flatMap(Clock.currentTimeMillis, (at) =>
-                  store.commands.released({ key: target.key, at }),
-                )
+              ? Effect.flatMap(Clock.currentTimeMillis, (at) => released(store, target.key, at))
               : Effect.void,
           { discard: true },
         )
@@ -531,7 +556,7 @@ export const Tag =
         refetch: Effect.flatMap(wanted.get, (asked) =>
           Effect.forEach(
             Option.toArray(asked),
-            (target) => store.commands.requested({ ...target, after, traceId: "", spanId: "" }),
+            (target) => begun(store, target, after, { traceId: "", spanId: "" }),
             { discard: true },
           ),
         ),
@@ -625,93 +650,32 @@ export const Tag =
       yield* Effect.forEach(
         Record.toEntries(before.entries),
         ([name, held]) =>
-          store.commands.requested({
-            key: name,
-            input: held.input,
-            after: null,
-            traceId: "",
-            spanId: "",
-          }),
+          begun(store, { key: name, input: held.input }, null, { traceId: "", spanId: "" }),
         { discard: true },
       )
     })
-    const undoneIfAlreadyGivenUp = (sentAs: string) =>
-      Effect.flatMap(Effect.serviceOption(GivenUpSends), (found) =>
-        Effect.forEach(
-          Option.toArray(found),
-          (sends) =>
-            Effect.flatMap(sends.dead.get, (dead) =>
-              dead.some((given) => given.key === sentAs) ? invalidate : Effect.void,
-            ),
-          { discard: true },
-        ),
+    const adopted = Effect.fnUntraced(function* (store: Held) {
+      const adopters = yield* Adopters
+      const decode = Schema.decodeEffect(Schema.toCodecJson(state))
+
+      yield* adopters.register(key, (sent) =>
+        Effect.ignore(Effect.flatMap(decode(sent), store.commands.streamed)),
       )
-    const undoneWhenGivenUp = (channel: string) =>
-      Effect.flatMap(Effect.serviceOption(GivenUpSends), (found) =>
-        Effect.forEach(
-          Option.toArray(found),
-          (sends) =>
-            Effect.forkScoped(
-              sends.dead.changes.pipe(
-                Stream.mapAccum(
-                  (): ReadonlySet<string> => new Set(),
-                  (seen, now: ReadonlyArray<GivenUp>) => newIn(seen, now, channel),
-                ),
-                Stream.runForEach(() => invalidate),
-              ),
-              { startImmediately: true },
-            ),
-          { discard: true },
-        ),
-      )
+
+      return store
+    })
+    const startedAt = (storeKey: string) =>
+      Effect.flatMap(Store.made(storeKey, definition, Effect.succeed(initialState)), running)
 
     return class extends base {
-      static readonly loads = loads
-      static readonly live = Layer.provideMerge(
-        Layer.effectDiscard(
-          Effect.gen(function* () {
-            const store = yield* Effect.service(base)
-            const adopters = yield* Adopters
-
-            yield* adopters.register(key, (sent) =>
-              Effect.ignore(
-                Effect.flatMap(
-                  Schema.decodeEffect(Schema.toCodecJson(state))(sent),
-                  store.commands.streamed,
-                ),
-              ),
-            )
-          }),
-        ),
-        base.layer([loads, drops, trims]),
-      )
+      static readonly live = Layer.effect(base, Effect.flatMap(startedAt(key), adopted))
       static readonly beside = <Props, EC = never, RC = never, ViewProps = never>(
         self: Mountable<Props, EC, RC, ViewProps>,
-      ) => base.with(self, [loads])
+      ) => within((place) => Layer.effect(base, startedAt(`${key} @ ${place}`)), key)(self)
       static readonly ask = ask
       static readonly read = read
       static readonly invalidate = invalidate
+      static readonly patch = patched
       static readonly pages = pages
-      static readonly invalidatedBy = <Other, Payload>(action: Action<Other, Payload>) =>
-        Store.unwatched(Store.after(action, () => invalidate))
-      static readonly patchedBy = <Other, Payload>(
-        action: Action<Other, Payload>,
-        input: (payload: Payload) => I,
-        patch: (value: A, payload: Payload) => A,
-      ) => {
-        const reaction = Store.unwatched(
-          Store.after(action, (payload) =>
-            patched(input(payload), (value) => patch(value, payload)),
-          ),
-        )
-
-        return {
-          ...reaction,
-          run: (logged: Logged, held: Other, sendNext: Store.Send<Other>) =>
-            Effect.andThen(reaction.run(logged, held, sendNext), undoneIfAlreadyGivenUp(logged.id)),
-          start: (channel: string) =>
-            Effect.andThen(reaction.start(channel), undoneWhenGivenUp(channel)),
-        }
-      }
     }
   }

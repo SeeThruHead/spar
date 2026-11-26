@@ -6,7 +6,17 @@ import { McpClient, McpProtocol } from "effect/ai"
 import { Command } from "effect/cli"
 import { SecureRandom } from "effect/crypto"
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http"
-import { Props, Router, Store, Timeline, UiState, View, compose, uses } from "spar"
+import {
+  Props,
+  Router,
+  State as OneState,
+  Store,
+  Timeline,
+  UiState,
+  View,
+  compose,
+  uses,
+} from "spar"
 import * as Devtools from "spar/devtools"
 import * as Spans from "spar/devtools/spans"
 import { jsx } from "spar/jsx-runtime"
@@ -70,8 +80,9 @@ const agent = Effect.fnUntraced(function* () {
 const openPage = Effect.fnUntraced(function* () {
   const url = yield* origin
   const built = yield* Layer.build(
-    Layer.merge(Tally.layer(), Page.layer({ url })).pipe(
+    Layer.merge(Tally.layer, Page.layer({ url })).pipe(
       Layer.provideMerge(Devtools.layer),
+      Layer.provideMerge(OneState.layer),
       Layer.provide(SecureRandom.layerWebCrypto),
     ),
   )
@@ -83,10 +94,10 @@ const openInspected = Effect.fnUntraced(function* () {
   const url = yield* origin
 
   return yield* Layer.build(
-    Layer.merge(Tally.layer(), Page.layer({ url })).pipe(
+    Layer.merge(Tally.layer, Page.layer({ url })).pipe(
       Layer.provideMerge(Devtools.layer),
       Layer.provideMerge(Spans.layer()),
-      Layer.provideMerge(Layer.sync(UiState.Tree, UiState.makeTree)),
+      Layer.provideMerge(OneState.layer),
       Layer.provide(SecureRandom.layerWebCrypto),
     ),
   )
@@ -318,7 +329,7 @@ describe("the devtools server for agents", () => {
       const earlier = yield* mcp.call("travel_to", { store: "test/Tally", seq: 1 })
 
       expect(stateOf(earlier.said)).toEqual({ count: 1 })
-      expect(yield* tally.viewing.get).toBe(1)
+      expect(yield* tally.state.get).toEqual({ count: 1 })
 
       const loaded = yield* mcp.call("load_log", {
         store: "test/Tally",
@@ -425,7 +436,6 @@ describe("the devtools server for agents", () => {
       const changed = yield* mcp.call("diff_states", { store: "test/Tally", from: 1, to: 3 })
 
       expect(changed.said).toEqual([{ path: "count", before: 1, after: 7 }])
-      expect(yield* tally.viewing.get).toBeNull()
 
       const present = yield* mcp.call("step", { by: 1 })
 
@@ -625,7 +635,7 @@ describe("the devtools server for agents", () => {
         })
 
         yield* Layer.build(
-          Layer.merge(Tally.layer(), Page.layer({ url: "http://127.0.0.1:9" })).pipe(
+          Layer.merge(Tally.layer, Page.layer({ url: "http://127.0.0.1:9" })).pipe(
             Layer.provideMerge(Devtools.layer),
             Layer.provide(SecureRandom.layerWebCrypto),
             Layer.provide(Logger.layer([listening])),

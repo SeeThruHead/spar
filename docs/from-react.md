@@ -16,7 +16,7 @@
 | Suspense                                          | `View.pending(Placeholder)`                                                                  |
 | Portals                                           | `View.portal`                                                                                |
 | React Router                                      | `Router.route`, `Router.outlet`, `router.link`                                               |
-| Redux and middleware                              | `Store.Tag`, `Store.after`, `Store.afterLatest`, `Store.afterLeading`, `Store.outbox`        |
+| Redux and middleware                              | `Store.Tag`, with async work as Effects on a service, and `Outbox.channel`                   |
 | Testing Library                                   | `spar/testing` (it uses the same queries by role)                                            |
 
 ## Things that will feel different

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { UiState, View } from "spar"
+import { View } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import * as Testing from "spar/testing"
 import { FolderTree } from "./folderTree.tsx"
 
@@ -34,7 +35,7 @@ describe("a recursive component: a folder tree", () => {
       yield* Testing.click("button", "home")
       yield* Testing.find("button", "music")
 
-      const tree = yield* UiState.snapshot
+      const tree = yield* Trees.snapshot
 
       expect(
         tree
@@ -45,6 +46,6 @@ describe("a recursive component: a folder tree", () => {
         ["FolderTree / FolderRow / FolderRow[music]", false],
         ["FolderTree / FolderRow / FolderRow[photos]", false],
       ])
-    }).pipe(Effect.provideService(UiState.Tree, UiState.makeTree())),
+    }).pipe(Effect.provideService(Trees.Tree, Trees.makeTree())),
   )
 })

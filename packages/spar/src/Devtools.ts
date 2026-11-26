@@ -46,6 +46,7 @@ import * as Store from "./Store.ts"
 import * as Timeline from "./Timeline.ts"
 import * as Props from "./Props.ts"
 import * as UiState from "./UiState.ts"
+import * as Trees from "./internal/uiTrees.ts"
 import * as View from "./View.ts"
 import { compose, withProps } from "./Compose.ts"
 
@@ -80,7 +81,7 @@ export class Registry extends Context.Service<
     readonly travelTo: (seq: number | null) => Effect.Effect<void>
     readonly uiState: () => UiState.Snapshot
     readonly setUi: (path: UiState.Path, name: string, value: Schema.Json) => boolean
-    readonly follow: (tree: ReturnType<typeof UiState.makeTree>) => void
+    readonly follow: (tree: ReturnType<typeof Trees.makeTree>) => void
     readonly branches: Reactive.Reactive<ReadonlyArray<Branch>>
     readonly fork: Effect.Effect<void>
     readonly switchTo: (id: number) => Effect.Effect<void>
@@ -152,7 +153,10 @@ const reachedBy = (store: Store.Inspected) =>
 
 export const layer: Layer.Layer<Registry> = Layer.effectContext(
   Effect.gen(function* () {
-    const first = yield* UiState.Tree
+    const first = yield* Trees.Tree
+
+    first.keepAtLeast(1000)
+
     const trees = Cell.make(first)
     const stores = Cell.make<ReadonlyArray<Store.Inspected>>([])
     const past = Cell.make<Past>({
@@ -165,7 +169,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
     })
 
     const record = Effect.fnUntraced(function* (noted: Timeline.Noted) {
-      const tree = yield* UiState.Tree
+      const tree = yield* Trees.Tree
       const reached = yield* Effect.forEach(stores.read(), reachedBy)
       trees.write(tree)
 
@@ -180,7 +184,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
         ...before,
         remembered: [
           ...before.remembered,
-          { moment: { ...noted, seq }, ui: tree.snapshot(), stores: Object.fromEntries(reached) },
+          { moment: { ...noted, seq }, ui: tree.uiSnapshot(), stores: Object.fromEntries(reached) },
         ].slice(-keepMoments),
       })
     })
@@ -204,7 +208,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
 
     const travelTo = Effect.fnUntraced(function* (seq: number | null) {
       const before = past.read()
-      const live = before.viewing === null ? trees.read().snapshot() : before.live
+      const live = before.viewing === null ? trees.read().uiSnapshot() : before.live
       const found = Array.findFirst(before.remembered, (kept) => kept.moment.seq === seq)
 
       yield* Option.match(found, {
@@ -228,7 +232,7 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
     const parked = (before: Past, resume: Effect.Effect<void>): Parked => ({
       ...before.branch,
       remembered: before.remembered,
-      ui: before.viewing === null ? trees.read().snapshot() : before.live,
+      ui: before.viewing === null ? trees.read().uiSnapshot() : before.live,
       resume,
     })
 
@@ -314,9 +318,12 @@ export const layer: Layer.Layer<Registry> = Layer.effectContext(
       moments: Reactive.map(fromCell(past), (now) => now.remembered.map((kept) => kept.moment)),
       viewing: Reactive.map(fromCell(past), (now) => now.viewing),
       travelTo,
-      uiState: () => trees.read().snapshot(),
+      uiState: () => trees.read().uiSnapshot(),
       setUi: (path, name, value) => trees.read().put(path, name, value),
-      follow: (tree) => trees.write(tree),
+      follow: (tree) => {
+        tree.keepAtLeast(1000)
+        trees.write(tree)
+      },
     }).pipe(
       Context.add(Store.Inspector, {
         keepStates: 1000,

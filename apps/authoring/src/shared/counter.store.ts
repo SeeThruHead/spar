@@ -1,14 +1,14 @@
-import { Duration, Effect, Schema } from "effect"
+import { Duration, Effect, FiberHandle, Schema } from "effect"
 import { Store } from "spar"
 
 const State = Schema.Struct({
   count: Schema.Int,
-  phase: Schema.Literals(["idle", "resetting"]),
+  resetting: Schema.Boolean,
 })
 
 type State = typeof State.Type
 
-const initialState: State = { count: 0, phase: "idle" }
+const initialState: State = { count: 0, resetting: false }
 
 export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
   state: State,
@@ -20,30 +20,24 @@ export class CounterStore extends Store.Tag<CounterStore>()("Counter", {
     })),
     resetClicked: Store.action(Schema.Void, (state: State): State => ({
       ...state,
-      phase: "resetting",
+      resetting: true,
     })),
     resetCompleted: Store.action(Schema.Void, (_state: State): State => initialState),
   },
   selectors: {
     count: Store.selector(Schema.Int, (state: State) => state.count),
-    resetting: Store.selector(Schema.Boolean, (state: State) => state.phase === "resetting"),
-  },
-  phases: {
-    of: (state) => state.phase,
-    accepts: {
-      idle: ["incremented", "resetClicked"],
-      resetting: ["resetCompleted"],
-    },
-    internal: ["resetCompleted"],
-  },
-  invariants: {
-    CountIsNeverNegative: (state) => state.count >= 0,
+    resetting: Store.selector(Schema.Boolean, (state: State) => state.resetting),
   },
 }) {}
 
-export const resetAfterDelay = Store.during("resetting", (_state: State, send) =>
-  Effect.andThen(
-    Effect.sleep(Duration.seconds(2)),
-    send(CounterStore.actions.resetCompleted, undefined),
-  ),
-)
+export const withReset = Effect.fnUntraced(function* () {
+  const store = yield* CounterStore
+  const running = yield* FiberHandle.make()
+  const reset = Effect.gen(function* () {
+    yield* store.commands.resetClicked()
+    yield* Effect.sleep(Duration.seconds(2))
+    yield* store.commands.resetCompleted()
+  })
+
+  return { onReset: Effect.asVoid(FiberHandle.run(running, reset, { onlyIfMissing: true })) }
+})

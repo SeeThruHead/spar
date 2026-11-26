@@ -196,7 +196,7 @@ panel, lenses show one kind at a time:
 | --------- | -------------------------------------------------------------------------------------- |
 | Rendering | Components mounting, and each event a component handled (`on click`, with its view)    |
 | Data      | Queries: each request, its call, its answer, and what a dependent one's input was from |
-| Stores    | Store commands and refusals                                                            |
+| Stores    | Store commands                                                                         |
 | Backend   | Spans the backend recorded                                                             |
 
 A request that waited for another query's value draws that wait as a line before its bar, from

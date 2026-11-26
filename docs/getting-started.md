@@ -136,7 +136,7 @@ const program = Effect.gen(function* () {
 
   return yield* App.mount(Counter, {
     target,
-    layer: CounterStore.layer(),
+    layer: CounterStore.layer,
   })
 })
 
@@ -164,7 +164,7 @@ it.live("the counter counts", () =>
     const count = yield* Testing.find("status", "Count")
 
     yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(CounterStore.layer())),
+  }).pipe(Effect.provide(CounterStore.layer)),
 )
 ```
 

@@ -78,9 +78,7 @@
       - button "Reset after a delay"
     - text: Delay in seconds
     - spinbutton "Delay in seconds": "2"
-    - paragraph:
-      - status "Last refusal": Nothing has been refused
-    - paragraph: Both buttons stay enabled, and the + key adds 1 too. The store decides.
+    - paragraph: "The + key adds 1 too. A second reset while one is running is ignored: the reset is one Effect, run by a FiberHandle."
   - region "People":
     - heading "People" [level=2]
     - paragraph:

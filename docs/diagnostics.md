@@ -1,6 +1,6 @@
 # Diagnostics
 
-Every error, refusal and lint finding Spar reports has a code that does not change. A report is
+Every error and lint finding Spar reports has a code that does not change. A report is
 the code and what happened, where it happened when that is known, the fix, and a pointer to its
 section here:
 
@@ -112,22 +112,6 @@ Fix: Read the defect that follows. If the part is wrapped in View.crash the rest
 
 Reported by: The running app: an error's message, or an entry in the log.
 
-### SPAR_SENT_AGAIN
-
-The same command, with the same payload, was sent again while the work the first one started was still running.
-
-Fix: If the second send is a mistake, such as a second press of Pay, declare the reaction with Store.afterLeading, which refuses the command while the first run lasts, or submit through Form.submit, which ignores a submit while one is running. If repeating it is meant, put something in the payload that tells the two apart.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
-### SPAR_OLDER_ANSWER
-
-What an earlier command started answered after what a later one started, and changed the same part of the state, so the older answer is what is held now.
-
-Fix: If only the newest answer matters, as with a search, declare the reaction with Store.afterLatest, which stops the earlier run when a newer one starts, or load the data with a Query, which is keyed by its input and refuses an answer to an earlier request. If each answer is for a different thing, such as one row each, this is not a problem.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
 ### SPAR_DUPLICATE_CALL
 
 The same request was made again while an identical one was still on its way.
@@ -160,22 +144,6 @@ Fix: Load the log into the version of the store that wrote it, or add the action
 
 Reported by: The running app: an error's message, or an entry in the log.
 
-### SPAR_UNREADABLE_SAVE
-
-What was saved for a store on this device could not be read.
-
-Fix: Clear the saved data, or read it with the version that wrote it. If the state's Schema changed, give the store's durable options a new version.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
-### SPAR_ABANDONED_ACTION
-
-An earlier tab asked a store for an action and closed before it was done, and this version cannot carry it out, so it was dropped.
-
-Fix: Nothing to do for the dropped action. To keep such actions across versions, keep the action's name and payload Schema readable by the new version.
-
-Reported by: The running app: an error's message, or an entry in the log.
-
 ### SPAR_COMPONENT_OUTSIDE_A_VIEW
 
 A component was written in JSX that is not drawn by a component, so it has no services to run with.
@@ -199,30 +167,6 @@ A test expected something and the screen never showed it.
 Fix: Check the role and name asked for against what the view draws, and that the data it needs was provided in the test's layer.
 
 Reported by: The running app: an error's message, or an entry in the log.
-
-### SPAR_ALREADY_LOADING
-
-It is already loading
-
-Fix: Nothing: one request runs for each input at a time, and the second was not needed.
-
-Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
-
-### SPAR_LATE_ANSWER
-
-This answers an earlier request
-
-Fix: Nothing: a newer request was made for the same input, and its answer is the one kept.
-
-Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
-
-### SPAR_IN_USE_AGAIN
-
-It is in use again
-
-Fix: Nothing: a query's data was about to be dropped as unused, and a component asked for it again first.
-
-Reported by: A store, as the reason a command was refused. It is in the log and on the command's span.
 
 ### SPAR_NEEDLESS_WAIT
 

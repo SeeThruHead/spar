@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Ref } from "effect"
-import { Timeline, UiState } from "spar"
+import { Timeline } from "spar"
+import * as Trees from "../src/internal/uiTrees.ts"
 import { noticed } from "../src/internal/notice.ts"
 import { ViewScope } from "../src/internal/viewScope.ts"
 
@@ -9,9 +10,9 @@ describe("something Spar noticed", () => {
     Effect.gen(function* () {
       const noted = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
       const scope = yield* Effect.scope
-      const page = { parent: undefined, label: "PageView", at: "", scope, tree: UiState.makeTree() }
+      const page = { parent: undefined, label: "PageView", at: "", scope, tree: Trees.makeTree() }
 
-      yield* noticed("SPAR_SENT_AGAIN", "shop/Till/paid", "Paid twice.").pipe(
+      yield* noticed("SPAR_DUPLICATE_CALL", "shop/Till/paid", "Paid twice.").pipe(
         Effect.provideService(ViewScope, {
           parent: page,
           label: "PayView",
@@ -29,7 +30,7 @@ describe("something Spar noticed", () => {
           "noticed",
           "shop/Till/paid",
           {
-            code: "SPAR_SENT_AGAIN",
+            code: "SPAR_DUPLICATE_CALL",
             said: "Paid twice.",
             in: "PageView > PayView",
             at: "/src/PayView.tsx:4:1",

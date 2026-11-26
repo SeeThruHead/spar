@@ -20,5 +20,5 @@ class Shortcuts extends Context.Service<Shortcuts, { readonly listening: true }>
 export const program = (open: UiState.UiState<boolean>) =>
   App.mount(Counter, {
     target: document.body,
-    layer: Layer.merge(CounterStore.layer(), Shortcuts.layer(open)),
+    layer: Layer.merge(CounterStore.layer, Shortcuts.layer(open)),
   })

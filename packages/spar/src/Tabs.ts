@@ -87,6 +87,16 @@ const shownAgain: Stream.Stream<void> = Stream.suspend(() =>
   ),
 )
 
+const keyOf = (event: Event): unknown => Reflect.get(event, "key")
+
+const storedElsewhere = (name: string): Stream.Stream<void> =>
+  Stream.suspend(() =>
+    events(on(window, "storage"), keyOf).pipe(
+      Stream.filter((key) => key === name),
+      Stream.map(Function.constVoid),
+    ),
+  )
+
 export const layerBrowser = Layer.effect(
   Tabs,
   Effect.gen(function* () {
@@ -104,6 +114,7 @@ export const layerBrowser = Layer.effect(
         events(on(peers, "message"), dataOf).pipe(
           Stream.filter((told) => told === name),
           Stream.map(Function.constVoid),
+          Stream.merge(storedElsewhere(name)),
           Stream.merge(shownAgain),
         ),
     }

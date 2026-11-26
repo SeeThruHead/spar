@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
-import { Reactive, UiState, compose } from "spar"
+import { Effect, Schema } from "effect"
+import { Reactive, State, UiState, compose } from "spar"
 import * as Testing from "spar/testing"
 import { OrdersView } from "./units.tsx"
 
@@ -22,6 +22,6 @@ describe("a UI state write", () => {
       yield* Testing.eventually(() =>
         expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("3"),
       )
-    }).pipe(Effect.provide(Layer.sync(UiState.Tree, UiState.makeTree))),
+    }).pipe(Effect.provide(State.layer)),
   )
 })

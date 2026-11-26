@@ -1,12 +1,4 @@
-import { Context } from "effect"
-import type { Reactive } from "./reactive.ts"
-
 export type GivenUp = { readonly key: string; readonly channel: string }
-
-export class GivenUpSends extends Context.Service<
-  GivenUpSends,
-  { readonly dead: Reactive<ReadonlyArray<GivenUp>> }
->()("spar/Outbox") {}
 
 export const newIn = (
   seen: ReadonlySet<string>,

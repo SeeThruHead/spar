@@ -6,7 +6,7 @@ import { installed } from "../internal/hook.ts"
 import type { Hook } from "../internal/hook.ts"
 import { renderInto } from "../internal/render.ts"
 import * as Timeline from "../Timeline.ts"
-import * as UiState from "../UiState.ts"
+import * as Trees from "../internal/uiTrees.ts"
 import * as View from "../View.ts"
 import * as Spans from "./spans.ts"
 
@@ -29,14 +29,14 @@ const shown = Effect.fnUntraced(function* (
 
 const apart = <A, E, R>(tools: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   tools.pipe(
-    Effect.provideService(UiState.Tree, UiState.makeTree()),
+    Effect.provideService(Trees.Tree, Trees.makeTree()),
     Effect.provideService(Timeline.Recorder, Option.none()),
   )
 
 const attach: Hook["attach"] = Effect.gen(function* () {
   const frame = yield* Frame
   const registry = yield* Effect.serviceOption(Devtools.Registry)
-  const tree = yield* UiState.Tree
+  const tree = yield* Trees.Tree
 
   yield* Effect.forEach(
     Option.toArray(registry),
