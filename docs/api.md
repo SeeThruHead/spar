@@ -517,6 +517,17 @@ and keep it up to date, so `App.mount` takes them; `Renderer.html` writes a page
 `find(role, name?)`, `findText(text)`, `gone(role, name?)`, `eventually(assertion)`,
 `click(role, name?)`, `fill(role, name, value)`, `press(key)`.
 
+`Testing.play(component)` mounts a component on a page kept in memory, with no browser and no
+global document, and runs it on the test's own clock and scheduler: its stores, tasks and queries
+are the real ones, against the layers the test provides, and every wait in them moves with
+`TestClock.adjust`. It gives back `click(role, name?)`, `type(role, name, value)`, `press(key)`, `find(role, name?)`
+and `has(text)`.
+Each step settles first (the page has stopped changing), acts, and settles again, so a test reads
+as what a user does and needs no `eventually`. A page that never stops changing fails with
+`NotSettled` (`SPAR_PLAY_NOT_SETTLED`), and something missing from the settled page with
+`NotOnPage` (`SPAR_PLAY_NOT_ON_PAGE`). `packages/spar/test/play.test.tsx` runs the reset counter's
+real task this way, and a query that answers after a second of test time.
+
 ## @spar/ui
 
 `Button`, `SubmitButton`, `TextField`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Menu`,

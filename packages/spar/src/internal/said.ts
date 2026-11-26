@@ -62,6 +62,16 @@ export const atRun = {
     what: "A test expected something and the screen never showed it.",
     fix: "Check the role and name asked for against what the view draws, and that the data it needs was provided in the test's layer.",
   },
+  SPAR_PLAY_NOT_SETTLED: {
+    kind: "run",
+    what: "A Play test waited for the page to stop changing, and it kept changing.",
+    fix: "Look for work that never ends without waiting on time: a loop that writes on every round, or a stream that never pauses. Work that waits on time is moved with TestClock.adjust and does not keep a page from settling.",
+  },
+  SPAR_PLAY_NOT_ON_PAGE: {
+    kind: "run",
+    what: "A Play test asked for something by role and name, and the settled page did not have it.",
+    fix: "Check the role and name against what the view draws, and that the test's layer answers what the page needs. A Play waits only until the page settles; time that has to pass is moved with TestClock.adjust first.",
+  },
 } as const satisfies Readonly<Record<string, Diagnostic>>
 
 export type RunCode = keyof typeof atRun

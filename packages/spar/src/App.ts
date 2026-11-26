@@ -6,7 +6,7 @@ import type { Dehydrated } from "./internal/dehydrated.ts"
 import { Hydrating, OnServer, Seed } from "./internal/server.ts"
 import { Tree, UiTree } from "./internal/uiTree.ts"
 import { ActionScope } from "./internal/actionScope.ts"
-import { browserScheduler } from "./internal/soon.ts"
+import { OnBrowserScheduler, browserScheduler } from "./internal/soon.ts"
 import * as Dom from "./internal/dom.ts"
 import { Frame, noPage } from "./internal/frame.ts"
 import { toHtml } from "./internal/html.ts"
@@ -114,6 +114,11 @@ const taken = Effect.fnUntraced(function* (taking: Taking) {
 const inPageOnly = (renderer: Renderer.Live, effect: Effect.Effect<void>) =>
   renderer.inPage ? effect : Effect.void
 
+const scheduled = <A, E, R>(running: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatMap(OnBrowserScheduler, (inBrowser) =>
+    inBrowser ? Effect.provideService(running, Scheduler.Scheduler, browserScheduler) : running,
+  )
+
 const started = <R, LayerError>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
@@ -189,7 +194,7 @@ const started = <R, LayerError>(
         onSome: (hook) => hook.wrap(running),
       }),
     Effect.scoped,
-    Effect.provideService(Scheduler.Scheduler, browserScheduler),
+    scheduled,
   )
 }
 
