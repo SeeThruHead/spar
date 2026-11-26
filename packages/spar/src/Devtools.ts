@@ -714,24 +714,24 @@ export const LanesPanel = compose(
 const chosenMoment = (
   moments: ReadonlyArray<Timeline.Moment>,
   viewing: number | null,
-): ReadonlyArray<Timeline.Moment> =>
-  viewing === null ? moments.slice(-1) : moments.filter((moment) => moment.seq === viewing)
+): Option.Option<Timeline.Moment> =>
+  viewing === null
+    ? Array.last(moments)
+    : Array.findFirst(moments, (moment) => moment.seq === viewing)
 
-export const eventShown = (moments: ReadonlyArray<Timeline.Moment>, viewing: number | null) => {
-  const found = chosenMoment(moments, viewing)
+const noEvent = { heading: "No event yet", kind: "", detail: "", traceId: "", spanId: "" }
 
-  return {
-    heading: found.map((moment) => `#${moment.seq} ${moment.name}`).join("") || "No event yet",
-    kind: found.map((moment) => moment.kind).join(""),
-    detail: found
-      .map((moment) =>
-        moment.detail === null ? "" : Formatter.formatJson(moment.detail, { space: 2 }),
-      )
-      .join(""),
-    traceId: found.map((moment) => moment.traceId).join(""),
-    spanId: found.map((moment) => moment.spanId).join(""),
-  }
-}
+export const eventShown = (moments: ReadonlyArray<Timeline.Moment>, viewing: number | null) =>
+  Option.match(chosenMoment(moments, viewing), {
+    onNone: () => noEvent,
+    onSome: (moment) => ({
+      heading: `#${moment.seq} ${moment.name}`,
+      kind: moment.kind,
+      detail: moment.detail === null ? "" : Formatter.formatJson(moment.detail, { space: 2 }),
+      traceId: moment.traceId,
+      spanId: moment.spanId,
+    }),
+  })
 
 export const EventPanel = compose(
   Effect.fnUntraced(function* () {

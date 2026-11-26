@@ -35,6 +35,11 @@ const session: ReadonlyArray<Moment> = [
   moment(6, "data", "people"),
 ]
 
+const colourOf = (kind: string) =>
+  ticksDrawn([{ seq: 1, kind, at: "0%" }])
+    .slice("linear-gradient(".length, -1)
+    .split(",")[0]
+
 const surface = (left: number, width: number, clientX: number) => ({
   clientX,
   currentTarget: { getBoundingClientRect: () => ({ left, width }) },
@@ -235,6 +240,8 @@ describe("the event panel", () => {
     })
     expect(eventShown([moment(6, "ui", "x . y"), traced], 6).heading).toBe("#6 x . y")
     expect(eventShown([moment(6, "ui", "x . y")], 6).detail).toBe("")
+    expect(eventShown(session, null).heading).toBe("#6 people")
+    expect(eventShown(session, 42).heading).toBe("No event yet")
   })
 
   it("says so when nothing has happened yet", () => {
@@ -279,6 +286,25 @@ describe("the lanes", () => {
     expect(seqAt(session, surface(100, 1192, 0))).toBe(1)
     expect(seqAt(session, surface(100, 1192, 5000))).toBe(6)
     expect(seqAt([], surface(100, 1192, 500))).toBe(null)
+  })
+
+  it("measure a pointer against the strip between the slot names and the right margin", () => {
+    expect(seqAt(session, surface(100, 1192, 100 + 180 + 700))).toBe(5)
+  })
+
+  it("give every kind of event its own colour", () => {
+    expect(
+      ["command", "ui", "route", "data", "call", "noticed", "refused", "waited"].map(colourOf),
+    ).toEqual([
+      "#6ea8fe",
+      "#c39bff",
+      "#f0b45a",
+      "#4fd1c5",
+      "#8bd17c",
+      "#ff8a94",
+      "#ff8a94",
+      "#f0b45a",
+    ])
   })
 
   it("draw each tick as a small block in its kind's colour", () => {

@@ -103,6 +103,12 @@ const facts = (table: string): ReadonlyArray<string> =>
       .join(" "),
   )
 
+const outlineBox = (): ReadonlyArray<string> => {
+  const { left, top, width, height } = screen.getByLabelText("Highlighted component").style
+
+  return [left, top, width, height]
+}
+
 const asked = Cell.make<ReadonlyArray<string>>([])
 
 const answered = (address: string): Response => {
@@ -183,6 +189,28 @@ const listed = (): ReadonlyArray<string | null | undefined> =>
 
 const rowsScrubbed = (): number =>
   document.querySelectorAll('[data-moment][data-scrubbed="yes"]').length
+
+const eventFacts = (): ReadonlyArray<string | number | null | undefined> => {
+  const cells = [...screen.getByLabelText("About the event").querySelectorAll("td")].map(
+    (cell) => cell.textContent ?? "",
+  )
+
+  return [
+    screen.getByLabelText("Event").querySelector("h2")?.textContent,
+    cells[0],
+    cells[1]?.length,
+    cells[2]?.length,
+    screen.getByLabelText("What the event carried").textContent,
+  ]
+}
+
+const liveness = (): string | null =>
+  screen.getByLabelText("Timeline position").getAttribute("data-live")
+
+const laneTracks = (): ReadonlyArray<string> =>
+  [...document.querySelectorAll<HTMLElement>("[data-lane-track]")].map((track) =>
+    track.style.background.slice(0, "linear-gradient".length),
+  )
 
 const lanesSurface = (): Element => {
   const found = document.querySelector("[data-lanes-surface]")
@@ -271,8 +299,14 @@ describe("devtools an app did not ask for", () => {
           expect(screen.getByLabelText("Trace shown").textContent).toBe("2 spans"),
         )
 
+        expect(liveness()).toBe("yes")
+        expect(laneTracks()).toEqual(["linear-gradient", "linear-gradient"])
         yield* Testing.click("button", "Jump to 1")
         yield* shows("0", "hi", "At 1")
+        yield* Testing.eventually(() =>
+          expect(eventFacts()).toEqual(["#1 Desk . draft", "ui", 32, 16, '"hi"']),
+        )
+        expect(liveness()).toBe("no")
         yield* Testing.eventually(() => expect(changedText()).toMatch(/Desk \. draft.*"hi"/))
         expect(
           [...screen.getByLabelText("Everything that happened").querySelectorAll("ol li")].map(
@@ -313,6 +347,10 @@ describe("devtools an app did not ask for", () => {
         shortcut("ArrowRight")
         yield* shows("1", "later", "Now")
         shortcut("ArrowLeft")
+        yield* shows("1", "later", "At 3")
+        shortcut("KeyX")
+        shortcut("ArrowLeft")
+        yield* shows("1", "hi", "At 2")
         shortcut("End")
         yield* shows("1", "later", "Now")
 
@@ -327,6 +365,17 @@ describe("devtools an app did not ask for", () => {
             lanesButton().getAttribute("aria-pressed"),
           ]).toEqual([String(wasOpen !== "true"), String(lanesWere !== "true")]),
         )
+
+        fireEvent.keyDown(document, { code: "KeyD" })
+        fireEvent.keyDown(document, { code: "KeyL" })
+        shortcut("KeyX")
+        shortcut("KeyD")
+        yield* Testing.eventually(() =>
+          expect([
+            toggle().getAttribute("aria-expanded"),
+            lanesButton().getAttribute("aria-pressed"),
+          ]).toEqual([String(wasOpen === "true"), String(lanesWere !== "true")]),
+        )
       }),
     ),
   )
@@ -337,6 +386,12 @@ describe("devtools an app did not ask for", () => {
         yield* mounted
         yield* Testing.click("button", "Devtools")
         expect(screen.getByLabelText("Picked component").textContent).toBe("Nothing picked yet")
+        expect(
+          ["Where it is", "Services", "Failures it recovers from"].map(
+            (label) => screen.getByLabelText(label).textContent,
+          ),
+        ).toEqual(["", "", ""])
+        expect([facts("Props"), facts("UI state")]).toEqual([[], []])
 
         const draft = yield* Testing.find("textbox", "Draft")
         const tools = yield* Testing.find("button", "Devtools")
@@ -351,6 +406,7 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.eventually(() =>
           expect(screen.getByLabelText("Highlighted component").textContent).toBe("DeskView"),
         )
+        expect(outlineBox()).toEqual(["0px", "0px", "0px", "0px"])
         yield* Effect.sync(() => fireEvent.click(veil, { clientX: 10, clientY: 10 }))
         yield* Testing.gone("button", "Pick a component on the page")
         yield* Testing.eventually(() => expect(facts("Props")).toContain('draft ""'))
