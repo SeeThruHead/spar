@@ -45,8 +45,25 @@ const browser = await launch()
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 
+const reloadedByVite = (error: unknown): boolean =>
+  String(error).includes("is interrupted by another navigation")
+
+const settled = async (left: number): Promise<unknown> => {
+  await page.waitForLoadState("load")
+  await Bun.sleep(1000)
+
+  return opened(left - 1)
+}
+
+const opened = (left: number): Promise<unknown> =>
+  page
+    .goto(address)
+    .catch((error: unknown) =>
+      left > 0 && reloadedByVite(error) ? settled(left) : Promise.reject(error),
+    )
+
 const steps = async (): Promise<ReadonlyArray<string>> => {
-  await page.goto(address)
+  await opened(8)
   await page.getByRole("button", { name: "Devtools" }).click()
   await page.getByRole("searchbox").first().fill("notes")
 
