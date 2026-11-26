@@ -154,6 +154,16 @@ it returned, `mode` (`"switch"`, `"queue"`, `"concurrent"`) says what a second s
 to start it and `running.<name>`, a reactive boolean. What must survive a reload goes on an
 `Outbox.channel` (`apps/sidebar/src/ResetCounterStore.ts`, `docs/state-and-server-data.md`).
 
+`run` may use services. Whatever it needs, the store's layer needs too, so provide it there once,
+not inside `run`:
+
+<<< packages/spar/test/tasks.test.ts#Priced
+
+<<< packages/spar/test/tasks.test.ts#pricing
+
+`Priced.layer` needs `Pricing`, and the type check says so until it is given:
+`Priced.layer.pipe(Layer.provide(pricing))`. A real app provides its server client the same way.
+
 ### A store beside its view
 
 <<< apps/sidebar/src/Notes.tsx

@@ -20,7 +20,7 @@ class Visits extends Store.Tag<Visits>()("test/Visits", {
   tasks: {
     cleared: Store.task(Schema.Void, {
       result: Schema.Void,
-      run: () => Effect.void,
+      run: () => Effect.withSpan(Effect.void, "test/Visits clearing"),
       finish: (): State => ({ visits: 0 }),
       mode: "switch",
     }),
@@ -118,6 +118,30 @@ describe("tracing", () => {
           .filter((span) => span.name === "test/Visits/cleared finished")
           .map((span) => span.attributes["spar.entry"]),
       ).toEqual(finished.map(([, seq]) => seq))
+    }),
+  )
+
+  it.effect("a task's run sits under the span that started it, not where the store was built", () =>
+    Effect.gen(function* () {
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+
+      yield* Effect.gen(function* () {
+        const visits = yield* Visits
+
+        yield* visits.tasks.cleared()
+        yield* Effect.yieldNow
+      }).pipe(
+        Effect.provide(Visits.layer.pipe(Layer.provideMerge(OneState.layer))),
+        Effect.withSpan("test/building"),
+        Effect.provide(spans),
+      )
+
+      const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+
+      expect(named("test/Visits clearing").map((span) => span.parentSpanId)).toEqual(
+        named("test/Visits/cleared").map((span) => span.spanId),
+      )
     }),
   )
 })

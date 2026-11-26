@@ -192,6 +192,9 @@ with async work. The short version:
   changes the state once with what it returned, `mode` says what a second start does, and
   `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
   state; never store a flag. Every start, finish and refusal is in the log and the trace.
+- A task's `run` may use services (a server client, a query). The store's layer then needs them:
+  write `TheStore.layer.pipe(Layer.provide(Server.layer))` once. Never `Effect.provide` a layer
+  inside `run`, which builds a fresh service on every start.
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
   that needs it reads `TheQuery.read(input)` itself.
 - When only the newest run matters (a search box, a filter), give the task `mode: "switch"`,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Duration, Effect, Layer, Option, Ref, Schema } from "effect"
+import { Context, Duration, Effect, Layer, Option, Ref, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { State as OneState, Store, Timeline } from "spar"
 
@@ -66,6 +66,29 @@ class Together extends Store.Tag<Together>()("test/Together", {
   selectors,
   tasks: { add: added("concurrent") },
 }) {}
+
+class Pricing extends Context.Service<
+  Pricing,
+  { readonly priceOf: (count: number) => Effect.Effect<number> }
+>()("test/Pricing") {}
+
+class Priced extends Store.Tag<Priced>()("test/Priced", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: {
+    priced: Store.task(Schema.Void, {
+      result: Schema.Finite,
+      run: (_: void, state: State) =>
+        Effect.flatMap(Pricing, (pricing) => pricing.priceOf(state.count)),
+      finish: (state: State, price: number): State => ({ ...state, count: price }),
+      mode: "switch",
+    }),
+  },
+}) {}
+
+const pricing = Layer.succeed(Pricing, { priceOf: (count) => Effect.succeed(count * 100 + 7) })
 
 const recorded = Effect.gen(function* () {
   const notes = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
@@ -189,6 +212,20 @@ describe("a store's task", () => {
       expect(yield* counter.select.count.get).toBe(11)
       expect(yield* counter.running.add.get).toBe(false)
     }).pipe(Effect.provide(Together.layer.pipe(Layer.provideMerge(OneState.layer)))),
+  )
+
+  it.effect("a task's run can use a service that the store's layer is given", () =>
+    Effect.gen(function* () {
+      const counter = yield* Priced
+
+      yield* counter.commands.incremented()
+      yield* counter.tasks.priced()
+      yield* Effect.yieldNow
+
+      expect(yield* counter.select.count.get).toBe(107)
+    }).pipe(
+      Effect.provide(Priced.layer.pipe(Layer.provide(pricing), Layer.provideMerge(OneState.layer))),
+    ),
   )
 
   it.effect("a log holding a task's start and finish replays to the same state", () =>
