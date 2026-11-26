@@ -379,7 +379,7 @@ export const made = Effect.fnUntraced(function* <
     Effect.updateContext(work, (current: Context.Context<never>) => Context.merge(needed, current))
   const worked = (name: string, job: Task<State, unknown, string, Needs>, payload: Schema.Json) =>
     Effect.flatMap(slot.value.get, (now) =>
-      Effect.flatMap(givenNeeds(job.work(payload, now)), (result) =>
+      Effect.flatMap(givenNeeds(Effect.scoped(job.work(payload, now))), (result) =>
         Effect.flatMap(Effect.orDie(job.finished(result)), (reduce) =>
           traced(finishedName(name), applied(finishedName(name), reduce, result)),
         ),

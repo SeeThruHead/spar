@@ -106,6 +106,30 @@ class Priced extends Store.Tag<Priced>()("test/Priced", {
 
 const pricing = Layer.succeed(Pricing, { priceOf: (count) => Effect.succeed(count * 100 + 7) })
 
+class Opened extends Context.Service<Opened, Ref.Ref<ReadonlyArray<string>>>()("test/Opened") {}
+
+const opening = (line: string) =>
+  Effect.flatMap(Opened, (lines) => Ref.update(lines, (all) => [...all, line]))
+
+class Opening extends Store.Tag<Opening>()("test/Opening", {
+  state: State,
+  initialState,
+  actions: counting,
+  selectors,
+  tasks: {
+    opened: Store.task(Schema.Void, {
+      result: Schema.Finite,
+      run: () =>
+        Effect.as(
+          Effect.acquireRelease(opening("opened"), () => opening("closed")),
+          1,
+        ),
+      finish: (state: State, by: number): State => ({ ...state, count: state.count + by }),
+      mode: "concurrent",
+    }),
+  },
+}) {}
+
 const recorded = Effect.gen(function* () {
   const notes = yield* Ref.make<ReadonlyArray<Timeline.Noted>>([])
 
@@ -317,6 +341,25 @@ describe("a store's task", () => {
     }).pipe(
       Effect.provide(Priced.layer.pipe(Layer.provide(pricing), Layer.provideMerge(OneState.layer))),
     ),
+  )
+
+  it.effect("a task's run closes what it opened when the run ends, not when the store goes", () =>
+    Effect.gen(function* () {
+      const lines = yield* Ref.make<ReadonlyArray<string>>([])
+
+      yield* Effect.gen(function* () {
+        const store = yield* Opening
+
+        yield* store.tasks.opened()
+        yield* Effect.yieldNow
+
+        expect(yield* store.select.count.get).toBe(1)
+        expect(yield* Ref.get(lines)).toEqual(["opened", "closed"])
+      }).pipe(
+        Effect.provide(Opening.layer.pipe(Layer.provideMerge(OneState.layer))),
+        Effect.provideService(Opened, lines),
+      )
+    }),
   )
 
   it.effect("a log holding a task's start and finish replays to the same state", () =>
