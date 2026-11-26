@@ -196,6 +196,24 @@ export const LanesView = View.make(
   ),
 )
 
+export const ChainLinkView = View.make(
+  "ChainLinkView",
+  {
+    seq: Schema.String,
+    kind: Props.Reactive(Schema.String),
+    summary: Props.Reactive(Schema.String),
+    here: Props.Reactive(Schema.Boolean),
+    onJump: Props.Action,
+  },
+  ({ seq, kind, summary, here, onJump }) => (
+    <li aria-current={here} data-kind={kind}>
+      <button type="button" title="Show the app as it was here" onClick={onJump}>
+        <span data-seq="">{seq}</span> <span data-kind-name="">{kind}</span> <code>{summary}</code>
+      </button>
+    </li>
+  ),
+)
+
 export const EventView = View.make(
   "EventView",
   {
@@ -205,10 +223,17 @@ export const EventView = View.make(
     traceId: Props.Reactive(Schema.String),
     spanId: Props.Reactive(Schema.String),
     changes: Props.Reactive(Schema.String),
+    chain: Props.Element,
+    chainSaid: Props.Reactive(Schema.String),
   },
-  ({ heading, kind, detail, traceId, spanId, changes }) => (
+  ({ heading, kind, detail, traceId, spanId, changes, chain, chainSaid }) => (
     <section aria-label="Event">
       <h2>{heading}</h2>
+      <h3>Cause and effect</h3>
+      <p>{chainSaid}</p>
+      <ol aria-label="Cause and effect" data-chain="">
+        {chain}
+      </ol>
       <table aria-label="About the event">
         <tbody>
           <tr>
@@ -487,6 +512,10 @@ const look = [
   "[data-marker], [data-scrubber] { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; pointer-events: none }",
   "[data-marker] { background: #ffffff; opacity: 0.85 } [data-scrubber] { background: #f0b45a }",
   "[data-moment][data-scrubbed=yes] { background: #3a2e17; color: #fff }",
+  "[data-chain] { margin: 0 12px; padding: 0 0 0 14px; border-left: 2px solid #262a33; list-style: none }",
+  "[data-chain] li { margin: 2px 0 }",
+  "[data-chain] button { display: block; width: 100%; padding: 3px 8px; border-radius: 4px; border-color: transparent; background: none; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }",
+  "[data-chain] li[aria-current=true] button { border-color: #6ea8fe; background: #1b2a44; color: #fff }",
   "[data-spar-devtools-sheet][hidden] { display: none }",
   "html:has([data-spar-devtools-sheet]:not([hidden])) body { margin-inline-end: clamp(760px, 62vw, 1400px) }",
   "@media (max-width: 1000px) { [data-spar-devtools-sheet] { inset: auto 0 0 0; width: 100%; height: 60vh; border-left: 0; border-top: 1px solid #262a33 } html:has([data-spar-devtools-sheet]:not([hidden])) body { margin-inline-end: 0; margin-block-end: 60vh } }",

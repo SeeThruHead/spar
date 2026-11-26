@@ -3,6 +3,8 @@ import type { Schema } from "effect"
 import {
   aboutSpan,
   acrossLanes,
+  chainOf,
+  chainSaid,
   changeLines,
   changesText,
   eventShown,
@@ -255,6 +257,30 @@ describe("the event panel", () => {
     expect(eventShown([moment(6, "ui", "x . y")], 6).detail).toBe("")
     expect(eventShown(session, null).heading).toBe("#6 people")
     expect(eventShown(session, 42).heading).toBe("No event yet")
+  })
+
+  it("links each event to the others in its trace, in order", () => {
+    const traced = (seq: number, name: string, traceId: string): Moment => ({
+      ...moment(seq, "command", name),
+      traceId,
+    })
+    const moments = [
+      traced(1, "a/pressed", "t1"),
+      traced(2, "a/started", "t1"),
+      moment(3, "ui", "x . y"),
+      traced(4, "b/other", "t2"),
+      traced(5, "a/finished", "t1"),
+    ]
+
+    expect(chainOf(moments, 2).map((found) => found.seq)).toEqual([1, 2, 5])
+    expect(chainOf(moments, 3).map((found) => found.seq)).toEqual([3])
+    expect(chainOf(moments, null).map((found) => found.seq)).toEqual([1, 2, 5])
+    expect(chainOf(moments, 42)).toEqual([])
+    expect(chainSaid(chainOf(moments, 2))).toBe(
+      "3 events share its trace: what started it, then what it led to, in order.",
+    )
+    expect(chainSaid(chainOf(moments, 3))).toBe("Nothing else happened in its trace.")
+    expect(chainSaid([])).toBe("")
   })
 
   it("says so when nothing has happened yet", () => {

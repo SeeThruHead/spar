@@ -22,6 +22,7 @@ import {
   DeadView,
   EntryView,
   FactView,
+  ChainLinkView,
   EventView,
   InspectorView,
   LaneView,
@@ -740,13 +741,51 @@ export const eventShown = (moments: ReadonlyArray<Timeline.Moment>, viewing: num
     }),
   })
 
+export const chainOf = (
+  moments: ReadonlyArray<Timeline.Moment>,
+  viewing: number | null,
+): ReadonlyArray<Timeline.Moment> =>
+  Option.match(chosenMoment(moments, viewing), {
+    onNone: () => [],
+    onSome: (moment) =>
+      moment.traceId === ""
+        ? [moment]
+        : moments.filter((other) => other.traceId === moment.traceId),
+  })
+
+export const chainSaid = (chain: ReadonlyArray<Timeline.Moment>): string => {
+  if (chain.length === 0) return ""
+  if (chain.length === 1) return "Nothing else happened in its trace."
+
+  return `${chain.length} events share its trace: what started it, then what it led to, in order.`
+}
+
 export const EventPanel = compose(
   Effect.fnUntraced(function* () {
     const registry = yield* Registry
     const chosen = yield* Reactive.zip(registry.moments, registry.viewing)
     const shown = Reactive.map(chosen, ([moments, viewing]) => eventShown(moments, viewing))
+    const chain = Reactive.map(chosen, ([moments, viewing]) => chainOf(moments, viewing))
+    const here = Reactive.map(chosen, ([moments, viewing]) =>
+      Option.getOrNull(Option.map(chosenMoment(moments, viewing), (moment) => moment.seq)),
+    )
 
     return {
+      chain: yield* pipe(
+        chain,
+        Reactive.mapBy(
+          (moment: Timeline.Moment) => String(moment.seq),
+          ChainLinkView,
+          (moment, seq) => ({
+            seq,
+            kind: Reactive.map(moment, (now) => now.kind),
+            summary: Reactive.map(moment, summaryOfMoment),
+            here: Reactive.map(here, (now) => String(now) === seq),
+            onJump: registry.travelTo(Number(seq)),
+          }),
+        ),
+      ),
+      chainSaid: Reactive.map(chain, chainSaid),
       heading: Reactive.map(shown, (now) => now.heading),
       kind: Reactive.map(shown, (now) => now.kind),
       detail: Reactive.map(shown, (now) => now.detail),

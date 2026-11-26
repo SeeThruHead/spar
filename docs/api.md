@@ -445,6 +445,9 @@ What the tools show, docked at the corner of the page:
   moment, and stepping opens the trace of the moment stepped to. From the keyboard, with Alt and
   Shift held: ← and → step, End goes back to now, L shows or hides the lanes, and D opens or
   closes the panel. None of these is a key an app is likely to want.
+- **Cause and effect.** The moment being shown lists every moment in its trace, in order: the
+  press or route change that started it, then each command, task, request, refusal and answer it
+  led to. Each one jumps there, so a task's start links to how it finished or why it was refused.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
   page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
