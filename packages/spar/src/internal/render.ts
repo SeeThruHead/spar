@@ -322,20 +322,35 @@ const settle = (later: Cell.Waiting<Later>): Later =>
 
 type Owned = { readonly scope: Scope.Closeable | undefined; readonly owner: Cell.Owner }
 
-const closeScope = (scope: Scope.Closeable | undefined): Effect.Effect<void> =>
-  scope === undefined ? Effect.void : Scope.close(scope, Exit.void)
+const scopesOf = (entries: ReadonlyArray<Owned>): ReadonlyArray<Scope.Closeable> =>
+  entries.flatMap((entry) => (entry.scope === undefined ? [] : [entry.scope]))
 
-const closeEntry = (entry: Owned): Effect.Effect<void> =>
+const closeEntries = (entries: ReadonlyArray<Owned>): Effect.Effect<void> =>
   Effect.andThen(
-    closeScope(entry.scope),
-    Effect.sync(() => Cell.release(entry.owner)),
+    Effect.forEach(scopesOf(entries), (scope) => Scope.close(scope, Exit.void), { discard: true }),
+    Effect.sync(() => entries.forEach((entry) => Cell.release(entry.owner))),
   )
 
-const removeEntry = <A>(entry: Entry<A>): Effect.Effect<void> =>
+const removeEntries = <A>(entries: ReadonlyArray<Entry<A>>): Effect.Effect<void> =>
   Effect.andThen(
-    closeEntry(entry),
-    Effect.sync(() => Dom.removeSpan(entry)),
+    closeEntries(entries),
+    Effect.sync(() => entries.forEach(Dom.removeSpan)),
   )
+
+const removeAll = <A>(
+  entries: ReadonlyArray<Entry<A>>,
+  parent: Dom.Host,
+  anchor: Node,
+): Effect.Effect<void> => {
+  const first = entries.at(0)
+  const last = entries.at(-1)
+  if (first === undefined || last === undefined) return Effect.void
+
+  return Effect.andThen(
+    closeEntries(entries),
+    Effect.sync(() => Dom.removeRun(parent, first, last, anchor)),
+  )
+}
 
 const mountEntry = <A>(
   rows: Mounted<A>,
@@ -355,7 +370,7 @@ const mountEntry = <A>(
 
       return Effect.as(settle(later), entry)
     }),
-    Effect.onError(() => closeEntry({ scope, owner })),
+    Effect.onError(() => closeEntries([{ scope, owner }])),
     Scope.provide(scope),
   )
 }
@@ -518,7 +533,7 @@ const fillRows = Effect.fnUntraced(function* <A>(
         rows.kind === "drawn"
           ? drawEach(rows, wanted, positions, keptCount, inside, made)
           : mountEach(rows, wanted, positions, keptCount, inside, made)
-      ).pipe(Effect.onError(() => Effect.forEach(Cell.take(made), removeEntry, { discard: true })))
+      ).pipe(Effect.onError(() => Effect.suspend(() => removeEntries(Cell.take(made)))))
 
       return claim === undefined
         ? placed
@@ -542,11 +557,9 @@ const fillRows = Effect.fnUntraced(function* <A>(
 
       const kept = previous.filter((entry) => keys.has(entry.key))
 
-      yield* Effect.forEach(
-        previous.filter((entry) => !keys.has(entry.key)),
-        removeEntry,
-        { discard: true },
-      )
+      yield* kept.length === 0
+        ? removeAll(previous, place.parent, anchor)
+        : removeEntries(previous.filter((entry) => !keys.has(entry.key)))
 
       if (onlyRemoved(previous, kept, nextKeys)) {
         kept.forEach((entry, index) => rewritten(entry, next[index]))
@@ -568,9 +581,7 @@ const fillRows = Effect.fnUntraced(function* <A>(
     Effect.provideService(Scheduler.PreventSchedulerYield, true),
   )
 
-  yield* Effect.addFinalizer(() =>
-    Effect.flatMap(Ref.get(entries), (all) => Effect.forEach(all, closeEntry, { discard: true })),
-  )
+  yield* Effect.addFinalizer(() => Effect.flatMap(Ref.get(entries), closeEntries))
 
   const turn = yield* Semaphore.make(1)
   const scope = yield* Effect.scope

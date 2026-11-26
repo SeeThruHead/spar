@@ -123,6 +123,26 @@ export const removeSpan = (span: Span): void => {
   nodesOf(span.start, span.end).forEach((node) => node.remove())
 }
 
+const holdsOnly = (parent: Host, first: Span, anchor: Node): boolean => {
+  if (parent.firstChild !== first.start) return false
+
+  return parent.lastChild === anchor
+}
+
+export const removeRun = (parent: Host, first: Span, last: Span, anchor: Node): void => {
+  if (holdsOnly(parent, first, anchor)) {
+    parent.textContent = ""
+
+    return void parent.appendChild(anchor)
+  }
+
+  const range = parent.ownerDocument.createRange()
+
+  range.setStartBefore(first.start)
+  range.setEndAfter(last.end)
+  range.deleteContents()
+}
+
 const movedKeepingState = (parent: Node, node: ChildNode, before: Node): boolean => {
   const moveBefore: unknown = Reflect.get(parent, "moveBefore")
   if (!Predicate.isFunction(moveBefore)) return false
