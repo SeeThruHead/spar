@@ -1522,7 +1522,12 @@ means no argument). The handle has `result` and `refetch`. `result` is a reactiv
 `AsyncResult` from `effect/reactivity`: `Initial` while the input is none or nothing has loaded,
 `Success` with the value, `Failure` with the typed error (and the last success, if any), each with
 `waiting: true` while a request runs. While a new input loads, `result` stays the last `Success`,
-marked `waiting`, so paging never blanks. It asks again
+marked `waiting`, so paging never blanks. Three readers turn a handle into what a view shows.
+`Query.shown(handle, { loading, failed, loaded })` maps every state, a failure included.
+`Query.valueOr(handle, (error) => fallback)` is the value, with the fallback in place of a
+failure. `Query.valueOf(handle)` is the value alone, and takes only a query whose failure is
+`Schema.Never`: given one that can fail it does not compile (SPAR_UNHANDLED_FAILURE), since the
+failure would show as nothing. Reading `result` by hand stays possible, and is not checked. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,
@@ -4404,6 +4409,14 @@ Reported by: The running app: an error's message, or an entry in the log.
 A query that takes no input was given one, such as a value made from another query. It would wait for that value for nothing, so it does not compile: the argument is not assignable to parameter of type 'void' (TS2345).
 
 Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.
+
+Reported by: The TypeScript compiler, in the text of a type error.
+
+#### SPAR_UNHANDLED_FAILURE
+
+Query.valueOf was given a query that can fail. It reads only the value, so a failure would show as nothing at all, as if still loading. It does not compile: the handle is not assignable to SPAR_UNHANDLED_FAILURE (TS2345).
+
+Fix: Say what the view shows when it fails: Query.shown(handle, { loading, failed, loaded }) for every state, or Query.valueOr(handle, (error) => fallback) for a value to use in its place. Query.valueOf is for queries whose failure is Schema.Never.
 
 Reported by: The TypeScript compiler, in the text of a type error.
 

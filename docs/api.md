@@ -357,7 +357,12 @@ means no argument). The handle has `result` and `refetch`. `result` is a reactiv
 `AsyncResult` from `effect/reactivity`: `Initial` while the input is none or nothing has loaded,
 `Success` with the value, `Failure` with the typed error (and the last success, if any), each with
 `waiting: true` while a request runs. While a new input loads, `result` stays the last `Success`,
-marked `waiting`, so paging never blanks. It asks again
+marked `waiting`, so paging never blanks. Three readers turn a handle into what a view shows.
+`Query.shown(handle, { loading, failed, loaded })` maps every state, a failure included.
+`Query.valueOr(handle, (error) => fallback)` is the value, with the fallback in place of a
+failure. `Query.valueOf(handle)` is the value alone, and takes only a query whose failure is
+`Schema.Never`: given one that can fail it does not compile (SPAR_UNHANDLED_FAILURE), since the
+failure would show as nothing. Reading `result` by hand stays possible, and is not checked. It asks again
 when the input changes; an input that is still fresh is a cache hit. One request runs for each
 input at a time (a second is not sent) and an answer to an earlier request is ignored. Because
 nothing awaits in a component's Effect, every query declared in a tree starts in the same pass,

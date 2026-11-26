@@ -72,6 +72,12 @@ const expectations: ReadonlyArray<Expectation> = [
       "Type 'Effect<never, string, never>' is not assignable to type 'Effect<void, never, never>'",
   },
   {
+    file: "query-read-without-its-failure.ts",
+    rule: "Reading the value of a query that can fail with nothing to show for its failure",
+    by: "types",
+    expect: "SPAR_UNHANDLED_FAILURE",
+  },
+  {
     file: "reducer-without-a-state-type.ts",
     rule: "Writing a store action's reducer without a type on its state parameter",
     by: "types",
