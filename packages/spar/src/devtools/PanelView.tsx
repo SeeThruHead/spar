@@ -700,6 +700,8 @@ export const StoreView = View.make(
     onExport: Props.Action,
     onPaste: Props.Handler("input", "textarea"),
     onLoad: Props.Action,
+    recorded: Props.Reactive(Schema.String),
+    onRecord: Props.Action,
   },
   (props) => (
     <section aria-label={props.name}>
@@ -724,6 +726,8 @@ export const StoreView = View.make(
       />
       <button onClick={props.onLoad}>Load log</button>
       <output aria-label={`${props.name} problem`}>{props.problem}</output>
+      <button onClick={props.onRecord}>Record as a test</button>
+      <textarea aria-label={`${props.name} recording`} readOnly={true} value={props.recorded} />
     </section>
   ),
 )

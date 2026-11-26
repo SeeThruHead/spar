@@ -200,6 +200,22 @@ Fix: Check the role and name against what the view draws, and that the test's la
 
 Reported by: The running app: an error's message, or an entry in the log.
 
+### SPAR_REPLAY_DIVERGED
+
+A recorded session was replayed against the store, and one of its steps made a different state than it did when it was recorded.
+
+Fix: Read the step the report names, and the recorded and replayed states beside it. If the change is a bug, fix the action's reducer. If the new state is right, record the session again from the devtools.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
+### SPAR_REPLAY_UNREADABLE
+
+A recorded session holds a state or payload that the store's schemas no longer read.
+
+Fix: The store's state or that action's payload schema changed since the session was recorded. Record it again, or keep the old shape readable with a Schema transformation.
+
+Reported by: The running app: an error's message, or an entry in the log.
+
 ### SPAR_NEEDLESS_WAIT
 
 A query that takes no input was given one, such as a value made from another query. It would wait for that value for nothing, so it does not compile: the argument is not assignable to parameter of type 'void' (TS2345).

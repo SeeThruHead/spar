@@ -528,6 +528,20 @@ as what a user does and needs no `eventually`. A page that never stops changing 
 `NotOnPage` (`SPAR_PLAY_NOT_ON_PAGE`). `packages/spar/test/play.test.tsx` runs the reset counter's
 real task this way, and a query that answers after a second of test time.
 
+`Testing.replay(Store, recording)` turns a recorded session into a regression test. In the
+devtools, a store's "Record as a test" button copies its log with the state each step made
+(`Store.RecordingText`: the start state, then each action, payload and state). Save it beside a
+test and replay it:
+
+<<< packages/spar/test/replay.test.ts#replayedFrom
+
+The replay runs each step's reducer from the recorded start, without running tasks: a task's
+finish is replayed from the result that was logged. It succeeds with the last state, and fails at
+the first step whose state differs with `Diverged` (`SPAR_REPLAY_DIVERGED`), which names the step
+and gives the recorded and replayed states. An action the store no longer has fails with
+`Store.UnknownAction`, and a state or payload its schemas no longer read with `Unreadable`
+(`SPAR_REPLAY_UNREADABLE`).
+
 ## @spar/ui
 
 `Button`, `SubmitButton`, `TextField`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Menu`,

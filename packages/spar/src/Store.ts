@@ -1,4 +1,11 @@
-export { Entries, LogText } from "./internal/journal.ts"
+export {
+  Entries,
+  LogText,
+  Recording,
+  RecordingText,
+  Step,
+  UnknownAction,
+} from "./internal/journal.ts"
 export type { Action, Entry, Mode, Selector, Task } from "./internal/journal.ts"
 export { withRow } from "./internal/rows.ts"
 export { Inspector, Tag, action, selector, task } from "./internal/store.ts"

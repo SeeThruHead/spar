@@ -265,6 +265,7 @@ describe("forking the running program", () => {
         state: Reactive.succeed(null),
         stateAt: () => Effect.succeed(null),
         log: Reactive.succeed([]),
+        recording: Effect.succeed({ store: "test/Late", start: null, steps: [] }),
         viewing: Reactive.succeed(null),
         travelTo: () => Effect.void,
         actions: () => [],

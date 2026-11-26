@@ -14,6 +14,20 @@ export const Entries = Schema.Array(StoredEntry)
 
 export const LogText = Schema.fromJsonString(Entries)
 
+export const Step = Schema.Struct({ ...StoredEntry.fields, state: Schema.Json })
+
+export type Step = typeof Step.Type
+
+export const Recording = Schema.Struct({
+  store: Schema.String,
+  start: Schema.Json,
+  steps: Schema.Array(Step),
+})
+
+export type Recording = typeof Recording.Type
+
+export const RecordingText = Schema.fromJsonString(Recording)
+
 export type Action<State, Payload> = {
   readonly encode: (input: unknown) => Effect.Effect<Schema.Json, Schema.SchemaError>
   readonly schema: Schema.Top

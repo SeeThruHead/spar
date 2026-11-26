@@ -7,6 +7,8 @@ import * as Diagnostics from "./internal/said.ts"
 
 export { NotOnPage, NotSettled, play } from "./internal/play.ts"
 export type { Play } from "./internal/play.ts"
+export { Diverged, Unreadable, replay } from "./internal/replay.ts"
+export type { Replayable } from "./internal/replay.ts"
 
 export class NotOnScreen extends Schema.TaggedError<
   NotOnScreen,
