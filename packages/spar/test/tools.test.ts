@@ -117,7 +117,7 @@ const answered = (address: string): Response => {
 
   asked.write([
     ...asked.read(),
-    address.slice(address.indexOf("/@spar"), address.lastIndexOf("/") + 1),
+    `${address.slice(address.indexOf("/@spar"), address.lastIndexOf("/") + 1)}${address.slice(address.lastIndexOf("?"))}`,
   ])
 
   return first
@@ -204,6 +204,11 @@ const eventFacts = (): ReadonlyArray<string | number | null | undefined> => {
   ]
 }
 
+const branchesListed = (): ReadonlyArray<string> =>
+  [...screen.getByLabelText("Branches").querySelectorAll("button")].map((button) =>
+    [button.textContent, button.title, button.getAttribute("aria-pressed")].join(" | "),
+  )
+
 const liveness = (): string | null =>
   screen.getByLabelText("Timeline position").getAttribute("data-live")
 
@@ -245,6 +250,34 @@ describe("the lanes", () => {
         yield* Testing.click("button", "Back to now")
       }).pipe(Effect.scoped),
     ),
+  )
+
+  it.live(
+    "a fork from an earlier event is listed beside the main line, and switching goes back",
+    () =>
+      withTools(
+        Effect.gen(function* () {
+          yield* mounted
+          yield* Testing.click("button", "Devtools")
+          yield* Testing.fill("textbox", "Draft", "hi")
+          yield* Testing.click("button", "Add")
+          yield* Testing.eventually(() => expect(listed()).toHaveLength(2))
+          yield* Testing.click("button", "Jump to 1")
+          yield* Testing.click("button", "Fork from here")
+          yield* Testing.eventually(() => expect(branchesListed()).toHaveLength(2))
+          expect(branchesListed()).toEqual([
+            "Main | 2 moments | false",
+            "Fork 1 | 1 moments, forked at 1 | true",
+          ])
+          yield* Testing.click("button", "Main")
+          yield* Testing.eventually(() =>
+            expect(branchesListed()).toEqual([
+              "Main | 2 moments | true",
+              "Fork 1 | 1 moments, forked at 1 | false",
+            ]),
+          )
+        }).pipe(Effect.scoped),
+      ),
   )
 
   it.live("hide and show from the bar", () =>
@@ -538,12 +571,18 @@ describe("devtools an app did not ask for", () => {
           ),
         )
         expect(asked.read()).toEqual([
-          "/@spar/backend/0/spans/",
-          "/@spar/backend/1/spans/",
-          "/@spar/backend/2/spans/",
+          "/@spar/backend/0/spans/?ask=1",
+          "/@spar/backend/1/spans/?ask=1",
+          "/@spar/backend/2/spans/?ask=1",
         ])
         yield* Testing.click("button", "Refresh trace")
-        yield* Testing.eventually(() => expect(asked.read()).toHaveLength(6))
+        yield* Testing.eventually(() =>
+          expect(asked.read().slice(3)).toEqual([
+            "/@spar/backend/0/spans/?ask=2",
+            "/@spar/backend/1/spans/?ask=2",
+            "/@spar/backend/2/spans/?ask=2",
+          ]),
+        )
         yield* Testing.click("button", "Backend")
         yield* Testing.eventually(() =>
           expect(spans().every((line) => line.startsWith("backend "))).toBe(true),
