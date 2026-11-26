@@ -60,6 +60,14 @@ class CounterModel extends Store.Tag<CounterModel>()("test/CounterModel", {
   },
 }) {}
 
+class NamedCounter extends Store.Tag<NamedCounter>()("test/NamedCounter", {
+  state: Counting,
+  initialState: { count: 0, resetting: false },
+  actions: CounterModel.actions,
+  selectors: { count: Store.selector(Schema.Int, (now: Counting) => now.count) },
+  savedAs: "counter.v2",
+}) {}
+
 class Resets extends Context.Service<Resets, { readonly reset: Effect.Effect<void> }>()(
   "test/Resets",
 ) {
@@ -202,6 +210,43 @@ describe("a store on one state", () => {
       )
 
       expect(restarted).toBe(3)
+    }),
+  )
+
+  it.live("saves under the key it names, or under its own store key when it names none", () =>
+    Effect.gen(function* () {
+      const storage = yield* Layer.build(KeyValueStore.layerMemory)
+      const store = Context.get(storage, KeyValueStore.KeyValueStore)
+      const savedIn = <Self,>(layer: Layer.Layer<Self, never, KeyValueStore.KeyValueStore>) =>
+        layer.pipe(Layer.provide(Layer.succeedContext(storage)), Layer.provideMerge(keepingLayer))
+
+      yield* store.set("counter.v2", JSON.stringify({ count: 41, resetting: false }))
+
+      const restarted = yield* Effect.scoped(
+        Effect.provide(
+          Effect.gen(function* () {
+            const counter = yield* NamedCounter
+
+            yield* counter.commands.incremented()
+
+            return yield* counter.select.count.get
+          }),
+          savedIn(NamedCounter.layerSaved),
+        ),
+      )
+
+      yield* Effect.scoped(
+        Effect.provide(
+          Effect.flatMap(CounterModel, (counter) => counter.commands.added(2)),
+          savedIn(CounterModel.layerSaved),
+        ),
+      )
+
+      expect(restarted).toBe(42)
+      expect(yield* store.get("counter.v2")).toBe(JSON.stringify({ count: 42, resetting: false }))
+      expect(yield* store.get("spar/state/test/CounterModel")).toBe(
+        JSON.stringify({ count: 2, resetting: false }),
+      )
     }),
   )
 

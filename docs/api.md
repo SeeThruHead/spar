@@ -184,7 +184,8 @@ folder is not page state and is left alone.
 
 A store placed with `TheStore.layerSaved` saves its state on the device in the same step as each
 command, so a reload or a close straight after a click loses nothing, and it starts from what was
-saved. Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
+saved. It saves under `spar/state/<store key>`; give the definition `savedAs: "chat-room.v1"` to
+save under a key of your own (a versioned key, one older code already reads, or a spec's name). Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
 saving, a tab tells the others, and each reads the saved state again (on the broadcast message and
 on the browser's own storage event, whichever arrives once the new value is visible). Two tabs that
 write at the same moment end on whichever saved last. Without the layer a store behaves as if it

@@ -109,6 +109,7 @@ in an enhancer and pass `props.shown` instead.
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                              | `fetch`, `FetchHttpClient.layer`                                                                               |
 | Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                                    | Calling the server from a handler and hoping                                                                   |
 | Keep a store across a reload              | `SomeStore.layerSaved`, with a `KeyValueStore`; other tabs that save it are followed                                                          | Writing to `localStorage` by hand                                                                              |
+| Save a store under a key you were given   | `savedAs: "the-key"` in the store's definition, then `SomeStore.layerSaved`                                                                   | Copying the state to `localStorage` under that key yourself                                                    |
 | Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                                                                                     | `catchAll` that hides it; leaving it (compile error)                                                           |
 | Show something while a component loads    | `View.pending(LoadingView)`                                                                                                                   | A loading flag in UI state                                                                                     |
 | Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)`                                                        | `location.href`, string paths                                                                                  |
@@ -1283,7 +1284,8 @@ folder is not page state and is left alone.
 
 A store placed with `TheStore.layerSaved` saves its state on the device in the same step as each
 command, so a reload or a close straight after a click loses nothing, and it starts from what was
-saved. Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
+saved. It saves under `spar/state/<store key>`; give the definition `savedAs: "chat-room.v1"` to
+save under a key of your own (a versioned key, one older code already reads, or a spec's name). Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
 saving, a tab tells the others, and each reads the saved state again (on the broadcast message and
 on the browser's own storage event, whichever arrives once the new value is visible). Two tabs that
 write at the same moment end on whichever saved last. Without the layer a store behaves as if it

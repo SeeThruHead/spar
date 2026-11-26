@@ -32,6 +32,7 @@ export type Service = {
     path: ReadonlyArray<string>,
     schema: Schema.Codec<A, I>,
     initial: A,
+    savedAs?: string,
   ) => Effect.Effect<Slot<A>, never, Scope.Scope>
   readonly log: Reactive<ReadonlyArray<Written>>
   readonly viewing: Reactive<number | null>
@@ -44,17 +45,18 @@ const Saving = Context.Reference<Option.Option<KeyValueStore.KeyValueStore>>("sp
   defaultValue: Option.none,
 })
 
-const storedKey = (path: ReadonlyArray<string>): string => `spar/state/${path.join(" / ")}`
+const storedKey = (path: ReadonlyArray<string>, savedAs: string | undefined): string =>
+  savedAs ?? `spar/state/${path.join(" / ")}`
 
 const savedValue = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
-  path: ReadonlyArray<string>,
+  key: string,
   schema: Schema.Codec<A, I>,
 ): Effect.Effect<Option.Option<A>> =>
   Option.match(saving, {
     onNone: () => Effect.succeedNone,
     onSome: (store) =>
-      Effect.map(Effect.orDie(store.get(storedKey(path))), (kept) =>
+      Effect.map(Effect.orDie(store.get(key)), (kept) =>
         Option.flatMap(
           Option.fromUndefinedOr(kept),
           Schema.decodeUnknownOption(Schema.fromJsonString(Schema.toCodecJson(schema))),
@@ -75,7 +77,7 @@ const replacedBy = <A, I>(
 const writtenAndSaved = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
   tabs: Tabs.Tabs,
-  path: ReadonlyArray<string>,
+  key: string,
   schema: Schema.Codec<A, I>,
   kept: Kept<A>,
   name: string,
@@ -95,25 +97,25 @@ const writtenAndSaved = <A, I>(
               Effect.orDie(
                 Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(value),
               ),
-              (text) => Effect.orDie(store.set(storedKey(path), text)),
+              (text) => Effect.orDie(store.set(key, text)),
             ),
           )
         }),
-        tabs.announce(storedKey(path)),
+        tabs.announce(key),
       ),
   })
 
 const followOtherTabs = <A, I>(
   saving: Option.Option<KeyValueStore.KeyValueStore>,
   tabs: Tabs.Tabs,
-  path: ReadonlyArray<string>,
+  key: string,
   schema: Schema.Codec<A, I>,
   kept: Kept<A>,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.forEach(Option.toArray(saving), () =>
     Effect.forkScoped(
-      Stream.runForEach(tabs.announced(storedKey(path)), () =>
-        Effect.flatMap(savedValue(saving, path, schema), (found) =>
+      Stream.runForEach(tabs.announced(key), () =>
+        Effect.flatMap(savedValue(saving, key, schema), (found) =>
           Effect.forEach(
             Option.toArray(found),
             (now) => replacedBy(kept, schema, fromAnotherTab, now),
@@ -130,23 +132,25 @@ const slotIn = (tree: Tree) =>
     path: ReadonlyArray<string>,
     schema: Schema.Codec<A, I>,
     initial: A,
+    savedAs?: string,
   ): Effect.fn.Return<Slot<A>, never, Scope.Scope> {
     const saving = yield* Saving
     const tabs = yield* Tabs.Tabs
-    const saved = yield* savedValue(saving, path, schema)
+    const key = storedKey(path, savedAs)
+    const saved = yield* savedValue(saving, key, schema)
     const kept = yield* Effect.acquireRelease(
       Effect.sync(() => tree.hold(tree.root(), path.join(" / "), schema, initial)),
       (held) => Effect.sync(() => tree.release(held)),
     )
     const written = (name: string, next: (now: A) => A, payload?: Schema.Json) =>
-      writtenAndSaved(saving, tabs, path, schema, kept, name, next, payload)
+      writtenAndSaved(saving, tabs, key, schema, kept, name, next, payload)
 
     yield* Effect.forEach(
       Option.toArray(saved),
       (value) => replacedBy(kept, schema, restoredFromStorage, value),
       { discard: true },
     )
-    yield* followOtherTabs(saving, tabs, path, schema, kept)
+    yield* followOtherTabs(saving, tabs, key, schema, kept)
 
     return {
       name: kept.name,

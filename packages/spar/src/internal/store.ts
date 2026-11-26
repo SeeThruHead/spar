@@ -163,6 +163,7 @@ export type Definition<
   readonly actions: A
   readonly selectors: S
   readonly tasks?: T & Refusable<A, T> & Tasks<State, Needs>
+  readonly savedAs?: string
 }
 
 export type Shape<
@@ -259,6 +260,7 @@ export const made = Effect.fnUntraced(function* <
     [key],
     definition.state,
     seededFrom(seed, key, definition.state, started),
+    definition.savedAs,
   )
   const recorder = yield* Timeline.Recorder
   const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = definition.actions
