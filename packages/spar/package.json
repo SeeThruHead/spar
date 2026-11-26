@@ -31,7 +31,8 @@
     "test": "bun --bun vitest run",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "mutation": "stryker run"
+    "mutation": "stryker run",
+    "mutation:changed": "bun tools/mutate-changed.ts"
   },
   "dependencies": {
     "effect": "4.1.4",
