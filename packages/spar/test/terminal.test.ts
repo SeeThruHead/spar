@@ -109,4 +109,25 @@ describe("the terminal renderer", () => {
       expect(Reflect.get(renderer, "inPage")).toBe(false)
     }),
   )
+
+  it.live("closes what a print opened when that print ends, not when the renderer goes", () =>
+    Effect.gen(function* () {
+      const lines = yield* Ref.make<ReadonlyArray<string>>([])
+      const noted = (line: string) => Ref.update(lines, (all) => [...all, line])
+      const context = yield* Layer.build(
+        layer((frame) =>
+          Effect.acquireRelease(noted(`opened ${frame}`), () => noted(`closed ${frame}`)),
+        ),
+      )
+      const renderer = context.mapUnsafe.get(Renderer.Renderer.key)
+      const target: HTMLElement = Reflect.get(renderer, "target")
+
+      target.append(target.ownerDocument.createTextNode("one"))
+
+      expect(yield* until(Ref.get(lines), (all) => all.length === 2)).toEqual([
+        "opened one",
+        "closed one",
+      ])
+    }).pipe(Effect.scoped),
+  )
 })

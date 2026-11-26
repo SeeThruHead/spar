@@ -362,7 +362,7 @@ export const Tag =
         runner.loads,
         asked.key,
         Effect.provide(
-          Effect.annotateSpans(fetched(store, asked, request), "spar.kind", "data"),
+          Effect.scoped(Effect.annotateSpans(fetched(store, asked, request), "spar.kind", "data")),
           runner.context,
         ),
       )

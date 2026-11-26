@@ -60,7 +60,7 @@ export const layer = <R>(print: (frame: string) => Effect.Effect<void, never, R>
       const start = yield* starter()
       const Observer: typeof MutationObserver = Reflect.get(window, "MutationObserver")
       const observer = new Observer(() => {
-        start(Effect.provideContext(print(frameOf(target)), services))
+        start(Effect.provideContext(Effect.scoped(print(frameOf(target))), services))
       })
 
       yield* Effect.acquireRelease(
