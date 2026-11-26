@@ -13,8 +13,9 @@ import {
   withStore,
 } from "spar"
 import type { Heading, Hit, Page } from "./api.ts"
+import { Ask } from "./Ask.ts"
 import { Loads } from "./Loads.ts"
-import { groups } from "./nav.ts"
+import { entries as pages, groups } from "./nav.ts"
 import { StoreDemo } from "./StoreDemo.ts"
 import { DocParams, PageQuery, SearchQuery, docRoute, home } from "./Shelves.ts"
 import {
@@ -87,6 +88,9 @@ const statusIn = <A, E>(result: AsyncResult.AsyncResult<A, E>): string =>
         onSuccess: () => "loaded",
       })
 
+const sectionTitle = (slug: string): string =>
+  pages.find((entry) => entry.slug === slug)?.title ?? slug
+
 export const titleOf = (page: string | undefined): string =>
   page === undefined ? "Spar" : `${page} · Spar`
 
@@ -97,6 +101,7 @@ const DocPage = compose(
     const latest = Reactive.map(page.result, shownIn)
     const current = Reactive.map(params, (now) => now.slug)
     const state = yield* Reactive.zip(Reactive.map(page.result, statusIn), current)
+    const sectionsOpen = yield* UiState.make("sections open", Schema.Boolean, false)
 
     yield* Events.title(Reactive.map(latest, (shown) => titleOf(shown?.title)))
 
@@ -119,6 +124,11 @@ const DocPage = compose(
       ),
       problem: Reactive.map(state, ([status, slug]) => said(status, slug)),
       busy: Reactive.map(page.result, (result) => String(result.waiting)),
+      section: Reactive.map(current, sectionTitle),
+      sectionsOpen,
+      sectionsSaid: Reactive.map(sectionsOpen, String),
+      onSections: UiState.update(sectionsOpen, (open) => !open),
+      onPicked: UiState.set(sectionsOpen, false),
     }
   }),
   withStore(Router.Router, (router) => ({ onLink: router.followLinks })),
@@ -137,6 +147,7 @@ const Home = compose(
       after: Reactive.map(page.result, (result) => partOf(shownIn(result), 2)),
       loads: yield* View.child(Loads, {}),
       store: yield* View.child(StoreDemo, {}),
+      ask: yield* View.child(Ask, {}),
       start: router.link(docRoute, { slug: "getting-started" }),
       principles: router.link(docRoute, { slug: "principles" }),
       onLink: router.followLinks,

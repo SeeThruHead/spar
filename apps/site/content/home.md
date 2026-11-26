@@ -23,6 +23,15 @@ In the example below, two requests start together and the third waits for the fi
 
 [[demo:loads]]
 
+<details class="figure-code">
+<summary>Show the code for this example</summary>
+
+<<< apps/site/src/Loads.ts#Loads
+
+<<< apps/site/src/LoadsView.tsx#LoadsView
+
+</details>
+
 **What it removes.** Accidental request waterfalls, the same request made by every row of a list,
 and an old answer landing over a newer one: an answer carries the number of the request it answers
 and a late one is ignored.
@@ -37,6 +46,15 @@ Reset again does nothing until it is done.
 <<< apps/site/src/StoreDemo.ts#CounterStore
 
 [[demo:store]]
+
+<details class="figure-code">
+<summary>Show the code for this example</summary>
+
+<<< apps/site/src/StoreDemo.ts#Panel
+
+<<< apps/site/src/StoreDemoView.tsx#StoreDemoView
+
+</details>
 
 **What it removes.** State that was changed from somewhere nobody can find, and work that runs
 twice because two events arrived in an order the author did not think of. Every command is in the
