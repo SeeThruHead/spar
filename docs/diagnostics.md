@@ -58,9 +58,17 @@ Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 
 ### SPAR_ENHANCER_UNTYPED
 
-An enhancer written inline as a function with an untyped parameter, followed by more enhancers. TypeScript works such a function out last, so every enhancer after it sees its props as unknown.
+An enhancer whose props parameter has no type: written inline as a function before more enhancers, or made with withEffectProps, withHandlers or withEffect outside compose. Inside compose TypeScript works such a function out last, and outside compose nothing tells it the props, so its props, and those of every enhancer after it, are unknown.
 
-Fix: Wrap it: withEffectProps((props) => effect) for props made by an Effect, withHandlers((props) => values) for plain values. Or give its parameter a type, or move it to a named function with a typed parameter.
+Fix: Inside compose, wrap it: withEffectProps((props) => effect) for props made by an Effect, withHandlers((props) => values) for plain values. Outside compose, give its parameter a type: withEffectProps(Effect.fnUntraced(function* (props: { readonly filter: Reactive.Reactive<Filter> }) { ... })), or write it inline in compose.
+
+Reported by: The build (the Vite or Bun plugin), with the file, line and column.
+
+### SPAR_FIRST_ENHANCER_PROPSLESS
+
+compose starts with an enhancer that takes no props, followed by more enhancers. Nothing then tells TypeScript the props, so every enhancer after it sees them as unknown ('props' is of type 'unknown', TS18046).
+
+Fix: Start compose with withProps(...), withProps({}) when the component takes no props, and put the enhancer after it.
 
 Reported by: The build (the Vite or Bun plugin), with the file, line and column.
 

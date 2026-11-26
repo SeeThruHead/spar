@@ -67,8 +67,16 @@ A group of enhancers is `compose(...)` without a view. `compose` takes up to 10 
 some with `compose(...)` beyond that.
 
 If TypeScript says `'props' is of type 'unknown'` or that a property you added does not exist,
-an untyped inline function among the enhancers is the cause (the build says so too, with
-`SPAR_ENHANCER_UNTYPED`): wrap it in `withEffectProps` or `withHandlers`.
+one of three things is the cause, and the build names each:
+
+- An untyped inline function among the enhancers (`SPAR_ENHANCER_UNTYPED`): wrap it in
+  `withEffectProps` or `withHandlers`.
+- An enhancer made with `withEffectProps` or `withHandlers` outside `compose` whose parameter
+  has no type (`SPAR_ENHANCER_UNTYPED`): give `props` its type there, or write it inline in
+  `compose`.
+- A first enhancer that takes no props, such as `Effect.fnUntraced(function* () { ... })`
+  (`SPAR_FIRST_ENHANCER_PROPSLESS`): start with `withProps(...)`, `withProps({})` when the
+  component takes no props, and put it second.
 
 Three other errors to avoid:
 

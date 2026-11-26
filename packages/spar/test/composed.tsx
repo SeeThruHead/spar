@@ -261,6 +261,7 @@ const withCounted = () =>
   )
 
 export const Counted = compose(
+  withProps({}),
   withCounted,
   withStore(CounterStore, (store) => ({
     count: store.select.count,
