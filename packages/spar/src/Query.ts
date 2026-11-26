@@ -16,7 +16,7 @@ import {
   Stream,
   Tracer,
 } from "effect"
-import type { AsyncResult } from "effect/reactivity"
+import { AsyncResult } from "effect/reactivity"
 import { sourceOf, sourced } from "./internal/inspect.ts"
 import { resultOf } from "./internal/queryResult.ts"
 import { OnServer } from "./internal/server.ts"
@@ -71,6 +71,46 @@ export type Handle<A, E> = {
   readonly result: Reactive<AsyncResult.AsyncResult<A, E>>
   readonly refetch: Effect.Effect<void>
 }
+
+export type SPAR_UNHANDLED_FAILURE<E> = {
+  readonly "this query can fail, so read it with Query.shown or Query.valueOr, not Query.valueOf": E
+}
+
+export type NeverFails<A, E> = [E] extends [never] ? Handle<A, E> : SPAR_UNHANDLED_FAILURE<E>
+
+export const valueOf = <A, E>(handle: Handle<A, E> & NeverFails<A, E>): Reactive<A | null> =>
+  map(handle.result, (result) => Option.getOrNull(AsyncResult.value(result)))
+
+export const valueOr = <A, E>(
+  handle: Handle<A, E>,
+  onFailure: (error: E) => A,
+): Reactive<A | null> =>
+  map(handle.result, (result) =>
+    Option.getOrNull(
+      Option.orElse(Option.map(AsyncResult.error(result), onFailure), () =>
+        AsyncResult.value(result),
+      ),
+    ),
+  )
+
+export const shown = <A, E, B>(
+  handle: Handle<A, E>,
+  cases: {
+    readonly loading: B
+    readonly failed: (error: E) => B
+    readonly loaded: (value: A) => B
+  },
+): Reactive<B> =>
+  map(handle.result, (result) =>
+    Option.match(AsyncResult.error(result), {
+      onSome: cases.failed,
+      onNone: () =>
+        Option.match(AsyncResult.value(result), {
+          onSome: cases.loaded,
+          onNone: () => cases.loading,
+        }),
+    }),
+  )
 
 type Asked = { readonly key: string; readonly input: Schema.Json }
 
@@ -415,8 +455,8 @@ export const Tag =
       )
     })
     const pollOnce = (store: Held, name: string, visible: Reactive<boolean>) =>
-      Effect.flatMap(Effect.all([visible.get, store.state.get]), ([shown, now]) => {
-        if (!shown) return Effect.void
+      Effect.flatMap(Effect.all([visible.get, store.state.get]), ([onScreen, now]) => {
+        if (!onScreen) return Effect.void
 
         return Effect.forEach(
           Option.toArray(Option.fromUndefinedOr(now.entries[name])),

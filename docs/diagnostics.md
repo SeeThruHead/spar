@@ -224,6 +224,14 @@ Fix: Ask for it with no argument, yield* TheQuery.ask(), so it starts with the o
 
 Reported by: The TypeScript compiler, in the text of a type error.
 
+### SPAR_UNHANDLED_FAILURE
+
+Query.valueOf was given a query that can fail. It reads only the value, so a failure would show as nothing at all, as if still loading. It does not compile: the handle is not assignable to SPAR_UNHANDLED_FAILURE (TS2345).
+
+Fix: Say what the view shows when it fails: Query.shown(handle, { loading, failed, loaded }) for every state, or Query.valueOr(handle, (error) => fallback) for a value to use in its place. Query.valueOf is for queries whose failure is Schema.Never.
+
+Reported by: The TypeScript compiler, in the text of a type error.
+
 ### SPAR_REDUCER_STATE_UNTYPED
 
 A store action's reducer has no type on its state parameter, so the store's state is unknown. The compiler then also says a command comes from an index signature (TS4111) or is possibly undefined (TS2722).

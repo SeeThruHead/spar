@@ -56,6 +56,11 @@ const elsewhere = {
     what: "A query that takes no input was given one, such as a value made from another query. It would wait for that value for nothing, so it does not compile: the argument is not assignable to parameter of type 'void' (TS2345).",
     fix: "Ask for it with no argument, yield* TheQuery.ask(), so it starts with the others. Give a query an input made from another query's value only when its request needs that value.",
   },
+  SPAR_UNHANDLED_FAILURE: {
+    kind: "types",
+    what: "Query.valueOf was given a query that can fail. It reads only the value, so a failure would show as nothing at all, as if still loading. It does not compile: the handle is not assignable to SPAR_UNHANDLED_FAILURE (TS2345).",
+    fix: "Say what the view shows when it fails: Query.shown(handle, { loading, failed, loaded }) for every state, or Query.valueOr(handle, (error) => fallback) for a value to use in its place. Query.valueOf is for queries whose failure is Schema.Never.",
+  },
   SPAR_REDUCER_STATE_UNTYPED: {
     kind: "types",
     what: "A store action's reducer has no type on its state parameter, so the store's state is unknown. The compiler then also says a command comes from an index signature (TS4111) or is possibly undefined (TS2722).",

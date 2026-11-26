@@ -97,7 +97,7 @@ const statusIn = (result: AsyncResult.AsyncResult<Timed>): string =>
 
 const shownOf = (handle: Query.Handle<Timed, never>) => ({
   status: Reactive.map(handle.result, statusIn),
-  value: Reactive.map(handle.result, (result) => Option.getOrNull(AsyncResult.value(result))),
+  value: Query.valueOf(handle),
 })
 
 const told = (run: Run | null, ends: ReadonlyArray<number>): string => {
