@@ -3952,8 +3952,11 @@ docs show.
 
 ### Where Effect UI is stronger
 
-- **A component kit.** `@effect/ui-kit` ships 45 unstyled, accessible components (Calendar,
-  DatePicker, Combobox, Dialog, VirtualList, Typeahead and more). Spar has none.
+- **A larger component kit.** At 87a704b, `@effect/ui-kit` exports 44 unstyled components
+  (among them Accordion, Calendar, Combobox, DatePicker, Drawer, NumberField, Slider and
+  VirtualList) and 4 helper modules (ListNavigation, Positioning, Typeahead, VirtualKeyboard).
+  Spar's kit, `@spar/ui`, has 13: Button, SubmitButton, TextField, Checkbox, Switch, Select,
+  Listbox, Menu, Tabs, Dialog, Popover, Tooltip and Toast.
 - **Testing a screen as data.** `Story` sends messages and resolves Commands by hand, and
   `HtmlScene` clicks by role, both with no browser and no clock. Spar tests stores as services
   and components by role in a page.
