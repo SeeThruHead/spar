@@ -23,11 +23,17 @@ const lookups = async (): Promise<ReadonlyArray<Recorded>> =>
     await fetch(`${backendOrigin}/spans`).then((answer) => answer.json()),
   ).filter((span) => span.name.startsWith("Agents.lookup "))
 
-const server = await createServer({ root, logLevel: "error", server: { port: 4191 } })
+const port = await freePort()
+
+const server = await createServer({
+  root,
+  logLevel: "error",
+  server: { port, strictPort: true },
+})
 
 await server.listen()
 
-const address = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4191/"
+const address = `http://127.0.0.1:${port}/`
 
 const browser = await launch()
 
