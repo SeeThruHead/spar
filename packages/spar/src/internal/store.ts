@@ -327,12 +327,14 @@ export const made = Effect.fnUntraced(function* <
   const commands = Record.map(
     named,
     (handled, name) => (input: unknown) =>
-      traced(
-        name,
-        refusing(
+      Effect.suspend(() =>
+        traced(
           name,
-          Effect.flatMap(Effect.orDie(handled.encode(input)), (payload) =>
-            run(name, handled, payload),
+          refusing(
+            name,
+            Effect.flatMap(Effect.orDie(handled.encode(input)), (payload) =>
+              run(name, handled, payload),
+            ),
           ),
         ),
       ),
@@ -349,17 +351,19 @@ export const made = Effect.fnUntraced(function* <
     held,
     ({ job, begin, count }, name) =>
       (input: unknown) =>
-        traced(
-          name,
-          refusing(
+        Effect.suspend(() =>
+          traced(
             name,
-            Effect.flatMap(Effect.orDie(job.encode(input)), (payload) =>
-              Effect.andThen(
+            refusing(
+              name,
+              Effect.flatMap(Effect.orDie(job.encode(input)), (payload) =>
                 Effect.andThen(
-                  moved(count, 1),
-                  applied(name, (now) => now, payload),
+                  Effect.andThen(
+                    moved(count, 1),
+                    applied(name, (now) => now, payload),
+                  ),
+                  begin(Effect.ensuring(worked(name, job, payload), moved(count, -1))),
                 ),
-                begin(Effect.ensuring(worked(name, job, payload), moved(count, -1))),
               ),
             ),
           ),
