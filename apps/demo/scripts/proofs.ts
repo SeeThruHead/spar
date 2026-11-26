@@ -53,6 +53,12 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "not assignable to parameter of type 'void'",
   },
   {
+    file: "query-interval-as-a-bare-number.ts",
+    rule: "Giving a query's polling interval as a bare number, which would read as milliseconds",
+    by: "types",
+    expect: "Type 'number' is not assignable",
+  },
+  {
     file: "reducer-without-a-state-type.ts",
     rule: "Writing a store action's reducer without a type on its state parameter",
     by: "types",

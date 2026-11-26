@@ -151,6 +151,8 @@ Each of these is an entry in the log and a span in the trace.
 | Pagination and infinite lists              | `TheQuery.pages({ first, next })`: the pages loaded so far, whether there is more, and an action that loads the next                                                                                        |
 | Retries                                    | `retry`, a schedule; `result` stays `waiting` until it gives up                                                                                                                                             |
 | Dropping unused data                       | An entry no component is using is released, and dropped after `dropAfter` (5 minutes unless set). Over `keepAtMost` entries (100 unless set), the longest unused go at once. Both show in the log           |
+| `refetchInterval`                          | `refetchEvery: "10 seconds"`: one timer for each input while any component uses it, none while the page is hidden. A bare number is a type error, since it would read as milliseconds                       |
+| Debouncing a typed input                   | `debounce: "300 millis"`: the first input is asked at once, a changed one only once it has stayed put that long, and `result` keeps the last answer meanwhile                                               |
 
 ### A list read a page at a time
 
