@@ -24,6 +24,14 @@ const wide = async (page: Page): Promise<ReadonlyArray<string>> => {
   return overflow > 1 ? [`${page.url()} is ${overflow}px wider than the screen`] : []
 }
 
+const sectionsOpened = async (page: Page, size: Size): Promise<void> => {
+  if (size.name !== "phone") return
+
+  await shot(page, size, "docs-bar")
+  await page.getByRole("navigation", { name: "Documentation" }).getByRole("button").click()
+  await shot(page, size, "docs-sections")
+}
+
 const lowContrast = async (page: Page): Promise<ReadonlyArray<string>> => {
   await page.addScriptTag({ path: `${root}scripts/contrast.js` })
 
@@ -129,6 +137,7 @@ const looked = async (page: Page, origin: string, size: Size): Promise<ReadonlyA
   await page.goBack()
   await page.getByRole("heading", { level: 1, name: "Getting started" }).waitFor({ timeout: 5000 })
 
+  await sectionsOpened(page, size)
   await page
     .getByRole("navigation", { name: "Documentation" })
     .getByRole("link", { name: "API", exact: true })

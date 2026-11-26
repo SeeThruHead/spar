@@ -75,22 +75,38 @@ export const DocView = View.make(
     headings: Props.Element,
     problem: Props.Reactive(Schema.String),
     busy: Props.Reactive(Schema.String),
+    section: Props.Reactive(Schema.String),
+    sectionsOpen: Props.Reactive(Schema.Boolean),
+    sectionsSaid: Props.Reactive(Schema.String),
+    onSections: Props.Action,
+    onPicked: Props.Action,
     onLink: Props.Handler("click"),
   },
-  ({ groups, body, headings, problem, busy, onLink }) => (
+  (props) => (
     <div class="doc">
-      <nav class="doc-nav" aria-label="Documentation">
-        {groups}
+      <nav class={{ "doc-nav": true, open: props.sectionsOpen }} aria-label="Documentation">
+        <button
+          type="button"
+          class="doc-nav-bar"
+          aria-expanded={props.sectionsSaid}
+          onClick={props.onSections}
+        >
+          <span class="doc-nav-bar-label">Docs</span>
+          <span class="doc-nav-bar-current">{props.section}</span>
+        </button>
+        <div class="doc-nav-groups" onClick={props.onPicked}>
+          {props.groups}
+        </div>
       </nav>
-      <main class="doc-main" aria-busy={busy}>
+      <main class="doc-main" aria-busy={props.busy}>
         <p class="problem" role="alert">
-          {problem}
+          {props.problem}
         </p>
-        <article class="prose" markup={body} onClick={onLink} />
+        <article class="prose" markup={props.body} onClick={props.onLink} />
       </main>
       <nav class="doc-toc" aria-label="On this page">
         <h2>On this page</h2>
-        <ul>{headings}</ul>
+        <ul>{props.headings}</ul>
       </nav>
     </div>
   ),
@@ -104,11 +120,12 @@ export const HomeView = View.make(
     after: Props.Reactive(Markup.Markup),
     loads: Props.Element,
     store: Props.Element,
+    ask: Props.Element,
     start: Router.Link,
     principles: Router.Link,
     onLink: Props.Handler("click"),
   },
-  ({ before, between, after, loads, store, start, principles, onLink }) => (
+  ({ before, between, after, loads, store, ask, start, principles, onLink }) => (
     <main class="home">
       <header class="lead">
         <h1>Spar</h1>
@@ -151,6 +168,7 @@ export const HomeView = View.make(
         />
         <figcaption>Spar in under two minutes (1:48, with sound).</figcaption>
       </figure>
+      {ask}
       <article class="prose" markup={before} onClick={onLink} />
       {loads}
       <article class="prose" markup={between} onClick={onLink} />
