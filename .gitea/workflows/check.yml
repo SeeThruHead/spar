@@ -82,18 +82,3 @@ jobs:
         run: bun packages/browsers/scripts/in.ts bun run moon run demo:browser stories:play sidebar:features sidebar:walkthrough sidebar:devtools sidebar:traced sidebar:deep ssr:browser --concurrency 1
         env:
           SPAR_BROWSER: webkit
-  mutation:
-    runs-on: sthdev
-    needs: check
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: https://github.com/oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.4"
-      - name: Install
-        run: bun install --frozen-lockfile
-      - name: Mutation testing of the framework, failing under 90 percent
-        run: bun run moon run spar:mutation

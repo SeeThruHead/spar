@@ -1,0 +1,34 @@
+name: mutation
+on:
+  pull_request:
+    paths:
+      - "packages/spar/src/**"
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    runs-on: sthdev
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Mutation testing of the framework source this pull request changes, failing under 90 percent
+        if: github.event_name == 'pull_request'
+        run: bun run --cwd packages/spar mutation:changed
+        env:
+          MUTATION_BASE: origin/${{ github.base_ref }}
+      - name: Mutation testing of the whole framework, failing under 90 percent
+        if: github.event_name != 'pull_request'
+        run: bun run moon run spar:mutation

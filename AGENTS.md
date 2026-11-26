@@ -21,6 +21,7 @@ Run one heavy command at a time (`--concurrency 1`).
 | `bun run moon run bench:memory`             | Fails if 10,000 rows hold more than 1.5 times what Solid holds.                                |
 | `bun run moon run bench:bench`              | Reruns the benchmarks and rewrites `docs/benchmarks.md`.                                       |
 | `bun run --cwd packages/spar mutation`      | Mutation testing of the framework (long). It rewrites `src` in place and restores it.          |
+| `bun run --cwd packages/spar mutation:changed` | The same, for only the `src` files changed since `origin/main` (what a pull request's CI runs). |
 | `bun run --cwd packages/devtools-mcp start` | The devtools server for agents (MCP at 127.0.0.1:4188/mcp); see docs/api.md.                   |
 | `bun run format`                            | Formats with oxfmt.                                                                            |
 
