@@ -35,35 +35,24 @@ const accepted = async (left: number): Promise<void> => {
   return accepted(left - 1)
 }
 
-const server = await createServer({ root, logLevel: "error", server: { port: 4189 } })
+const port = await freePort()
+
+const server = await createServer({
+  root,
+  logLevel: "error",
+  server: { port, strictPort: true },
+})
 
 await server.listen()
 
-const address = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4189/"
+const address = `http://127.0.0.1:${port}/`
 
 const browser = await launch()
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 
-const reloadedByVite = (error: unknown): boolean =>
-  String(error).includes("is interrupted by another navigation")
-
-const settled = async (left: number): Promise<unknown> => {
-  await page.waitForLoadState("load")
-  await Bun.sleep(1000)
-
-  return opened(left - 1)
-}
-
-const opened = (left: number): Promise<unknown> =>
-  page
-    .goto(address)
-    .catch((error: unknown) =>
-      left > 0 && reloadedByVite(error) ? settled(left) : Promise.reject(error),
-    )
-
 const steps = async (): Promise<ReadonlyArray<string>> => {
-  await opened(8)
+  await page.goto(address)
   await page.getByRole("button", { name: "Devtools" }).click()
   await page.getByRole("searchbox").first().fill("notes")
 
