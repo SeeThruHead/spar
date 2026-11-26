@@ -43,7 +43,7 @@ const runs = Number(setting("PROFILE_RUNS") ?? 7)
 
 const top = Number(setting("PROFILE_TOP") ?? 30)
 
-const settle = Number(setting("PROFILE_SETTLE") ?? 0)
+const settle = Number(setting("PROFILE_SETTLE") ?? 100)
 
 const lead = Number(setting("PROFILE_LEAD") ?? 0)
 
