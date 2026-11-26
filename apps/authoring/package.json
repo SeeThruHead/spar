@@ -9,6 +9,7 @@
     "format:check": "oxfmt --check"
   },
   "dependencies": {
+    "@alchemy.run/domain": "workspace:*",
     "alchemy": "2.0.0-beta.87",
     "effect": "4.1.4",
     "oxc-parser": "0.141.0",

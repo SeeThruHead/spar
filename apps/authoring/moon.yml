@@ -1,0 +1,20 @@
+$schema: https://moonrepo.dev/schemas/project.json
+fileGroups:
+  upstream:
+    - /package.json
+    - /tsconfig.base.json
+    - /packages/spar/package.json
+    - /packages/spar/src/**/*
+    - /packages/alchemy-domain/src/**/*
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", "@group(upstream)"]
+  test:
+    command: bun run test
+    inputs: ["**/*", "@group(upstream)"]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  check:
+    deps: [typecheck, test, format]

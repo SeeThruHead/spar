@@ -39,10 +39,9 @@ export declare const withHandlers: <In, Add>(make: (props: In) => Add) => Step<I
 
 export declare const withKey: <In>(key: string, action: (props: In) => Action) => Step<In, unknown>
 
-export declare const withEffect: {
-  <State, R>(reaction: Store.Reaction<State, R>): Step<unknown, unknown, never, R>
-  <In, E, R>(run: (props: In) => Effect.Effect<void, E, R>): Step<In, unknown, E, Outside<R>>
-}
+export declare const withEffect: <In, E, R>(
+  run: (props: In) => Effect.Effect<void, E, R>,
+) => Step<In, unknown, E, Outside<R>>
 
 export declare const withSpan: (
   name: string,

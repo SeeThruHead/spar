@@ -17,6 +17,7 @@ export const groups: ReadonlyArray<Group> = [
       { slug: "state-and-server-data", title: "State and server data" },
       { slug: "navigation", title: "Navigation" },
       { slug: "recipes", title: "Recipes" },
+      { slug: "domain", title: "Aggregates as stores" },
     ],
   },
   {

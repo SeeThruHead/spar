@@ -7,11 +7,7 @@
     "noUncheckedIndexedAccess": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "useUnknownInCatchVariables": false,
-    "paths": {
-      "@alchemy.run/domain": ["./vendor/alchemy-domain/src/index.ts"],
-      "@alchemy.run/domain/*": ["./vendor/alchemy-domain/src/*.ts"]
-    }
+    "useUnknownInCatchVariables": false
   },
   "include": ["src", "test"]
 }
