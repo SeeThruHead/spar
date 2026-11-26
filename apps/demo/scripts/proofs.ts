@@ -59,6 +59,19 @@ const expectations: ReadonlyArray<Expectation> = [
     expect: "Type 'number' is not assignable",
   },
   {
+    file: "task-refusing-an-unknown-action.ts",
+    rule: "Naming, in what a store task refuses while it runs, an action or task the store does not have",
+    by: "types",
+    expect: 'readonly refuses: readonly ("added" | "reset")[]',
+  },
+  {
+    file: "task-whose-failure-is-unhandled.ts",
+    rule: "Giving a store task an Effect that can fail, with nothing in the task saying what its failure does to the state",
+    by: "types",
+    expect:
+      "Type 'Effect<never, string, never>' is not assignable to type 'Effect<void, never, never>'",
+  },
+  {
     file: "reducer-without-a-state-type.ts",
     rule: "Writing a store action's reducer without a type on its state parameter",
     by: "types",
