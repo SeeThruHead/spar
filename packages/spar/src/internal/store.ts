@@ -80,9 +80,9 @@ export function action<Payload, Encoded, State>(
   }
 }
 
-type TaskOptions<Payload, Result, ResultEncoded, State, Refuses extends string> = {
+type TaskOptions<Payload, Result, ResultEncoded, State, Refuses extends string, Needs> = {
   readonly result: Schema.Codec<Result, ResultEncoded>
-  readonly run: (payload: Payload, state: State) => Effect.Effect<Result>
+  readonly run: (payload: Payload, state: State) => Effect.Effect<Result, never, Needs>
   readonly finish: (state: State, result: Result) => State
   readonly mode: Mode
   readonly refuses?: ReadonlyArray<Refuses>
@@ -95,10 +95,11 @@ export function task<
   ResultEncoded,
   State,
   const Refuses extends string = never,
+  Needs = never,
 >(
   schema: Schema.Codec<Payload, Encoded>,
-  options: TaskOptions<Payload, Result, ResultEncoded, State, Refuses>,
-): Typed<State, Task<State, Payload, Refuses>>
+  options: TaskOptions<Payload, Result, ResultEncoded, State, Refuses, Needs>,
+): Typed<State, Task<State, Payload, Refuses, Needs>>
 export function task<
   Payload,
   Encoded,
@@ -106,10 +107,11 @@ export function task<
   ResultEncoded,
   State,
   const Refuses extends string = never,
+  Needs = never,
 >(
   schema: Schema.Codec<Payload, Encoded>,
-  options: TaskOptions<Payload, Result, ResultEncoded, State, Refuses>,
-): Task<State, Payload, Refuses> | SPAR_REDUCER_STATE_UNTYPED {
+  options: TaskOptions<Payload, Result, ResultEncoded, State, Refuses, Needs>,
+): Task<State, Payload, Refuses, Needs> | SPAR_REDUCER_STATE_UNTYPED {
   const json = Schema.toCodecJson(schema)
   const decode = Schema.decodeUnknownEffect(json)
   const results = Schema.toCodecJson(options.result)
@@ -153,20 +155,22 @@ export type Definition<
   State,
   A extends Actions<State>,
   S extends Selectors<State>,
-  T extends Tasks<State> = NoTasks,
+  T extends Tasks<State, Needs> = NoTasks,
+  Needs = never,
 > = {
   readonly state: Schema.Codec<State, unknown>
   readonly initialState: State
   readonly actions: A
   readonly selectors: S
-  readonly tasks?: T & Refusable<A, T>
+  readonly tasks?: T & Refusable<A, T> & Tasks<State, Needs>
+  readonly savedAs?: string
 }
 
 export type Shape<
   State,
   A extends Actions<State>,
   S extends Selectors<State>,
-  T extends Tasks<State> = NoTasks,
+  T extends Tasks<State, unknown> = NoTasks,
 > = {
   readonly state: Reactive<State>
   readonly select: { readonly [Name in keyof S]: Struct.Apply<ToReactive<State>, S[Name]> }
@@ -239,14 +243,16 @@ export const made = Effect.fnUntraced(function* <
   State,
   A extends Actions<State>,
   S extends Selectors<State>,
-  T extends Tasks<State>,
   E,
   R,
+  T extends Tasks<State, Needs> = NoTasks,
+  Needs = never,
 >(
   key: string,
-  definition: Definition<State, A, S, T>,
+  definition: Definition<State, A, S, T, Needs>,
   start: Effect.Effect<State, E, R>,
-): Effect.fn.Return<Shape<State, A, S, T>, E, R | Scope.Scope> {
+): Effect.fn.Return<Shape<State, A, S, T>, E, R | Needs | Scope.Scope> {
+  const needed = yield* Effect.context<Needs>()
   const state = yield* State.current
   const seed = yield* Seed
   const started = yield* start
@@ -254,6 +260,7 @@ export const made = Effect.fnUntraced(function* <
     [key],
     definition.state,
     seededFrom(seed, key, definition.state, started),
+    definition.savedAs,
   )
   const recorder = yield* Timeline.Recorder
   const named: Readonly<Record<keyof A & string, Action<State, unknown>>> = definition.actions
@@ -296,7 +303,9 @@ export const made = Effect.fnUntraced(function* <
     Effect.flatMap(Effect.orDie(handled.reducer(payload)), (reduce) =>
       applied(name, reduce, payload),
     )
-  const jobs: Readonly<Record<keyof T & string, Task<State, unknown>>> = tasksOf(definition.tasks)
+  const jobs: Readonly<Record<keyof T & string, Task<State, unknown, string, Needs>>> = tasksOf(
+    definition.tasks,
+  )
   const scope = yield* Effect.scope
   const held = Record.map(jobs, (job) => ({
     job,
@@ -340,9 +349,11 @@ export const made = Effect.fnUntraced(function* <
         ),
       ),
   )
-  const worked = (name: string, job: Task<State, unknown>, payload: Schema.Json) =>
+  const givenNeeds = <Done>(work: Effect.Effect<Done, never, Needs>) =>
+    Effect.updateContext(work, (current: Context.Context<never>) => Context.merge(needed, current))
+  const worked = (name: string, job: Task<State, unknown, string, Needs>, payload: Schema.Json) =>
     Effect.flatMap(slot.value.get, (now) =>
-      Effect.flatMap(job.work(payload, now), (result) =>
+      Effect.flatMap(givenNeeds(job.work(payload, now)), (result) =>
         Effect.flatMap(Effect.orDie(job.finished(result)), (reduce) =>
           traced(finishedName(name), applied(finishedName(name), reduce, result)),
         ),
@@ -489,10 +500,11 @@ export const Tag =
     State,
     const A extends Actions<State>,
     const S extends Selectors<State>,
-    const T extends Tasks<State> = NoTasks,
+    const T extends Tasks<State, Needs> = NoTasks,
+    Needs = never,
   >(
     key: Key,
-    definition: Definition<State, A, S, T>,
+    definition: Definition<State, A, S, T, Needs>,
   ) => {
     const service = Context.Service<Self, Shape<State, A, S, T>>()(key)
 

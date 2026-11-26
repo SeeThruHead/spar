@@ -109,6 +109,7 @@ in an enhancer and pass `props.shown` instead.
 | Call someone else's HTTP API              | An Effect `HttpClient` call, or an HttpApi client, with `Backend.layer` provided                                                              | `fetch`, `FetchHttpClient.layer`                                                                               |
 | Send something that must not be lost      | `Outbox.channel(name, schema, send)`: saved on the device, retried with an idempotency key                                                    | Calling the server from a handler and hoping                                                                   |
 | Keep a store across a reload              | `SomeStore.layerSaved`, with a `KeyValueStore`; other tabs that save it are followed                                                          | Writing to `localStorage` by hand                                                                              |
+| Save a store under a key you were given   | `savedAs: "the-key"` in the store's definition, then `SomeStore.layerSaved`                                                                   | Copying the state to `localStorage` under that key yourself                                                    |
 | Handle a failure a component can have     | `View.recover(ErrorSchema, FallbackView)`                                                                                                     | `catchAll` that hides it; leaving it (compile error)                                                           |
 | Show something while a component loads    | `View.pending(LoadingView)`                                                                                                                   | A loading flag in UI state                                                                                     |
 | Navigate                                  | `Router.route(path, Schema)`, `router.link(route, params)`, `router.go(route, params)`                                                        | `location.href`, string paths                                                                                  |
@@ -192,6 +193,9 @@ with async work. The short version:
   changes the state once with what it returned, `mode` says what a second start does, and
   `refuses` names the commands refused while it runs. Read `store.running.<task>` for a busy
   state; never store a flag. Every start, finish and refusal is in the log and the trace.
+- A task's `run` may use services (a server client, a query). The store's layer then needs them:
+  write `TheStore.layer.pipe(Layer.provide(Server.layer))` once. Never `Effect.provide` a layer
+  inside `run`, which builds a fresh service on every start.
 - Server data is a `Query.Tag`. Views never fetch and props never carry server data: an Effect
   that needs it reads `TheQuery.read(input)` itself.
 - When only the newest run matters (a search box, a filter), give the task `mode: "switch"`,
