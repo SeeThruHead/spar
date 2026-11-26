@@ -41,7 +41,16 @@ export type Entry<A, E> = {
   readonly traceId: string
   readonly spanId: string
   readonly unusedSince: number | null
+  readonly guessed?: boolean
 }
+
+const answeredWith = <A, E>(held: Entry<A, E>, value: A, at: number): Entry<A, E> =>
+  held.guessed === true
+    ? { ...held, status: "loaded", error: null, loadedAt: null, guessed: false }
+    : { ...held, status: "loaded", value, error: null, loadedAt: at }
+
+const guessedOver = <A, E>(held: Entry<A, E>, value: A): Entry<A, E> =>
+  held.status === "loading" ? { ...held, value, guessed: true } : { ...held, value }
 
 export type State<A, E> = {
   readonly entries: Readonly<Record<string, Entry<A, E>>>
@@ -207,6 +216,7 @@ export const Tag =
       traceId: Schema.String,
       spanId: Schema.String,
       unusedSince: Schema.NullOr(Schema.Finite),
+      guessed: Schema.optionalKey(Schema.Boolean),
     })
     const state: Schema.Codec<State<A, E>, unknown> = Schema.Struct({
       entries: Schema.Record(Schema.String, entry),
@@ -251,13 +261,7 @@ export const Tag =
             at: Schema.Finite,
           }),
           (before: State<A, E>, answer): State<A, E> =>
-            answered(before, answer, (held) => ({
-              ...held,
-              status: "loaded",
-              value: answer.value,
-              error: null,
-              loadedAt: answer.at,
-            })),
+            answered(before, answer, (held) => answeredWith(held, answer.value, answer.at)),
         ),
         failed: Store.action(
           Schema.Struct({ key: Schema.String, request: Schema.Int, error: options.failure }),
@@ -271,7 +275,7 @@ export const Tag =
         patched: Store.action(
           Schema.Struct({ key: Schema.String, value: options.success }),
           (before: State<A, E>, { key: name, value }): State<A, E> =>
-            settled(before, name, (held) => ({ ...held, value })),
+            settled(before, name, (held) => guessedOver(held, value)),
         ),
         released: Store.action(
           Schema.Struct({ key: Schema.String, at: Schema.Finite }),
