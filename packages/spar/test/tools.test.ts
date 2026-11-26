@@ -204,6 +204,12 @@ const eventFacts = (): ReadonlyArray<string | number | null | undefined> => {
   ]
 }
 
+const chained = (): ReadonlyArray<string> =>
+  [...screen.getByLabelText("Cause and effect").querySelectorAll("li")].map(
+    (item) =>
+      `${item.textContent?.replace(/\s+/g, " ").trim()} | ${item.getAttribute("aria-current")}`,
+  )
+
 const branchesListed = (): ReadonlyArray<string> =>
   [...screen.getByLabelText("Branches").querySelectorAll("button")].map((button) =>
     [button.textContent, button.title, button.getAttribute("aria-pressed")].join(" | "),
@@ -339,6 +345,7 @@ describe("devtools an app did not ask for", () => {
         yield* Testing.eventually(() =>
           expect(eventFacts()).toEqual(["#1 Desk . draft", "ui", 32, 16, '"hi"']),
         )
+        expect(chained()).toEqual(['1 ui Desk . draft "hi" | true'])
         expect(liveness()).toBe("no")
         yield* Testing.eventually(() => expect(changedText()).toMatch(/Desk \. draft.*"hi"/))
         expect(
