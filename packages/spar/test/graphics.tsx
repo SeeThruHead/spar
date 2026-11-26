@@ -29,7 +29,7 @@ export const IconView = View.make(
   { size: Props.Reactive(Schema.Finite) },
   ({ size }) => (
     <svg viewBox="0 0 10 10" width={size} role="img" aria-label="Dot">
-      <circle cx="5" cy="5" r="4" class={{ dot: true }} />
+      <circle cx="5" cy="5" r="4" class={{ dot: true }} tabIndex={0} />
       <foreignObject>
         <p>Inside the drawing</p>
       </foreignObject>
