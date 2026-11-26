@@ -1,5 +1,5 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate"
-import { Effect, Ref, Schema, Semaphore, Stream } from "effect"
+import { Effect, Predicate, Ref, Schema, Semaphore, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
 import type { Context } from "effect"
 import { Outbox, State } from "spar"
@@ -19,9 +19,7 @@ type Aggregated<Def extends Aggregate.AnyDefinition, Id> = Context.Key<
 type CommandOf<Def extends Aggregate.AnyDefinition> = Aggregate.InstanceOf<Def["commands"][number]>
 
 export const tagOf = (value: unknown): ReadonlyArray<string> =>
-  typeof value === "object" && value !== null && "_tag" in value && typeof value._tag === "string"
-    ? [value._tag]
-    : []
+  Predicate.hasProperty(value, "_tag") && Predicate.isString(value._tag) ? [value._tag] : []
 
 type Evolve = Readonly<Record<string, (...args: never[]) => unknown>>
 
