@@ -1,5 +1,8 @@
+import { Glob } from "bun"
 import { chromium } from "playwright"
 import type { Browser, Page } from "playwright"
+import { entries } from "../src/nav.ts"
+import type { Entry } from "../src/nav.ts"
 import { start } from "./site.ts"
 
 type Size = { readonly name: string; readonly width: number; readonly height: number }
@@ -186,6 +189,57 @@ const walked = async (
   return Promise.race([looked(page, origin, size), broke]).finally(() => page.close())
 }
 
+const proseLength = async (page: Page): Promise<number> => {
+  await ready(page)
+  await Bun.sleep(300)
+
+  return ((await page.locator("article.prose").first().textContent()) ?? "").trim().length
+}
+
+const empty = (how: string, slug: string, length: number): ReadonlyArray<string> =>
+  length < 200 ? [`/docs/${slug} ${how} shows ${length} characters of text`] : []
+
+const opened = async (page: Page, origin: string, slug: string) => {
+  await page.goto(`${origin}/docs/${slug}`)
+
+  return empty("opened directly", slug, await proseLength(page))
+}
+
+const followed = async (page: Page, entry: Entry) => {
+  await page
+    .getByRole("navigation", { name: "Documentation" })
+    .getByRole("link", { name: entry.title, exact: true })
+    .click()
+  await page.waitForURL(`**/docs/${entry.slug}`)
+
+  return empty("reached from the docs nav", entry.slug, await proseLength(page))
+}
+
+const unlisted = async (): Promise<ReadonlyArray<string>> => {
+  const files = await Array.fromAsync(new Glob("*.md").scan(`${root}../../docs`))
+
+  return files
+    .map((file) => file.replace(/\.md$/, ""))
+    .filter((slug) => !entries.some((entry) => entry.slug === slug))
+    .map((slug) => `docs/${slug}.md is not in the site's docs navigation`)
+}
+
+const everyPage = async (browser: Browser, origin: string): Promise<ReadonlyArray<string>> => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  const direct = await entries.reduce<Promise<ReadonlyArray<string>>>(
+    async (all, entry) => [...(await all), ...(await opened(page, origin, entry.slug))],
+    Promise.resolve([]),
+  )
+  const clicked = await entries.reduce<Promise<ReadonlyArray<string>>>(
+    async (all, entry) => [...(await all), ...(await followed(page, entry))],
+    Promise.resolve([]),
+  )
+
+  await page.close()
+
+  return [...(await unlisted()), ...direct, ...clicked]
+}
+
 const server = await start(0, "127.0.0.1")
 const browser = await chromium.launch()
 const problems = await sizes
@@ -195,7 +249,7 @@ const problems = await sizes
         ...done,
         ...(await walked(browser, `http://127.0.0.1:${server.port}`, size)),
       ]),
-    Promise.resolve([]),
+    everyPage(browser, `http://127.0.0.1:${server.port}`),
   )
   .finally(async () => {
     await browser.close()
