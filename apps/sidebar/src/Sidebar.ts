@@ -119,19 +119,22 @@ const sectionFields = {
   dragging: Dragging,
 }
 
+const agentRows = (props: Schema.Struct<typeof sectionFields>["Type"]) =>
+  pipe(
+    Reactive.map(props.section, (section) => section.rows),
+    Reactive.mapBy(
+      (agent: Agent) => agent.id,
+      AgentRow,
+      (agent, id) => ({ agent, id, editing: props.editing, dragging: props.dragging }),
+    ),
+  )
+
 const SectionPanel = compose(
   withProps(sectionFields),
   Effect.fnUntraced(function* (props: Schema.Struct<typeof sectionFields>["Type"]) {
     const store = yield* BoardStore
     const space = SpaceId.make(props.sectionKey)
-    const rows = yield* pipe(
-      Reactive.map(props.section, (section) => section.rows),
-      Reactive.mapBy(
-        (agent: Agent) => agent.id,
-        AgentRow,
-        (agent, id) => ({ agent, id, editing: props.editing, dragging: props.dragging }),
-      ),
-    )
+    const rows = yield* agentRows(props)
     const dropped = (event: DragEvent) =>
       Effect.flatMap(props.dragging.dragged.get, (now) => {
         if (now === null) return Effect.void

@@ -299,7 +299,8 @@ const bundleBytes = async (framework: string): Promise<number> => {
 }
 
 const measure = async (browser: Browser, framework: string): Promise<Result> => {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const page = await context.newPage()
   const timings = await operations.reduce<Promise<Readonly<Record<string, Timing>>>>(
     (collected, operation) =>
       collected.then(async (all) => ({
@@ -315,7 +316,7 @@ const measure = async (browser: Browser, framework: string): Promise<Result> => 
 
   const startup = await startupOf(page, framework)
 
-  await page.close()
+  await context.close()
   console.log(`measured ${framework}`)
 
   return {

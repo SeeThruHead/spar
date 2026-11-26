@@ -133,7 +133,9 @@ const rowElement = <A>(rows: Rows<A>, item: A): Effect.Effect<Element, never, Sc
   const key = rows.key(item)
   const shown = fromCell(Cell.make(item))
 
-  return rows.kind === "drawn" ? Effect.sync(() => rows.draw(key, shown)) : rows.mount(key, shown)
+  return rows.kind === "drawn"
+    ? Effect.sync(() => rows.draw(key, shown, item))
+    : rows.mount(key, shown)
 }
 
 const list = <A>(rows: Rows<A>): Pieces =>

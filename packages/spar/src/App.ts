@@ -16,6 +16,8 @@ import { starter } from "./internal/listen.ts"
 import * as Pieces from "./internal/pieces.ts"
 import { fromCell } from "./internal/reactive.ts"
 import { renderInto } from "./internal/render.ts"
+import { live } from "./internal/rendererIn.ts"
+import * as Renderer from "./Renderer.ts"
 import { Inspector } from "./Store.ts"
 import type { Router } from "./Router.ts"
 import type { Component } from "./View.ts"
@@ -26,15 +28,27 @@ export type { Frame } from "./internal/frame.ts"
 
 export type NoProps = Readonly<Record<string, never>>
 
-const overlayRoot = Effect.acquireRelease(Effect.sync(Dom.addOverlayRoot), (root) =>
-  Effect.sync(() => root.remove()),
-)
-
-type Options<R, LayerError> = {
+type Drawn<R, LayerError> = {
   readonly target: HTMLElement
   readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>>, LayerError>
+}
+
+type Rendered<R, LayerError> = {
+  readonly target?: undefined
+  readonly layer: Layer.Layer<NoInfer<Exclude<R, Frame>> | Renderer.Renderer, LayerError>
+}
+
+type Options<R, LayerError> = (Drawn<R, LayerError> | Rendered<R, LayerError>) & {
   readonly shown?: Effect.Effect<void>
 }
+
+const provided = <R, LayerError, Rest>(
+  app: Effect.Effect<never, LayerError, Exclude<R, Frame> | Renderer.Renderer | Rest>,
+  options: Options<R, LayerError>,
+): Effect.Effect<never, LayerError, Rest> =>
+  options.target === undefined
+    ? Effect.provide(app, options.layer)
+    : Effect.provide(app, Layer.merge(options.layer, Renderer.dom(options.target)))
 
 const sent = (): Option.Option<Dehydrated> =>
   Option.flatMap(Option.fromNullOr(Dom.textOf(stateId)), Schema.decodeUnknownOption(Text))
@@ -97,24 +111,33 @@ const taken = Effect.fnUntraced(function* (taking: Taking) {
   )
 })
 
+const inPageOnly = (renderer: Renderer.Live, effect: Effect.Effect<void>) =>
+  renderer.inPage ? effect : Effect.void
+
 const started = <R, LayerError>(
   component: Component<NoProps, never, R>,
   options: Options<R, LayerError>,
-  existing: (target: HTMLElement) => Dom.Cursor | undefined,
+  existing: (target: Dom.Host) => Dom.Cursor | undefined,
   state: Dehydrated,
   name: string,
 ): Effect.Effect<never, LayerError> => {
   const adopters = Cell.make<ReadonlyMap<string, Pieces.Adopt>>(new Map())
   const expecting = Cell.make(state.pieces === true)
 
-  return Effect.all({
+  const app = Effect.all({
     scope: Effect.scope,
-    overlays: overlayRoot,
+    renderer: live,
     context: Effect.context<Exclude<R, Frame>>(),
   }).pipe(
-    Effect.tap(() => Effect.sync(() => Dom.markTaken(options.target, Pieces.taken))),
-    Effect.flatMap(({ scope, overlays, context }) => {
-      const claim = existing(options.target)
+    Effect.tap(({ renderer }) =>
+      inPageOnly(
+        renderer,
+        Effect.sync(() => Dom.markTaken(renderer.target, Pieces.taken)),
+      ),
+    ),
+    Effect.flatMap(({ scope, renderer, context }) => {
+      const { target, overlays } = renderer
+      const claim = existing(target)
       const hydrating = Cell.make(claim !== undefined)
 
       return Effect.andThen(
@@ -122,7 +145,7 @@ const started = <R, LayerError>(
         component.mount({}),
       ).pipe(
         Effect.flatMap((element) =>
-          renderInto(element, { parent: options.target, before: null, namespace: "html" }, claim),
+          renderInto(element, { parent: target, before: null, namespace: "html" }, claim),
         ),
         Effect.andThen(
           Effect.sync(() => {
@@ -133,22 +156,24 @@ const started = <R, LayerError>(
         (mounted) =>
           Effect.withSpan(mounted, name, { captureStackTrace: false, ...continued(state) }),
         Effect.andThen(options.shown ?? Effect.void),
-        Effect.andThen(taken({ adopters, expecting })),
+        Effect.andThen(inPageOnly(renderer, taken({ adopters, expecting }))),
         Effect.andThen(
           Option.match(installed.read(), {
             onNone: () => Effect.void,
             onSome: (hook) => hook.attach,
           }),
         ),
+        Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(target)))),
         Effect.provideService(Hydrating, hydrating),
         Effect.provideService(ActionScope, scope),
-        Effect.provideService(Frame, { target: options.target, overlays }),
+        Effect.provideService(Frame, { target, overlays }),
         Effect.provideService(Preload, rehearsal(component, context)),
       )
     }),
-    Effect.andThen(Effect.addFinalizer(() => Effect.sync(() => Dom.clear(options.target)))),
     Effect.andThen(Effect.never),
-    Effect.provide(options.layer),
+  )
+
+  return provided(app, options).pipe(
     Effect.provideService(Pieces.Adopters, {
       register: (key, adopt) =>
         Effect.sync(() => adopters.write(new Map([...adopters.read(), [key, adopt]]))),
@@ -158,8 +183,11 @@ const started = <R, LayerError>(
       Seed,
       Pieces.seededWith(state.stores, Pieces.arrivedEarly(Dom.waitingPieces(Pieces.holder))),
     ),
-    (app) =>
-      Option.match(installed.read(), { onNone: () => app, onSome: (hook) => hook.wrap(app) }),
+    (running) =>
+      Option.match(installed.read(), {
+        onNone: () => running,
+        onSome: (hook) => hook.wrap(running),
+      }),
     Effect.scoped,
     Effect.provideService(Scheduler.Scheduler, browserScheduler),
   )

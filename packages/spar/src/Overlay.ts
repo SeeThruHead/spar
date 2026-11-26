@@ -10,7 +10,7 @@ import type { Source } from "./internal/listen.ts"
 import { fromStream, map } from "./internal/reactive.ts"
 import type { Reactive } from "./internal/reactive.ts"
 import { ViewScope } from "./internal/viewScope.ts"
-import * as Props from "./Props.ts"
+import * as Props from "./internal/props.ts"
 
 export type { OverlayLayer } from "./internal/frame.ts"
 

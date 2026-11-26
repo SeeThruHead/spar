@@ -9,6 +9,7 @@
     "proofs": "bun scripts/proofs.ts",
     "build": "bun scripts/build.ts",
     "serve": "bun scripts/serve.ts",
+    "terminal": "bun scripts/terminal.ts",
     "test:browser": "bun run build && bun scripts/browser-test.ts",
     "browser:install": "playwright install chromium-headless-shell firefox",
     "browser:install:webkit": "playwright install webkit",

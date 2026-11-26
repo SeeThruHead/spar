@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
-import { Effect, Layer, pipe } from "effect"
-import { Server, View } from "spar"
+import { Effect, pipe } from "effect"
+import { Renderer, Server, View } from "spar"
 import { find, mount } from "spar/testing"
 import { LoadingView } from "./views.tsx"
 
@@ -33,7 +33,7 @@ describe("a component whose code is loaded when it is first shown", () => {
         View.split(LoadingView, later),
         View.mapProps(() => ({ id: "report" })),
       )
-      const made = yield* Server.render(Page, { layer: Layer.empty })
+      const made = yield* Server.render(Page, { layer: Renderer.html })
 
       expect(made.html).toContain("<h1>Loaded later: ")
       expect(made.html).not.toContain("Loading report")

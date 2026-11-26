@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
-import { Query, Reactive, Router, Server, Store, compose } from "spar"
+import { Query, Reactive, Renderer, Router, Server, Store, compose } from "spar"
 import { NothingView, ShelfView, TeaView } from "./instantData.tsx"
 
 class TeaQuery extends Query.Tag<TeaQuery>()("test/Tea", {
@@ -65,7 +65,10 @@ describe("a server render of a routed page whose data arrives at once", () => {
   it.live("draws the data, not the moment before it", () =>
     Effect.gen(function* () {
       const html = yield* Server.renderToString(Shelf, {
-        layer: Layer.provideMerge(TeaQuery.live, Router.Router.layerMemory("/")),
+        layer: Layer.merge(
+          Layer.provideMerge(TeaQuery.live, Router.Router.layerMemory("/")),
+          Renderer.html,
+        ),
       })
 
       expect(html).toContain('<output aria-label="Tea">green tea</output>')
@@ -75,7 +78,7 @@ describe("a server render of a routed page whose data arrives at once", () => {
   it.live("still ends when a page changes its own store every time it is drawn", () =>
     Effect.gen(function* () {
       const html = yield* Server.renderToString(RestlessShelf, {
-        layer: Router.Router.layerMemory("/"),
+        layer: Layer.merge(Router.Router.layerMemory("/"), Renderer.html),
       })
 
       expect(html).toContain('<output aria-label="Tea">1</output>')

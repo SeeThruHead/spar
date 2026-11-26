@@ -77,7 +77,7 @@ const defaults: Options = { maxAttempts: 8, attemptTimeout: "10 seconds" }
 
 const sharedName = "spar/outbox"
 
-export const retryPolicy = Schedule.exponential("250 millis").pipe(
+const retryPolicy = Schedule.exponential("250 millis").pipe(
   Schedule.modifyDelay((metadata) =>
     Effect.succeed(Duration.min(metadata.duration, Duration.seconds(5))),
   ),

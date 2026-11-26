@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, SubscriptionRef } from "effect"
-import { App, Markup, Reactive, Server, compose } from "spar"
+import { App, Markup, Reactive, Renderer, Server, compose } from "spar"
 import * as Testing from "spar/testing"
 import { ArticleView } from "./markup.tsx"
 
@@ -31,7 +31,7 @@ describe("trusted markup", () => {
   it.live("is drawn on the server, and hydrating keeps the nodes the server sent", () =>
     Effect.gen(function* () {
       const Article = compose(() => Effect.succeed({ body: Reactive.succeed(first) }))(ArticleView)
-      const html = yield* Server.renderToString(Article, { layer: Layer.empty })
+      const html = yield* Server.renderToString(Article, { layer: Renderer.html })
       const target = document.createElement("div")
 
       expect(html).toContain(

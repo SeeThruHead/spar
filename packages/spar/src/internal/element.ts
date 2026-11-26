@@ -11,7 +11,7 @@ type Listed<A> = {
 
 export type Drawn<A> = Listed<A> & {
   readonly kind: "drawn"
-  readonly draw: (key: string, item: Reactive<A>) => Element
+  readonly draw: (key: string, item: Reactive<A>, first: A) => Element
 }
 
 export type Mounted<A> = Listed<A> & {

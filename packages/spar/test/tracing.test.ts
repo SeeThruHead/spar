@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Context, Effect, Layer, Schema } from "effect"
 import { State as OneState, Store } from "spar"
 import * as Spans from "spar/devtools/spans"
+import { Tree, UiTree } from "../src/internal/uiTree.ts"
 
 const State = Schema.Struct({ visits: Schema.Finite })
 
@@ -43,6 +44,38 @@ describe("tracing", () => {
             span.attributes["spar.action"],
           ]),
       ).toEqual([["test/Visits/visited", "test/Visits", "visited"]])
+    }),
+  )
+
+  it.effect("with the log kept, a command's span names the log entry it made", () =>
+    Effect.gen(function* () {
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+      const keeping = Layer.sync(UiTree, () => {
+        const tree = new Tree()
+
+        tree.keepAtLeast(10)
+
+        return tree
+      })
+
+      const logged = yield* Effect.gen(function* () {
+        const visits = yield* Visits
+        const state = yield* OneState.current
+
+        yield* visits.commands.visited()
+        yield* visits.commands.visited()
+
+        return (yield* state.log.get).map((entry) => String(entry.seq))
+      }).pipe(Effect.provide(Visits.layer.pipe(Layer.provideMerge(keeping))), Effect.provide(spans))
+
+      expect(
+        buffer
+          .recent()
+          .filter((span) => span.name === "test/Visits/visited")
+          .map((span) => span.attributes["spar.entry"]),
+      ).toEqual(logged)
+      expect(logged).toHaveLength(2)
     }),
   )
 })

@@ -1,6 +1,6 @@
 import { Predicate } from "effect"
 import type { Schema } from "effect"
-import * as Props from "./Props.ts"
+import * as Props from "./internal/props.ts"
 
 const TypeId = "~spar/Markup"
 
@@ -8,7 +8,7 @@ export type Markup = { readonly [TypeId]: string }
 
 export const trusted = (html: string): Markup => ({ [TypeId]: html })
 
-export const isMarkup = (value: unknown): value is Markup => Predicate.hasProperty(value, TypeId)
+const isMarkup = (value: unknown): value is Markup => Predicate.hasProperty(value, TypeId)
 
 export const htmlOf = (value: unknown): string => (isMarkup(value) ? value[TypeId] : "")
 

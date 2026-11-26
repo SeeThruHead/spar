@@ -1,44 +1,21 @@
-import { Effect, Option, Predicate, Schema } from "effect"
+import { Effect, Option, Predicate } from "effect"
+import type { Schema } from "effect"
 import { WriteTypeId } from "./internal/action.ts"
 import type { Action as AnyAction, Handler as AnyHandler } from "./internal/action.ts"
 import { isElement } from "./internal/element.ts"
 import type { Element as AnyElement } from "./internal/element.ts"
 import { isHandle } from "./internal/handle.ts"
 import type { Handle as AnyHandle } from "./internal/handle.ts"
+import { encoded, kind, named } from "./internal/props.ts"
+import type { Show } from "./internal/props.ts"
 import { Backing, Direct, isReactive } from "./internal/reactive.ts"
 import type { Backed, Reactive as AnyReactive } from "./internal/reactive.ts"
 import { Kept } from "./internal/uiTree.ts"
 
-export type Field = Schema.Codec<unknown, unknown>
-
-export type Fields = Readonly<Record<string, Field>>
-
-type Show = (value: unknown) => Option.Option<Schema.Json>
-
-const shows = new WeakMap<object, Show>()
-
-export const kind = <T>(is: (value: unknown) => value is T, show: Show): Schema.declare<T> => {
-  const schema = Schema.declare(is)
-
-  shows.set(schema, (value) => (is(value) ? show(value) : Option.none()))
-
-  return schema
-}
-
-export const named =
-  (name: string): Show =>
-  () =>
-    Option.some(name)
-
-const encoded =
-  (schema: Field): Show =>
-  (value) =>
-    Option.flatten(
-      Option.liftThrowable(() => Schema.encodeUnknownOption(Schema.toCodecJson(schema))(value))(),
-    )
+export type { Field, Fields } from "./internal/props.ts"
 
 const current =
-  (inner: Field): Show =>
+  (inner: Schema.Codec<unknown, unknown>): Show =>
   (value) =>
     Option.flatMap(Option.liftPredicate(value, isReactive), (reactive) =>
       Option.flatMap(Option.fromUndefinedOr(reactive[Direct]), (now) => encoded(inner)(now.read())),
@@ -92,19 +69,4 @@ export const Handler = <
     (value): value is AnyHandler<HTMLElementEventMap[Name] & On<Tag>> =>
       Predicate.isNotNullish(value),
     named("handler"),
-  )
-
-export const shown = (field: Field, value: unknown): Option.Option<Schema.Json> =>
-  (shows.get(field) ?? encoded(field))(value)
-
-export const allShown = (fields: Fields, props: unknown): Readonly<Record<string, Schema.Json>> =>
-  Object.fromEntries(
-    Object.entries(fields).flatMap(([name, field]) =>
-      Option.toArray(
-        Option.map(
-          shown(field, Predicate.hasProperty(props, name) ? props[name] : undefined),
-          (value) => [name, value] as const,
-        ),
-      ),
-    ),
   )

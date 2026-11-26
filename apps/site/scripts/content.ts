@@ -1,6 +1,7 @@
+import { expanded } from "../../../scripts/includes.ts"
 import type { Heading, Page } from "../src/api.ts"
 import { entries } from "../src/nav.ts"
-import type { Content, Section } from "../server/content.ts"
+import type { Content, Section } from "../src/content.ts"
 import { drawing } from "./diagrams.ts"
 import type { Drawing } from "./diagrams.ts"
 import { highlight, unescaped } from "./highlight.ts"
@@ -77,7 +78,7 @@ const titleOf = (html: string, fallback: string): string => {
 }
 
 const pageOf = async (drawn: Drawing, source: (typeof sources)[number]): Promise<Page> => {
-  const markdown = await Bun.file(source.file).text()
+  const markdown = await expanded(await Bun.file(source.file).text())
   const withFigures = await drawn.withDiagrams(Bun.markdown.html(markdown), source.slug)
   const raw = withLinks(withHighlighting(withFigures))
 

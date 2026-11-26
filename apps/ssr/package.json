@@ -9,6 +9,7 @@
     "serve": "bun run build && bun scripts/serve.ts",
     "browser": "bun run build && bun ../../packages/browsers/scripts/in.ts bun scripts/browser-test.ts",
     "leaks": "bun run build && bun scripts/leaks.ts",
+    "render-time": "bun scripts/render-time.ts",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },

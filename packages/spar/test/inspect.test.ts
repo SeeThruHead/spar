@@ -3,6 +3,7 @@ import { Effect, Option, Schema, SubscriptionRef, pipe } from "effect"
 import { Props, Reactive, UiState, View, compose, uses, withHandlers, withProps } from "spar"
 import * as Testing from "spar/testing"
 import { fragment } from "../src/internal/element.ts"
+import { allShown } from "../src/internal/props.ts"
 import {
   Inspecting,
   inspecting,
@@ -147,7 +148,7 @@ describe("what the inspector knows about what is on the page", () => {
           BadgeView.props,
           Option.none(),
         ])
-        expect(Props.allShown(BadgeView.props, seen.props)).toEqual({ text: "badge", tone: null })
+        expect(allShown(BadgeView.props, seen.props)).toEqual({ text: "badge", tone: null })
       }),
     ),
   )
@@ -171,7 +172,7 @@ describe("what the inspector knows about what is on the page", () => {
           "TwiceView",
           Option.some({ path: ["Pair", "Twice"], services: ["Clock"] }),
         ])
-        expect(Props.allShown(NoteView.props, note.props)).toEqual({
+        expect(allShown(NoteView.props, note.props)).toEqual({
           id: "b",
           text: "new",
           onClear: "action",

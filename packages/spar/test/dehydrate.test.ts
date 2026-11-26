@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { screen } from "@testing-library/dom"
 import { Context, Effect, Layer, Option, Ref, Schema, Stream } from "effect"
 import { SecureRandom } from "effect/crypto"
-import { App, Query, Reactive, Router, Server, Store, UiState, compose } from "spar"
+import { App, Query, Reactive, Renderer, Router, Server, Store, UiState, compose } from "spar"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
 import { Seed } from "../src/internal/server.ts"
@@ -43,7 +43,10 @@ const Shop = (note: string) =>
 
 const database = Effect.succeed<State>({ items: ["<rice>", "beans"] })
 
-const onServer = Shelf.layerFrom(database).pipe(Layer.provide(SecureRandom.layerWebCrypto))
+const onServer = Layer.merge(
+  Shelf.layerFrom(database).pipe(Layer.provide(SecureRandom.layerWebCrypto)),
+  Renderer.html,
+)
 
 const inBrowser = Shelf.layer.pipe(Layer.provide(SecureRandom.layerWebCrypto))
 
@@ -171,7 +174,7 @@ const queries = Layer.merge(Catalog.live, Price.live).pipe(
 describe("a page whose data comes from queries, drawn on the server", () => {
   it.live("the server waits for every query, dependent ones too, and sends what they loaded", () =>
     Effect.gen(function* () {
-      const made = yield* Server.render(Priced, { layer: queries })
+      const made = yield* Server.render(Priced, { layer: Layer.merge(queries, Renderer.html) })
 
       expect(made.html).toContain('<output aria-label="Orders status">loaded</output>')
       expect(made.html).toContain('<output aria-label="Orders count">3</output>')
@@ -183,7 +186,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
   it.live("it waits too for queries that only start once a routed page is drawn", () =>
     Effect.gen(function* () {
       const made = yield* Server.render(Routed, {
-        layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+        layer: Layer.mergeAll(queries, Router.Router.layerMemory("/orders"), Renderer.html),
       })
 
       expect(made.html).toContain('<output aria-label="Orders status">loaded</output>')
@@ -199,6 +202,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
           queries,
           Router.Router.layerMemory("/shelf"),
           SecureRandom.layerWebCrypto,
+          Renderer.html,
         ),
       })
 
@@ -214,7 +218,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
     () =>
       Effect.gen(function* () {
         const noted = Note.live.pipe(Layer.provideMerge(Asked.layer))
-        const made = yield* Server.render(Noted, { layer: noted })
+        const made = yield* Server.render(Noted, { layer: Layer.merge(noted, Renderer.html) })
 
         expect(JSON.stringify(made.state.stores["test/Note"])).toContain('"ahead":["null"]')
 
@@ -238,7 +242,7 @@ describe("a page whose data comes from queries, drawn on the server", () => {
 
   it.live("the browser starts with that data in hand and asks for nothing again", () =>
     Effect.gen(function* () {
-      const made = yield* Server.render(Priced, { layer: queries })
+      const made = yield* Server.render(Priced, { layer: Layer.merge(queries, Renderer.html) })
       const built = yield* Effect.provideService(Layer.build(queries), Seed, made.state.stores)
       const taken = yield* Effect.provide(
         Effect.gen(function* () {
@@ -285,7 +289,7 @@ const pushPiece = (piece: unknown) =>
   })
 
 const sentInPieces = Server.renderInPieces(Routed, {
-  layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+  layer: Layer.mergeAll(queries, Router.Router.layerMemory("/orders"), Renderer.html),
   open: "<main>",
   close: "</main>",
   script: "<script async></script>",
@@ -341,7 +345,7 @@ describe("a page sent in pieces", () => {
       Effect.gen(function* () {
         const parts = yield* Stream.runCollect(
           Server.renderInPieces(Priced, {
-            layer: queries,
+            layer: Layer.merge(queries, Renderer.html),
             open: "<main>",
             close: "</main>",
             script: "",
@@ -374,7 +378,7 @@ describe("a page sent in pieces", () => {
         yield* Effect.provide(
           Stream.runDrain(
             Server.renderInPieces(Priced, {
-              layer: queries,
+              layer: Layer.merge(queries, Renderer.html),
               open: "",
               close: "",
               script: "",
@@ -426,6 +430,7 @@ describe("a page sent in pieces", () => {
             layer: Layer.merge(Catalog.live, Price.live).pipe(
               Layer.provideMerge(Layer.effect(Asked, Effect.fail("no database"))),
               Layer.provide(SecureRandom.layerWebCrypto),
+              Layer.merge(Renderer.html),
             ),
             open: "",
             close: "",
@@ -479,7 +484,7 @@ describe("a page sent in pieces", () => {
     () =>
       Effect.gen(function* () {
         const made = yield* Server.render(Routed, {
-          layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+          layer: Layer.mergeAll(queries, Router.Router.layerMemory("/orders"), Renderer.html),
         })
         const state = {
           ...made.state,
@@ -525,7 +530,7 @@ describe("a page sent in pieces", () => {
     () =>
       Effect.gen(function* () {
         const made = yield* Server.render(Routed, {
-          layer: Layer.merge(queries, Router.Router.layerMemory("/orders")),
+          layer: Layer.mergeAll(queries, Router.Router.layerMemory("/orders"), Renderer.html),
         })
         const state = {
           ...made.state,

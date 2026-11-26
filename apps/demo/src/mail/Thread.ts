@@ -12,6 +12,13 @@ import {
   ThreadView,
 } from "./ThreadView.tsx"
 
+const closedOnEscapeOrOutside = Effect.fnUntraced(function* (open: UiState.UiState<boolean>) {
+  yield* Events.onDocument("pointerdown", UiState.set(open, false))
+  yield* Events.onDocument("keydown", (event) =>
+    event.key === "Escape" ? UiState.set(open, false) : [],
+  )
+})
+
 const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }) {
   const api = yield* MailApi
   const store = yield* MailStore
@@ -23,10 +30,7 @@ const threadProps = Effect.fnUntraced(function* ({ id }: { readonly id: string }
   const draft = yield* UiState.make("draft", Schema.String, "")
   const pick = (label: string) => [UiState.set(status, label), UiState.set(menuOpen, false)]
 
-  yield* Events.onDocument("pointerdown", UiState.set(menuOpen, false))
-  yield* Events.onDocument("keydown", (event) =>
-    event.key === "Escape" ? UiState.set(menuOpen, false) : [],
-  )
+  yield* closedOnEscapeOrOutside(menuOpen)
 
   const menu = yield* pipe(
     menuOpen,

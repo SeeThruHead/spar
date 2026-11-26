@@ -22,10 +22,10 @@ export const toText = (value: unknown): string => {
   return ""
 }
 
-export const create = (tag: string, namespace: Namespace): Host => {
-  if (namespace === "svg") return document.createElementNS(svgNamespace, tag)
+export const create = (page: Document, tag: string, namespace: Namespace): Host => {
+  if (namespace === "svg") return page.createElementNS(svgNamespace, tag)
 
-  return document.createElement(tag)
+  return page.createElement(tag)
 }
 
 export const insert = (parent: Node, node: Node, before: Node | null): void => {
@@ -37,7 +37,7 @@ export const setText = (node: Text, value: unknown): void => {
 }
 
 const isProperty = (node: Host, name: string): boolean => {
-  if (node instanceof SVGElement) return false
+  if (node.namespaceURI === svgNamespace) return false
   if (attributeNames.test(name)) return false
 
   return name in node
@@ -108,20 +108,6 @@ export const setStyle = (node: Host, name: string, value: unknown): void => {
   node.style.setProperty(cssName(name), text)
 }
 
-const rangeOf = (span: Span): Range => {
-  const range = document.createRange()
-  range.setStartBefore(span.start)
-  range.setEndAfter(span.end)
-
-  return range
-}
-
-export const removeSpan = (span: Span): void => {
-  if (span.start === span.end) return span.start.remove()
-
-  rangeOf(span).deleteContents()
-}
-
 const nodesOf = (node: ChildNode, end: ChildNode): ReadonlyArray<ChildNode> => {
   if (node === end) return [node]
 
@@ -129,6 +115,12 @@ const nodesOf = (node: ChildNode, end: ChildNode): ReadonlyArray<ChildNode> => {
     node,
     ...Option.toArray(Option.fromNullishOr(node.nextSibling)).flatMap((next) => nodesOf(next, end)),
   ]
+}
+
+export const removeSpan = (span: Span): void => {
+  if (span.start === span.end) return span.start.remove()
+
+  nodesOf(span.start, span.end).forEach((node) => node.remove())
 }
 
 const movedKeepingState = (parent: Node, node: ChildNode, before: Node): boolean => {

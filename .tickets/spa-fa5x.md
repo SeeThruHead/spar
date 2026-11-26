@@ -22,7 +22,7 @@ A trace test: a click produces one connected browser-to-server trace; an unhandl
 
 **2026-11-19T04:06:29Z**
 
-From the plugin ticket: the Vite plugin (packages/spar/src/devtools/vite.ts) still needs configureServer with an endpoint that takes browser spans (OTLP JSON), keeps a buffer per trace id and forwards to the configured collector (Alloy http://192.168.0.29:4318), and options for the backends' OTLP or Tempo endpoints.
+From the plugin ticket: the Vite plugin (packages/spar/src/devtools/vite.ts) still needs configureServer with an endpoint that takes browser spans (OTLP JSON), keeps a buffer per trace id and forwards to the configured collector (Alloy), and options for the backends' OTLP or Tempo endpoints.
 
 **2026-11-19T04:34:25Z**
 
@@ -34,4 +34,4 @@ Also done: the sidebar's agent page asks the backend for the agent's record thro
 
 **2026-11-19T04:39:57Z**
 
-Closed. Added sidebar:traced (in CI's browser job): builds the app, starts the backend, and in a real browser starts an agent, waits for the backend to accept it, opens its page and reads the backend's record; then asserts from the backend's span buffer that the two start attempts are one trace continued from the page. Run once with OTLP_ENDPOINT=http://192.168.0.29:4318: the page's telemetry posts were forwarded and none was refused, and the backend exported without an error. Not done by me: looking the trace up in Tempo itself (no query access from this session). Decided: the tools read the browser's spans from a span buffer in the page (spar/devtools/spans works in the browser too), so the Vite plugin needs no collecting endpoint; the backend's spans come from its GET /spans/:traceId. Spans that exist: on <event>, <store>/<action> for each command (the store change), Outbox.persist and Outbox.deliver, Router.go/replace/back, one per component mount (the view's name), each RPC call, and on the backend the RPC and handler spans.
+Closed. Added sidebar:traced (in CI's browser job): builds the app, starts the backend, and in a real browser starts an agent, waits for the backend to accept it, opens its page and reads the backend's record; then asserts from the backend's span buffer that the two start attempts are one trace continued from the page. Run once with OTLP_ENDPOINT set to a local collector: the page's telemetry posts were forwarded and none was refused, and the backend exported without an error. Not done by me: looking the trace up in Tempo itself (no query access from this session). Decided: the tools read the browser's spans from a span buffer in the page (spar/devtools/spans works in the browser too), so the Vite plugin needs no collecting endpoint; the backend's spans come from its GET /spans/:traceId. Spans that exist: on <event>, <store>/<action> for each command (the store change), Outbox.persist and Outbox.deliver, Router.go/replace/back, one per component mount (the view's name), each RPC call, and on the backend the RPC and handler spans.

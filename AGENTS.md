@@ -66,7 +66,8 @@ passing test hides its console output.
 - `apps/site`: the docs site, built with Spar itself and server-rendered (`bun run --cwd apps/site
   dev`, port 4190), with code highlighted and Mermaid diagrams drawn at build time; the build fails
   if diagram text would be under 13px on a phone, and `site:look` walks it at phone and desktop
-  sizes in dark and light. It deploys to spar.sthloc.vip from `.gitea/workflows/site.yml`.
+  sizes in dark and light. `bun run --cwd apps/site static` writes it as static files, and
+  `.github/workflows/pages.yml` publishes them to GitHub Pages at spar.seethruhead.vip.
 - `apps/bench`: the same table app in Spar, Solid and Foldkit, with the leak and memory checks.
 
 ## How it starts

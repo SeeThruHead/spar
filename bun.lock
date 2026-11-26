@@ -228,6 +228,7 @@
       "version": "0.0.0",
       "dependencies": {
         "effect": "4.1.4",
+        "happy-dom": "20.0.11",
         "oxc-parser": "0.99.0",
       },
       "devDependencies": {
@@ -240,7 +241,6 @@
         "@testing-library/dom": "10.4.1",
         "@types/bun": "1.4.3",
         "@vitest/coverage-istanbul": "5.0.5",
-        "happy-dom": "20.0.11",
         "oxfmt": "0.73.0",
         "oxlint": "1.91.0",
         "typescript": "7.0.2",

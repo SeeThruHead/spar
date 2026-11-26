@@ -77,7 +77,7 @@ const stands = <A, E>(
   onServer: boolean,
 ): boolean => onServer || isFresh(entry, now, staleAfter)
 
-export const defaultStaleAfter: Duration.Input = "500 millis"
+const defaultStaleAfter: Duration.Input = "500 millis"
 
 const withAhead = (keys: ReadonlyArray<string>): { readonly ahead?: ReadonlyArray<string> } =>
   keys.length === 0 ? {} : { ahead: [...new Set(keys)] }

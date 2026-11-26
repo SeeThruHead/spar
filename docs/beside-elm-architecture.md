@@ -14,7 +14,7 @@ Model. These follow from that shape, not from how well it is built:
 
 - **State and server data beside the component that uses them.** A Spar component asks for its
   data in its own Effect (`TheQuery.ask(input)`), and a store can ship with a view
-  (`Store.with`, `Query.beside`). In the Elm architecture a child's data is a field in the
+  (`SomeStore.with(Component)`, `SomeQuery.beside(Component)`). In the Elm architecture a child's data is a field in the
   Model, a Message for its answer and a branch in `update`, wired in by each parent. In the
   five-segment navigation written in Foldkit, the click's branch of `update` lists the five
   lookups, and the branch that handles an answer starts the sixth
@@ -36,16 +36,18 @@ and the backend (`docs/devtools-compared.md`).
 
 ## What Foldkit does better
 
-- **One value holds everything.** The whole app's state is one Model with one Schema. Spar has
-  several stores and UI state, joined by a log; no single value is the app.
+- **The one value is declared in one place.** Both hold the whole app's state in one value: Spar's
+  stores, components' own state and query caches are slots in one tree, read whole with
+  `State.current.snapshot` and rewound together. Foldkit declares that value as one Model with one
+  Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
 - **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
   as cases of their own. In Spar you read `status` and `value` together.
 - **Speed on a few list operations, depending on the run.** In the latest run of this repo's
-  benchmark Foldkit is ahead of Spar only at removing a row. In earlier runs it was also ahead at
-  swapping two rows and at changing one row among 10,000 timed to the next frame, so differences
-  of a few milliseconds here are within the noise. Spar uses less memory and ships less
+  benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
+  one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next
+  frame. Earlier runs ordered these differently, so a few milliseconds here are within the noise. Spar uses less memory and ships less
   JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.

@@ -422,10 +422,10 @@ export const withEffect =
   (props) =>
     Effect.as(Effect.forkScoped(run(props)), {})
 
-export const For = <A>(props: {
+export const For = <A, const Key extends string | number>(props: {
   readonly each: Reactive<ReadonlyArray<A>> | ReadonlyArray<A>
-  readonly by: (item: A) => string | number
-  readonly children: (item: Reactive<A>, key: string) => Element
+  readonly by: (item: A) => Key
+  readonly children: (item: Reactive<A>, key: Key) => Element
 }): Element => {
   const context = drawnHere()
 
@@ -433,8 +433,8 @@ export const For = <A>(props: {
     kind: "drawn",
     items: isReactive(props.each) ? props.each : succeed(props.each),
     key: (item: A) => String(props.by(item)),
-    draw: (key, item) =>
-      drawingNow(Context.add(context, RowKey, key), () => props.children(item, key)),
+    draw: (key, item, first) =>
+      drawingNow(Context.add(context, RowKey, key), () => props.children(item, props.by(first))),
   })
 }
 

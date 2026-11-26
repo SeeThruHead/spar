@@ -4,14 +4,7 @@ Enhancers make a component's props; the view comes last and only draws. An enhan
 function from the props so far to an Effect. What the enhancers need and how they can fail are in
 the component's type, all the way up the tree.
 
-```tsx
-export const Counter = compose(
-  withStore(CounterStore, (store) => ({
-    count: store.select.count,
-    onAdd: store.commands.added(),
-  })),
-)((props) => <button onClick={props.onAdd}>Count is {props.count}</button>)
-```
+<<< apps/demo/src/counter/Counter.tsx#Counter
 
 **What it removes.** A missing provider and an unhandled failure. `App.mount` only accepts a
 component with no errors left and a layer that provides everything the tree needs, so both are
@@ -22,28 +15,11 @@ compile errors and neither can reach a user.
 A component says which data it needs by asking a query. It never fetches. Queries asked for in the
 same render start together, and one request runs for each input however many components ask.
 
-```tsx
-const userOf = (props: { readonly params: Reactive<Params> }) =>
-  Reactive.map(props.params, (now) => now.user)
+<<< apps/sidebar/src/DeepPage.tsx#ReportPage
 
-const ReportPage = compose(
-  withProps({ params: Props.Reactive(Params) }),
-  withQuery("profile", ProfileQuery, userOf),
-  withQuery("orders", OrdersQuery, userOf),
-  withQuery("suggestions", SuggestionsQuery, (props) =>
-    Reactive.map(props.profile.value, (found) => Option.fromNullishOr(found?.taste)),
-  ),
-)((props) => (
-  <section>
-    <h1>{nameOf(props.profile)}</h1>
-    <p>{countOf(props.orders)} orders</p>
-    <p>{listOf(props.suggestions)}</p>
-  </section>
-))
-```
-
-The third query waits for the first only because its input is made from the first one's value.
+The author query waits for the report only because its input is made from the report's value.
 That dependency is written down, so the trace viewer can draw it and name what waited for what.
+In the example below, two requests start together and the third waits for the first.
 
 [[demo:loads]]
 
@@ -57,15 +33,7 @@ All app state lives in one place, and changes only through named commands. A sto
 pure actions and selectors over its part of that state. What takes time is a plain Effect: the
 reset below is one fiber, so pressing Reset again while it runs does nothing.
 
-```ts
-const reset = Effect.gen(function* () {
-  yield* store.commands.resetClicked()
-  yield* Effect.sleep("2 seconds")
-  yield* store.commands.resetCompleted()
-})
-
-FiberHandle.run(running, reset, { onlyIfMissing: true })
-```
+<<< apps/site/src/StoreDemo.ts#withReset
 
 [[demo:store]]
 
@@ -112,8 +80,8 @@ dropped at the wrong moment.
 
 The page and the backend share one typed contract over Effect RPC, one trace and one way to
 declare data. The same components render on a server and are picked up in the browser without
-being drawn again. This site is built that way: it is a Spar app, rendered on the server, and its
-search box is a query.
+being drawn again. This site is a Spar app: each page is drawn to HTML with `Renderer.html` when the
+site is built, the browser takes it over without drawing it again, and its search box is a query.
 
 Read on in [Getting started](/docs/getting-started), or see how Spar sits beside
 [React](/docs/from-react), [Foldkit](/docs/from-foldkit) and [Solid 2.0](/docs/beside-solid-2).

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { fireEvent, screen } from "@testing-library/dom"
 import { Context, Effect, Layer, Ref } from "effect"
-import { App, Reactive, Server, View } from "spar"
+import { App, Reactive, Renderer, Server, View } from "spar"
 import * as Trees from "../src/internal/uiTrees.ts"
 import * as Spans from "spar/devtools/spans"
 import * as Testing from "spar/testing"
@@ -132,7 +132,7 @@ describe("a component composed from enhancers, its view last and inline", () => 
 
   it.live("is drawn on the server, and hydrating keeps the nodes the server sent", () =>
     Effect.gen(function* () {
-      const html = yield* Server.renderToString(Toolbar, { layer: Layer.empty })
+      const html = yield* Server.renderToString(Toolbar, { layer: Renderer.html })
       const target = document.createElement("div")
 
       expect(html).toContain("Sort by")

@@ -49,7 +49,7 @@ type Entry<A> = Dom.Span & {
 }
 
 type Target = {
-  readonly parent: Node
+  readonly parent: Dom.Host
   readonly before: Node | null
   readonly namespace: Dom.Namespace
 }
@@ -76,7 +76,7 @@ const insert = (node: Node, place: Place): void =>
 const textNode = (place: Place): Text => {
   if (place.claim !== undefined) return Dom.claimText(place.claim, place.parent)
 
-  const node = document.createTextNode("")
+  const node = place.parent.ownerDocument.createTextNode("")
 
   insert(node, place)
 
@@ -86,7 +86,7 @@ const textNode = (place: Place): Text => {
 const marker = (place: Place): Comment => {
   if (place.claim !== undefined) return Dom.claimComment(place.claim, place.parent, "")
 
-  const node = document.createComment("")
+  const node = place.parent.ownerDocument.createComment("")
 
   insert(node, place)
 
@@ -233,7 +233,7 @@ const markedUp = (
     return found
   }
 
-  const node = Dom.create(element.tag, inside.namespace)
+  const node = Dom.create(inside.parent.ownerDocument, element.tag, inside.namespace)
 
   fillMarkup(node, element, { ...inside, claim: undefined }, false)
   insert(node, place)
@@ -255,7 +255,7 @@ const renderIntrinsic = (element: Intrinsic, place: Place): Dom.Host => {
     return found
   }
 
-  const node = Dom.create(element.tag, namespace)
+  const node = Dom.create(place.parent.ownerDocument, element.tag, namespace)
 
   fill(node, element, { ...inside, claim: undefined })
   insert(node, place)
@@ -360,7 +360,7 @@ const drawEntry = <A>(
 ): Entry<A> => {
   const owner = Cell.owner()
   const cell = Cell.make(item)
-  const span = createSpan(rows.draw(key, fromCell(cell)), { ...place, owner })
+  const span = createSpan(rows.draw(key, fromCell(cell), item), { ...place, owner })
 
   return {
     start: span.start,
@@ -575,7 +575,7 @@ const renderRows = <A>(rows: Rows<A>, place: Place): void => {
     return Cell.defer(place.later, fillRows(rows, place, list.anchor, list.rows))
   }
 
-  const anchor = document.createComment("")
+  const anchor = place.parent.ownerDocument.createComment("")
 
   insert(anchor, place)
   Cell.defer(place.later, fillRows(rows, place, anchor, undefined))
@@ -615,7 +615,7 @@ export const renderInto = Effect.fnUntraced(function* (
   const owner = Cell.owner()
   const later = Cell.waiting<Later>()
 
-  Dom.watchTyping(document)
+  Dom.watchTyping(target.parent.ownerDocument)
 
   yield* Effect.addFinalizer(() => Effect.sync(() => Cell.release(owner)))
   yield* Effect.sync(() =>

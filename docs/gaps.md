@@ -29,10 +29,10 @@ Built since, and smaller than they sound, but not done:
 - **Generated ids in `@spar/ui` come from a counter, not a store.** A tooltip or a listbox asks
   for an id when it mounts. Decided to leave it: an id is not state anyone would rewind to, and an
   action for every id would bury the log. Toasts did move to a store.
-- **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
+- **A fork lives in the page.** A saved store's saved state is not rewritten by a fork, so a reload
   returns to what was saved. Decided not to build keeping forks on the device as a leftover: a
   parked branch holds each store's state in memory as a way to resume it, and to save it the
-  branches would have to become plain data that every kind of store can be loaded from, durable
+  branches would have to become plain data that every kind of store can be loaded from, saved
   ones and ones with an outbox included. A store's log can be exported and loaded again, which is
   the way to keep one today.
 - **The showcase is not drawn on the server.** `apps/ssr` shows server rendering, with a routed
@@ -46,9 +46,8 @@ Built since, and smaller than they sound, but not done:
   everything code can do: a layer built by a function declaration, a component from a package, or
   a service reached only through `Effect.service` is not seen, and such a child still fails when
   it mounts. The Bun plugin checks one file at a time.
-- **The bundle is large and starts slower than Solid's.** The benchmark app loads 58.4 kB gzipped
-  at start (Solid 6.1 kB, React 68.0 kB), down from 68.6 kB once the router, the device journal
-  and diagnostic text for builds stopped shipping to apps that do not use them. About 35 kB is the floor
+- **The bundle is large and starts slower than Solid's.** In the published benchmark the app loads
+  60.6 kB gzipped at start (Solid 6.1 kB, React 68.0 kB). About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not
   any one slow function (`docs/benchmarks.md`). `bun run --cwd apps/bench startup` profiles it:
   on sthdev, Spar waits about 4.7 ms longer than Solid while its 200 kB bundle (minified) loads and

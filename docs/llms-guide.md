@@ -38,6 +38,10 @@ Three rules that break the build most often:
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
    already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
+   When what to run depends on a value, return the action from an Effect instead of yielding it:
+   an action (a callback prop's result, a list) cannot be yielded, and Spar runs what you return.
+   `onEnter: Effect.gen(function* () { const now = yield* props.palette.get; return props.onRun(now.active) })`.
+   Returning nothing runs nothing.
 
 ## The shape of an app
 
@@ -111,7 +115,7 @@ in an enhancer and pass `props.shown` instead.
 | Build a form                              | `Form.make(Schema, initial)`, `form.field(name)`, `form.submit` or `form.submitThen`                                                    | UI state for each input plus hand validation                                                                   |
 | React to a key press                      | `withKey("Escape", (props) => UiState.set(props.open, false))`                                                                          | `addEventListener`                                                                                             |
 | Run something while mounted               | `withEffect((props) => effect)`; `Events.onWindow` / `onDocument` inside it                                                             | A module-level listener                                                                                        |
-| Focus or measure an element               | `Handle.make`, passed as a `Props.Handle`                                                                                               | `document.querySelector`                                                                                       |
+| Focus or measure an element               | `const input = yield* Handle.make` (an Effect, not a function), passed as a `Props.Handle`                                              | `document.querySelector`                                                                                       |
 | Open a dialog, menu, popover or tooltip   | The ones in `@spar/ui`, or `View.portal` with `Overlay`                                                                                 | A positioned div                                                                                               |
 | Note something that happened, for the log | `Timeline.note(kind, name, detail)`                                                                                                     | `console.log`                                                                                                  |
 | Test a store                              | Provide its layer and call commands in `it.effect`                                                                                      | Mounting a page to test a reducer                                                                              |
@@ -132,8 +136,12 @@ compile):
   (`(state: State): State => ...`), or TypeScript widens the literal and the action is rejected.
 - UI state made in a service, written from a command, a stream or a service listener, or seeded
   from a store. UI state belongs to one component and changes only in its handlers.
-- A connected component written as a JSX tag, a service passed into a view, a modal outside a
-  portal, `View.pending` placed before `View.recover`, a route mounted with the wrong page.
+- A component that can still fail, written as a JSX tag (`TS2604` / `TS2786`: "cannot be used as a
+  JSX component"). Recover its error inside it with `View.recover`, or mount it with
+  `View.child(component, props)` from an enhancer. If its error type shows as `unknown`, look for
+  the first error in that component instead: something there was not typed.
+- A service passed into a view, a modal outside a portal, `View.pending` placed before
+  `View.recover`, a route mounted with the wrong page.
 
 Build errors (the Vite plugin stops the build and names the file, line and rule):
 
@@ -163,6 +171,11 @@ by component path, and goes away when the component unmounts. Nothing else can w
 App state is what the app knows: the agents, the notes, the cart. It lives in a store. A store is
 a Schema for the state, named actions with pure reducers, and named selectors. It changes only
 through `store.commands.<action>(payload)`, and every command is an entry in the store's log.
+
+Keep in the state only what cannot be worked out from the rest. A total, a count, a "has any",
+a filtered or sorted list is a selector over the state, never a field that every reducer has to
+remember to update: `total: Store.selector(Schema.Int, (state: State) => state.counts.reduce((sum, c) => sum + c.count, 0))`.
+A second copy of a value is a value that can disagree with the first.
 
 A store does not have to be declared at the root. `SomeStore.with(Component)` makes one unit of a
 store and the component that uses it. Mount that unit twice and there are two stores, each with
@@ -202,14 +215,7 @@ with async work. The short version:
 
 Declare the contract once, in a file both sides import:
 
-```ts
-export class Agents extends RpcGroup.make(
-  Rpc.make("Start", {
-    payload: { name: Schema.String, idempotencyKey: Schema.String },
-    error: ServerUnreachable,
-  }),
-) {}
-```
+<<< apps/sidebar/src/api.ts#Agents
 
 On the page, `Backend.rpc(Agents, url)` gives a typed client. Its calls are spans in the trace of
 whatever caused them, the trace context travels to the backend in the request, and the backend's

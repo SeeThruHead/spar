@@ -124,8 +124,8 @@ export class Kept<A> implements Cell.Cell<A> {
     this.tree.tell("set", this)
   }
 
-  writtenAs(name: string, value: A, about: About): void {
-    this.tree.written(this, name, value, about)
+  writtenAs(name: string, value: A, about: About): Option.Option<number> {
+    return this.tree.written(this, name, value, about)
   }
 
   subscribe(listener: Cell.Listener<A>): Cell.Stop {
@@ -193,14 +193,14 @@ export class Tree {
     this.keeping.write(Math.max(this.keeping.read(), count))
   }
 
-  written<A>(kept: Kept<A>, name: string, value: A, about: About): void {
+  written<A>(kept: Kept<A>, name: string, value: A, about: About): Option.Option<number> {
     if (this.viewing.read() !== null) this.travelTo(null)
 
     const seq = this.seq.read() + 1
 
     this.seq.write(seq)
     kept.write(value)
-    if (this.keeping.read() === 0) return
+    if (this.keeping.read() === 0) return Option.none()
 
     kept.remembered(seq, value)
     this.log.write(
@@ -208,6 +208,8 @@ export class Tree {
         -logLimit,
       ),
     )
+
+    return Option.some(seq)
   }
 
   root(): Place {

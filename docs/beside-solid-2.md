@@ -7,17 +7,17 @@ follows is what Solid says it does, not what was seen it do, except where the be
 
 ## Data that arrives later
 
-|                                   | Solid 2.0                                                                                           | Spar                                                                                                                                     |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Declaring it                      | Any computation that returns a promise: `createMemo(() => fetchUser(id()))`                         | A query class with Schemas, then `yield* TheQuery.ask(input)` in the component                                                           |
-| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `status`                                                              |
-| One piece that needs another      | A computation reads the other's value, so it runs when that value is ready                          | The second query's input is made from the first one's value; it is `waiting` until then                                                  |
-| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `status` is `loading`; `latest` keeps the last loaded value                                                                              |
-| A request that is superseded      | The earlier run is cleaned up, and an AbortController registered in it can cancel the request       | The earlier answer is refused when it lands (`SPAR_LATE_ANSWER`). The request is not cancelled                                           |
-| A cache by input, a stale time    | Not in the core: a computation holds the value for its current inputs                               | Yes: entries keyed by the encoded input, `staleAfter`, refetch on focus and reconnect                                                    |
-| A change shown before it is saved | `action` with `createOptimisticStore`; the optimistic value reverts by itself when the work settles | `patchedBy` with `Store.outbox`; the send survives a reload and is retried, and if it fails for good the query loads what the server has |
-| Failure                           | `<Errored>`, or an effect's `error` option                                                          | The handle's `error`, typed by the query's failure Schema; `retry` takes a schedule                                                      |
-| Asking again                      | `refresh(user)`, with `affects(user)` to show it as pending                                         | The handle's `refetch`, `TheQuery.invalidate`, `invalidatedBy(action)`                                                                   |
+|                                   | Solid 2.0                                                                                           | Spar                                                                                                                                                               |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Declaring it                      | Any computation that returns a promise: `createMemo(() => fetchUser(id()))`                         | A query class with Schemas, then `yield* TheQuery.ask(input)` in the component                                                                                     |
+| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `status`                                                                                        |
+| One piece that needs another      | A computation reads the other's value, so it runs when that value is ready                          | The second query's input is made from the first one's value; it is `waiting` until then                                                                            |
+| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `status` is `loading`; `latest` keeps the last loaded value                                                                                                        |
+| A request that is superseded      | The earlier run is cleaned up, and an AbortController registered in it can cancel the request       | The earlier answer is ignored when it lands, because it is not for the newest request. The request is not cancelled                                                |
+| A cache by input, a stale time    | Not in the core: a computation holds the value for its current inputs                               | Yes: entries keyed by the encoded input, `staleAfter`, refetch on focus and reconnect                                                                              |
+| A change shown before it is saved | `action` with `createOptimisticStore`; the optimistic value reverts by itself when the work settles | `TheQuery.patch(input, f)` beside an `Outbox.channel` send; the send survives a reload and is retried, and on `Outbox.givenUp` the query loads what the server has |
+| Failure                           | `<Errored>`, or an effect's `error` option                                                          | The handle's `error`, typed by the query's failure Schema; `retry` takes a schedule                                                                                |
+| Asking again                      | `refresh(user)`, with `affects(user)` to show it as pending                                         | The handle's `refetch`, or `TheQuery.invalidate` from any Effect                                                                                                   |
 
 **The same idea in both.** Data that arrives later is a reactive value. What depends on it is
 known from what reads it, so nobody lists dependencies or writes a loader beside the route, and
@@ -29,10 +29,11 @@ independent pieces load side by side.
 - A change in flight is a first-class thing: the screen holds what it showed, `isPending` says a
   change is on the way, and an optimistic value reverts by itself.
 - A superseded request can be cancelled, not only ignored.
-- It is small and quick to start. In this repo's benchmark the Solid 2 table ships 23.7 kB of
-  JavaScript (gzip) against Spar's 70.0 kB, starts in 4.5 ms against 9.3 ms, and changes one row
-  among 10,000 in 0.5 ms against 1.2 ms. Spar is ahead of it at updating, selecting, swapping and
-  removing rows among 1,000 (`docs/benchmarks.md`).
+- It is smaller, quicker to start and quicker at most table work. In this repo's benchmark the
+  Solid 2 table ships 23.7 kB of JavaScript (gzip) against Spar's 60.6 kB, starts in 6.5 ms
+  against 11.0 ms, changes one row among 10,000 in 0.8 ms against 1.0 ms, and selects, swaps and
+  removes rows among 1,000 faster. Spar is ahead of it only at updating every 10th row
+  (`docs/benchmarks.md`).
 - Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 34,
   among them slow scopes, effects that write their own source, and requests thrown away.
 
@@ -95,7 +96,7 @@ Read from the README of Solid Router's main branch, whose 1.0 line targets Solid
 | What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask`                                                     |
 | How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | Data a preload or the server loaded is used once by the first real read, whatever `staleAfter` is; after that, `staleAfter` (500 ms unless set) |
 | Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                                                                                 |
-| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request                                                                   |
+| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `TheQuery.invalidate` or `TheQuery.patch` in the Effect that made the change; the refetch is a second request                                   |
 
 Two things Solid Router does that bear on Spar's list of open cases. Preloaded data is fresh for
 a few seconds by itself; Spar uses data loaded ahead once whatever the stale time, and keeps any

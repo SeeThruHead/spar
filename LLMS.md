@@ -38,6 +38,10 @@ Three rules that break the build most often:
    requirement, a UI write, or a list of them. A store command (`store.commands.added(payload)`)
    already fits.
    Something that fails or needs a service gets handled first: `Effect.catch`, or provide it.
+   When what to run depends on a value, return the action from an Effect instead of yielding it:
+   an action (a callback prop's result, a list) cannot be yielded, and Spar runs what you return.
+   `onEnter: Effect.gen(function* () { const now = yield* props.palette.get; return props.onRun(now.active) })`.
+   Returning nothing runs nothing.
 
 ## The shape of an app
 
@@ -111,7 +115,7 @@ in an enhancer and pass `props.shown` instead.
 | Build a form                              | `Form.make(Schema, initial)`, `form.field(name)`, `form.submit` or `form.submitThen`                                                    | UI state for each input plus hand validation                                                                   |
 | React to a key press                      | `withKey("Escape", (props) => UiState.set(props.open, false))`                                                                          | `addEventListener`                                                                                             |
 | Run something while mounted               | `withEffect((props) => effect)`; `Events.onWindow` / `onDocument` inside it                                                             | A module-level listener                                                                                        |
-| Focus or measure an element               | `Handle.make`, passed as a `Props.Handle`                                                                                               | `document.querySelector`                                                                                       |
+| Focus or measure an element               | `const input = yield* Handle.make` (an Effect, not a function), passed as a `Props.Handle`                                              | `document.querySelector`                                                                                       |
 | Open a dialog, menu, popover or tooltip   | The ones in `@spar/ui`, or `View.portal` with `Overlay`                                                                                 | A positioned div                                                                                               |
 | Note something that happened, for the log | `Timeline.note(kind, name, detail)`                                                                                                     | `console.log`                                                                                                  |
 | Test a store                              | Provide its layer and call commands in `it.effect`                                                                                      | Mounting a page to test a reducer                                                                              |
@@ -132,8 +136,12 @@ compile):
   (`(state: State): State => ...`), or TypeScript widens the literal and the action is rejected.
 - UI state made in a service, written from a command, a stream or a service listener, or seeded
   from a store. UI state belongs to one component and changes only in its handlers.
-- A connected component written as a JSX tag, a service passed into a view, a modal outside a
-  portal, `View.pending` placed before `View.recover`, a route mounted with the wrong page.
+- A component that can still fail, written as a JSX tag (`TS2604` / `TS2786`: "cannot be used as a
+  JSX component"). Recover its error inside it with `View.recover`, or mount it with
+  `View.child(component, props)` from an enhancer. If its error type shows as `unknown`, look for
+  the first error in that component instead: something there was not typed.
+- A service passed into a view, a modal outside a portal, `View.pending` placed before
+  `View.recover`, a route mounted with the wrong page.
 
 Build errors (the Vite plugin stops the build and names the file, line and rule):
 
@@ -163,6 +171,11 @@ by component path, and goes away when the component unmounts. Nothing else can w
 App state is what the app knows: the agents, the notes, the cart. It lives in a store. A store is
 a Schema for the state, named actions with pure reducers, and named selectors. It changes only
 through `store.commands.<action>(payload)`, and every command is an entry in the store's log.
+
+Keep in the state only what cannot be worked out from the rest. A total, a count, a "has any",
+a filtered or sorted list is a selector over the state, never a field that every reducer has to
+remember to update: `total: Store.selector(Schema.Int, (state: State) => state.counts.reduce((sum, c) => sum + c.count, 0))`.
+A second copy of a value is a value that can disagree with the first.
 
 A store does not have to be declared at the root. `SomeStore.with(Component)` makes one unit of a
 store and the component that uses it. Mount that unit twice and there are two stores, each with
@@ -204,12 +217,22 @@ Declare the contract once, in a file both sides import:
 
 ```ts
 export class Agents extends RpcGroup.make(
+  Rpc.make("Describe", {
+    payload: { name: Schema.String },
+    success: Started,
+    error: NoRecord,
+  }),
   Rpc.make("Start", {
     payload: { name: Schema.String, idempotencyKey: Schema.String },
     error: ServerUnreachable,
   }),
+  Rpc.make("Started", { success: Schema.Array(Schema.String) }),
+  Rpc.make("Users", { success: Schema.Array(User) }),
+  Rpc.make("Lookup", { payload: { kind: Schema.String, id: Schema.String }, success: Found }),
 ) {}
 ```
+
+(`apps/sidebar/src/api.ts`)
 
 On the page, `Backend.rpc(Agents, url)` gives a typed client. Its calls are spans in the trace of
 whatever caused them, the trace context travels to the backend in the request, and the backend's
@@ -256,15 +279,19 @@ A parent reads a value from a store and passes it to a child. The child declares
 uses the prop.
 
 ```tsx
-class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
+export class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   input: Schema.Int,
   success: Schema.Array(Order),
   failure: ServerUnreachable,
-  load: (userId) => Effect.flatMap(Effect.service(Server), (server) => server.orders(userId)),
+  load: (userId: number) => Effect.flatMap(Effect.service(Server), (found) => found.orders(userId)),
   staleAfter: "30 seconds",
 }) {}
+```
 
-const Orders = compose(
+(`packages/spar/test/serverData.test.tsx`)
+
+```tsx
+export const Orders = compose(
   withProps({ userId: Props.Reactive(Schema.Int) }),
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
@@ -272,11 +299,17 @@ const Orders = compose(
     {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
   </p>
 ))
+```
 
-const Parent = compose(
+(`packages/spar/test/serverData.test.tsx`)
+
+```tsx
+export const Parent = compose(
   withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
 )((props) => <Orders userId={props.selected} />)
 ```
+
+(`packages/spar/test/serverData.test.tsx`)
 
 That is the whole of it. Provide `OrdersQuery.live` where the app is mounted and it works.
 
@@ -295,12 +328,31 @@ What Spar does with it:
 
 A query that needs another query's answer takes its input from that answer:
 
-```ts
-const report = yield * ReportQuery.ask(reportId)
-const author =
-  yield *
-  AuthorQuery.ask(Reactive.map(report.value, (found) => Option.fromNullishOr(found?.authorId)))
+```tsx
+const ReportPage = compose(
+  withProps({ params: Props.Reactive(Report) }),
+  withQuery("report", ReportQuery, (props) => Reactive.map(props.params, (now) => now.report)),
+  withQuery("author", AuthorQuery, (props) =>
+    Reactive.map(props.report.value, (found) => Option.fromNullishOr(found?.authorId)),
+  ),
+)((props) => (
+  <section class="segment" aria-label="Report">
+    <h1>
+      <output aria-label="Report name">{Reactive.map(props.report.value, labelOf)}</output>
+    </h1>
+    <p>
+      <output aria-label="Report status">{props.report.status}</output>
+    </p>
+    <p>
+      Written by{" "}
+      <output aria-label="Author name">{Reactive.map(props.author.value, labelOf)}</output>{" "}
+      <output aria-label="Author status">{props.author.status}</output>
+    </p>
+  </section>
+))
 ```
+
+(`apps/sidebar/src/DeepPage.tsx`)
 
 While the input is none the author query is `waiting`. The moment the report answers, it starts.
 That is the only waterfall Spar allows, it is the one the data really has, and it shows: as the
@@ -316,52 +368,58 @@ A route is a path and a Schema. Fields named in the path are path params; every 
 search param. Links and navigation take the decoded params, so a wrong param is a type error.
 
 ```ts
-export const reportRoute = Router.route(
-  "/org/:org/team/:team/member/:member/reports/:report",
-  Schema.Struct({
-    org: Schema.String,
-    team: Schema.String,
-    member: Schema.String,
-    report: Schema.String,
-  }),
-)
-
-const link = router.link(reportRoute, { org: "acme", team: "core", member: "ada", report: "q3" })
+export const orgRoute = Router.route("/org/:org/*", Org)
 ```
 
-Segments nest with open-ended routes and an outlet in each layout. `Router.live` keeps a layout
-mounted while only its params change and gives it the params as a reactive value, which is what a
-query wants as its input:
+(`apps/sidebar/src/Deep.ts`)
 
-```tsx
-const orgRoute = Router.route("/org/:org/*", Org)
-
-const withTeams = () =>
-  Effect.map(
-    Router.outlet({ routes: [Router.live(teamRoute, TeamSegment)], otherwise: Missing }),
-    (inner) => ({ inner }),
-  )
-
-const OrgSegment = compose(
-  withProps({ params: Props.Reactive(Org) }),
-  withQuery("org", OrgQuery, (props) => Reactive.map(props.params, (now) => now.org)),
-  withTeams,
-)((props) => (
-  <section>
-    <h2>{Reactive.map(props.org.value, (found) => found?.label ?? "")}</h2>
-    {props.inner}
-  </section>
-))
-```
+A link is `router.link(route, params)`, with the params typed by the route's Schema.
 
 A route inside another is declared under it, so its path is written once. The parent must end
 with `/*`, and the Schema must carry every param of the whole path; both are compile errors
 otherwise:
 
 ```ts
-const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
-const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
+export const teamRoute = Router.under(orgRoute, "/team/:team/*", Team)
 ```
+
+(`apps/sidebar/src/Deep.ts`)
+
+```ts
+export const memberRoute = Router.under(teamRoute, "/member/:member/*", Member)
+```
+
+(`apps/sidebar/src/Deep.ts`)
+
+Segments nest with open-ended routes and an outlet in each layout. `Router.live` keeps a layout
+mounted while only its params change and gives it the params as a reactive value, which is what a
+query wants as its input. In the showcase each segment asks for its own data from its params and
+places the next segment's outlet:
+
+```tsx
+const withInner =
+  <Params, Path extends string, R>(
+    route: Router.Route<Params, Path>,
+    page: View.Component<{ readonly params: Reactive.Reactive<Params> }, never, R>,
+  ) =>
+  () =>
+    Effect.map(
+      Router.outlet({ routes: [Router.live(route, page)], otherwise: DeepMissingView }),
+      (inner) => ({ inner }),
+    )
+```
+
+(`apps/sidebar/src/DeepPage.tsx`)
+
+```tsx
+export const OrgSegment = compose(
+  withProps({ params: Props.Reactive(Org) }),
+  withSegment("Organisation", OrgQuery, (now: typeof Org.Type) => now.org),
+  withInner(teamRoute, TeamSegment),
+)(SegmentView)
+```
+
+(`apps/sidebar/src/DeepPage.tsx`)
 
 There is no separate route tree to keep in step: the nesting is the outlets, and the paths follow
 from `under`.
@@ -373,12 +431,9 @@ needs (`apps/sidebar/scripts/deep.ts`).
 
 ### Preload on intent
 
-A link has `onIntent`. Put it on the anchor and pointing at the link, or focusing it, starts the
-target page's queries before the click:
-
-```tsx
-<a href={link.href} onClick={link.onClick} onPointerenter={link.onIntent} onFocus={link.onIntent}>
-```
+A link has `onIntent`. Put it on the anchor (`onPointerenter={link.onIntent}` and
+`onFocus={link.onIntent}`, beside `href={link.href}` and `onClick={link.onClick}`) and pointing at
+the link, or focusing it, starts the target page's queries before the click.
 
 Spar rehearses the target: it mounts the app at that address without drawing anything, which
 reaches every `ask` on the way, and throws the result away. The queries are real and their answers
@@ -392,19 +447,34 @@ a heading on the same page, and a click with a modifier key are left to the brow
 
 ### Loading a page's code when it is first shown
 
-```ts
-Router.live(
-  orgRoute,
-  View.split(LoadingView, () => import("./DeepPage.ts").then((module) => module.OrgSegment)),
-)
+```tsx
+const withPage = () =>
+  Effect.map(
+    Router.outlet({
+      routes: [
+        Router.on(home, EmptyPageView),
+        Router.on(agentRoute, AgentPage),
+        Router.live(
+          orgRoute,
+          View.split(DeepLoadingView, () =>
+            import("./DeepPage.tsx").then((module) => module.OrgSegment),
+          ),
+        ),
+      ],
+      otherwise: MissingPageView,
+    }),
+    (page) => ({ page }),
+  )
 ```
+
+(`apps/sidebar/src/Shell.tsx`)
 
 `View.split` shows the placeholder, a view that takes the same props, until the code has
 arrived. Routes, param Schemas and query classes stay in the main bundle because the query layers
 are provided at the root; the components and their views are what is split off. Preloading a link
 fetches the code too, since the rehearsal mounts the page. On the server and while taking over a
 server-drawn page the real component is used, not the placeholder. The showcase's deep page is
-loaded this way (`apps/sidebar/src/Shell.ts`).
+loaded this way, as above.
 
 ### Pending and failure, per segment
 
@@ -420,7 +490,7 @@ start late.
 
 - The build refuses a wait written straight into an enhancer inside `compose(...)`: `yield*` of
   `Effect.sleep`, `Effect.promise`, `Effect.tryPromise`, `Effect.callback`, `Deferred.await`,
-  `Fiber.join` (rule `no-waiting-in-components`). A wait in a handler, in a store's reaction or
+  `Fiber.join` (rule `no-waiting-in-components`). A wait in a handler, in a service's Effect or
   anywhere outside a component is fine.
 - The build cannot see a wait behind a call such as `yield* server.describe(name)`, or in an
   enhancer written outside the `compose(...)` call. For that,
@@ -447,7 +517,7 @@ panel, lenses show one kind at a time:
 
 A request that waited for another query's value draws that wait as a line before its bar, from
 when the other was asked for to when this one started. Data that was already there (after a
-preload, or going back) is a short `served` span that links to the trace that loaded it.
+preload, or going back) is a short `<query key>/served` span that links to the trace that loaded it.
 
 Hovering a link and then clicking it follows one rule. Hovering starts the target page's
 queries in the hover's own trace. When the click asks for the same queries, nothing is asked
@@ -495,14 +565,29 @@ database's spans, and going back loads no new document.
 works without JavaScript. `Server.renderInPieces` does not wait:
 
 ```ts
-Server.renderInPieces(Site, {
-  layer: layer(url),
-  open,
-  close: "</div>",
-  script: '<script type="module" async src="/client.js"></script>',
-  end: "</body></html>",
-})
+const inPieces = (url: string) =>
+  Effect.map(
+    Effect.context(),
+    (context) =>
+      new Response(
+        Stream.toReadableStreamWith(
+          Stream.encodeText(
+            Server.renderInPieces(Site, {
+              layer: layer(url, "300 millis"),
+              open,
+              close: "</div>",
+              script: client,
+              end: "</body></html>",
+            }),
+          ),
+          context,
+        ),
+        { headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+  )
 ```
+
+(`apps/ssr/scripts/site.ts`)
 
 It sends the page as first drawn, with each query showing its own `loading` or `waiting`
 state, and the state it had then. The queries go on running on the server, dependent ones too,
@@ -598,12 +683,15 @@ needs.
 
 Rules out: a load failure nobody handles and a missing provider. Both are compile errors.
 
-### 4. Children with needs are placed by the Effect, not by JSX
+### 4. A child's needs and failures are not lost in JSX
 
-TypeScript gives every JSX expression the same type, so a connected component used as a tag would
-silently lose its errors and layers. A connected component is therefore not a function and cannot be
-a tag. The parent's Effect mounts it with `View.child`, `Reactive.mapBy`, `Reactive.when` or
-`Router.outlet` and hands the view a finished element. Only pure views are JSX tags.
+TypeScript gives every JSX expression the same type, so a child written as a tag cannot add its
+errors and services to its parent's type. Two things close that hole. A component that can still
+fail cannot be written as a tag at all: recover its error inside it with `View.recover`, or mount it
+from the parent's Effect with `View.child`, `Reactive.mapBy`, `Reactive.when` or `Router.outlet`,
+which keep its type. And the Vite build reads the code, follows components across files to the
+layer given to `App.mount`, and stops with `SPAR_CHILD_NEEDS_A_SERVICE` when a child written as a
+tag needs a service nothing above it provides.
 
 Rules out: requirements and errors that disappear somewhere in the middle of the tree.
 
@@ -642,8 +730,8 @@ drifts from the state.
 
 ### 8. Nothing the user did is lost
 
-A durable store writes each action to the device before the state changes and comes back after a
-reload. Anything leaving the device goes through the outbox: saved first, sent in order with one
+A saved store (`layerSaved`) writes its state to the device in the same step as each action and
+comes back after a reload. Anything leaving the device goes through the outbox: saved first, sent in order with one
 idempotency key, retried, held while offline, sent by one tab at a time, and set aside with its
 reason if it can never be sent.
 
@@ -678,9 +766,11 @@ Rules out: rules that hold only while everyone remembers them.
 
 ### 12. One way to do each thing
 
-The surface is these modules: View, Reactive, UiState, Store, Outbox, Events, Handle, Form, Router,
-Overlay, Devtools, App, and `spar/testing`. Timers are Effect's schedules and websockets are
-`effect/socket`; Spar adds no wrapper for what Effect already ships.
+The surface is `compose` with its enhancers, and these modules: App, Backend, Diagnostics, Events,
+Form, Handle, Markup, Outbox, Overlay, Props, Query, Reactive, Renderer, Router, Server, State,
+Store, Tabs, Timeline, UiState and View, plus `spar/testing` and the devtools under
+`spar/devtools`. Timers are Effect's schedules and websockets are `effect/socket`; Spar adds no
+wrapper for what Effect already ships.
 
 Rules out: two styles of the same app in one codebase.
 
@@ -745,7 +835,7 @@ Every backend call goes through `Backend`. Effect RPC is the way to talk to a ba
 HttpApi and JSON clients plug into the same client; everything that would go around it is refused
 by the build. A call the framework cannot see is a call missing from the trace.
 
-### 18a. Work that takes time is an Effect, and server data is a store
+### 18. Work that takes time is an Effect, and server data is a store
 
 Events interleave: anything can arrive while a multi-step flow is waiting. A store accepts every
 command; what a repeat does is said by the Effect that does the work, with Effect's own tools (a
@@ -754,7 +844,7 @@ Effect, so a button, a key and an agent get the same behaviour, and every comman
 the log and the trace. Server data is no exception: a query is a store with typed loading, loaded
 and failed states, and any Effect reads it directly, so no prop carries server data.
 
-### 18. The past can be walked and branched
+### 19. The past can be walked and branched
 
 Any moment in the log can be shown again, stepped through with the trace each step caused, and
 forked: the program carries on from there while the original is kept. People do it in the tools
@@ -772,8 +862,12 @@ and agents do it over MCP or from a shell.
   to act on it.
 - A span per component is automatic (named after the view), so there is no `withSpan`.
 - Two internal modules are allowed to mutate, each behind a pure-looking interface: `internal/dom.ts`
-  (all DOM writes) and `internal/cell.ts` (the value cell under reactive values, added after the
-  benchmark showed a stream and a fiber per binding cost 10 seconds for 10,000 rows). The reactive
+  (all DOM writes) and `internal/cell.ts` (the value cell under reactive values). The first
+  benchmark took 10.7 seconds for 10,000 rows with a stream and a fiber per binding, but that
+  change also replaced Effect's default scheduler, whose `setTimeout(0)` browsers stretch to 4 ms.
+  Measured apart later, with the fast scheduler kept: streams per binding cost about 1.5 times the
+  time to build rows and 5 times the memory (89 MB against 18 MB at 10,000 rows), and Effect's own
+  `Atom` about 1.3 times the time and 1.8 times the memory (33 MB). The reactive
   values in `internal/reactive.ts` are small classes for the same reason: one object per value
   instead of an object, two effects and three closures, which with one list of things to stop per
   row took 10,000 rows from 61 MB to 19 MB. The lint rule lets a constructor set its own fields
@@ -823,7 +917,11 @@ export const withHover = compose(
     onLeave: UiState.set(props.hovered, false),
   })),
 )
+```
 
+(`packages/spar/test/composed.tsx`)
+
+```tsx
 export const Card = compose(
   withProps({ title: Schema.String }),
   withHover,
@@ -884,10 +982,7 @@ export const FolderRow: View.Component<{ readonly folder: Reactive.Reactive<Fold
 The Schema of a tree refers to itself too: `Schema.suspend` and a written-out type.
 
 ```tsx
-export const Folder: Schema.Codec<Folder> = Schema.Struct({
-  name: Schema.String,
-  folders: Schema.Array(Schema.suspend((): Schema.Codec<Folder> => Folder)),
-})
+export type Folder = { readonly name: string; readonly folders: ReadonlyArray<Folder> }
 ```
 
 (`packages/spar/test/folderTree.tsx`)
@@ -918,9 +1013,32 @@ export const AgentPage = pipe(
     withAgent,
     withStore(Router.Router, (router) => ({ home: router.link(home, {}) })),
   )((props) => (
-
-    ...
-
+    <section>
+      <p>
+        <a
+          href={props.home.href}
+          onClick={props.home.onClick}
+          onPointerenter={props.home.onIntent}
+          onFocus={props.home.onIntent}
+        >
+          All agents
+        </a>
+      </p>
+      <h1>{props.name}</h1>
+      <dl>
+        <dt>Status</dt>
+        <dd>{props.status}</dd>
+        <dt>Project</dt>
+        <dd>{props.project}</dd>
+        <dt>Tags</dt>
+        <dd>{props.tags}</dd>
+      </dl>
+      <ServerRecordView name={props.agentName} />
+      <Notes id="agent-note" title="Notes on this agent" />
+      <button type="button" class="spar-button spar-quiet" onClick={props.onPin}>
+        {props.pinLabel}
+      </button>
+    </section>
   )),
   View.recover(AgentNotFound, AgentMissingView),
   View.pending(AgentLoadingView),
@@ -934,18 +1052,18 @@ export const AgentPage = pipe(
 A view's props are declared as a record of Schemas. Plain data uses `Schema` as it is; what is
 not data has a Schema of its own kind:
 
-| Schema                                                           | A prop that is                                       |
-| ---------------------------------------------------------------- | ---------------------------------------------------- |
-| `Props.Reactive(schema)`                                         | a reactive value of that type                        |
-| `Props.State(schema)`                                            | UI state the view may also set                       |
-| `Props.Action`                                                   | something to run from a handler                      |
-| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named |
-| `Props.Callback(schema)`                                         | a function from a value to an action                 |
-| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element          |
-| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits          |
+| Schema                                                           | A prop that is                                                                                              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Props.Reactive(schema)`                                         | a reactive value of that type                                                                               |
+| `Props.State(schema)`                                            | UI state the view may also set                                                                              |
+| `Props.Action`                                                   | something to run from a handler: an Effect (which may return the action to run next), a UI write, or a list |
+| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named                                                        |
+| `Props.Callback(schema)`                                         | a function from a value to an action                                                                        |
+| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element                                                                 |
+| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits                                                                 |
 
-`Props.kind(guard, show)` makes one for a type of your own. `Props.allShown(fields, props)` gives a
-view's props as plain values, which is what the inspector and the MCP tools read.
+For a type of your own, `Schema.declare(guard)` is a prop kind like any other. The inspector and
+the MCP tools show each prop as plain JSON where its Schema can encode it.
 
 ### Markup
 
@@ -971,8 +1089,7 @@ the current value.
 | `Reactive.fromSubscriptionRef(ref)`, `Reactive.succeed(value)`, `Reactive.make(get, changes)` | Other ways to make one.                                               |
 
 ```ts
-const rows =
-  yield *
+const agentRows = (props: Schema.Struct<typeof sectionFields>["Type"]) =>
   pipe(
     Reactive.map(props.section, (section) => section.rows),
     Reactive.mapBy(
@@ -995,10 +1112,7 @@ down, with a row's key in brackets (`Board / Note[a]`), and a number when two sh
 (`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
 the same one state that stores live in, so the devtools and agents read, set and rewind UI state
 through it. Give an app or a test its own with `State.layer`; a server render always has its own.
-
-```tsx
-<button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
-```
+A handler that flips one is `onClick={UiState.update(open, (shown) => !shown)}`.
 
 ### Store
 
@@ -1030,14 +1144,82 @@ is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
 #### A store beside its view
 
 ```tsx
-export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
+import { Effect, Schema } from "effect"
+import { Events, For, Form, Reactive, Store, compose, withProps, withStore } from "spar"
+import { SubmitButton, TextField } from "@spar/ui"
 
-const NotesPanel = compose(withProps({ id: Schema.String, title: Schema.String }), ...)(
-  (props) => <section aria-label={props.title}>...</section>,
-)
+const Note = Schema.Struct({ id: Schema.Int, text: Schema.String })
+
+type Note = typeof Note.Type
+
+const State = Schema.Struct({ notes: Schema.Array(Note) })
+
+type State = typeof State.Type
+
+const counted = (state: State): string =>
+  state.notes.length === 1 ? "1 note" : `${state.notes.length} notes`
+
+export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", {
+  state: State,
+  initialState: { notes: [] },
+  actions: {
+    added: Store.action(Schema.String, (state: State, text) => ({
+      notes: [...state.notes, { id: state.notes.length + 1, text }],
+    })),
+  },
+  selectors: {
+    notes: Store.selector(Schema.Array(Note), (state: State) => state.notes),
+    count: Store.selector(Schema.String, counted),
+  },
+}) {}
+
+const Draft = Schema.Struct({
+  text: Schema.String.check(Schema.makeFilter((text) => text.trim().length > 0 || "Write a note")),
+})
+
+const withDraft = (props: { readonly onAdd: (text: string) => Effect.Effect<void> }) =>
+  Effect.map(Form.make(Draft, { text: "" }), (form) => ({
+    field: form.field("text"),
+    busy: form.submitting,
+    onSubmit: form.submitThen(({ text }) => props.onAdd(text.trim()), form.reset),
+  }))
+
+const NotesPanel = compose(
+  withProps({ id: Schema.String, title: Schema.String }),
+  withStore(NotesStore, (store) => ({
+    count: store.select.count,
+    notes: store.select.notes,
+    onAdd: store.commands.added,
+  })),
+  withDraft,
+)((props) => (
+  <section class="notes" aria-label={props.title}>
+    <h2>{props.title}</h2>
+    <p>
+      <output aria-label={`${props.title} count`}>{props.count}</output>
+    </p>
+    <ul>
+      <For each={props.notes} by={(note) => String(note.id)}>
+        {(note) => <li>{Reactive.map(note, (now) => now.text)}</li>}
+      </For>
+    </ul>
+    <form aria-label={`Add to ${props.title}`} onSubmit={Events.prevent(props.onSubmit)}>
+      <TextField
+        id={props.id}
+        label="Note"
+        hint={`Kept in ${props.title}`}
+        type="text"
+        field={props.field}
+      />
+      <SubmitButton label="Add note" busy={props.busy} />
+    </form>
+  </section>
+))
 
 export const Notes = NotesStore.with(NotesPanel)
 ```
+
+(`apps/sidebar/src/Notes.tsx`)
 
 `Notes` is one unit: mount it anywhere with `<Notes id="..." title="..." />` and nothing is wired at the
 app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
@@ -1053,28 +1235,13 @@ folder is not page state and is left alone.
 
 #### Several tabs
 
-```mermaid
-sequenceDiagram
-  participant A as Tab A
-  participant D as Device
-  participant B as Tab B
-  A->>D: save request
-  A->>D: take lock
-  D-->>A: news from B
-  A->>D: append entry
-  A-)B: announce
-  B->>D: read news
-  Note over B: same state
-```
-
-Provide `Tabs.layerBrowser` in a browser and a durable store is one store across every open tab.
-A command takes a cross-tab lock, first applies whatever other tabs have recorded since, then
-records its own entry, so two tabs never write the same slot and a reducer always sees the latest
-state. Idle tabs hear about new entries and follow. A tab that fell behind a fold of old entries
-starts again from the saved state. Each command is written to the device before the lock is taken, so
-one made just before a reload or a close is carried out by the next tab to open (and reported as
-`Store.Abandoned` if that version no longer has the action). Without the layer a store behaves as if
-it were the only tab.
+A store placed with `TheStore.layerSaved` saves its state on the device in the same step as each
+command, so a reload or a close straight after a click loses nothing, and it starts from what was
+saved. Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
+saving, a tab tells the others, and each reads the saved state again (on the broadcast message and
+on the browser's own storage event, whichever arrives once the new value is visible). Two tabs that
+write at the same moment end on whichever saved last. Without the layer a store behaves as if it
+were the only tab.
 
 ### Outbox
 
@@ -1103,14 +1270,29 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 ### Form
 
 ```ts
-const form = yield * Form.make(Named, { name: "" })
+const ProjectForm = compose(
+  withProps(formFields),
+  Effect.fnUntraced(function* ({ onClose }: FormProps) {
+    const store = yield* BoardStore
+    const form = yield* Form.make(Named, { name: "" })
 
-return {
-  field: form.field("name"),
-  busy: form.submitting,
-  onSubmit: form.submit(({ name }) => store.commands.spaceAdded({ name })),
-}
+    return {
+      id: "project-name",
+      label: "Project name",
+      hint: "Agents can be moved into it afterwards",
+      action: "Add project",
+      field: form.field("name"),
+      busy: form.submitting,
+      onSubmit: form.submitThen(
+        ({ name }) => store.commands.spaceAdded({ name: name.trim() }),
+        onClose,
+      ),
+    }
+  }),
+)(NameFormView)
 ```
+
+(`apps/sidebar/src/Sidebar.ts`)
 
 A form's values, which fields have been left, whether a submit was tried and what the server
 rejected are the component's UI state, under a name such as `form (name)`. So typing, leaving a
@@ -1134,15 +1316,37 @@ the submit has worked, and not when the input was invalid or the server refused 
 ### Router
 
 ```ts
-export const home = Router.route("/")
-export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
+import { Schema } from "effect"
+import { Router } from "spar"
 
-page: yield *
-  Router.outlet({
-    routes: [Router.on(home, EmptyPageView), Router.on(agentRoute, AgentPage)],
-    otherwise: MissingPageView,
-  })
+export const home = Router.route("/")
+
+export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
 ```
+
+(`apps/sidebar/src/routes.ts`)
+
+```tsx
+const withPage = () =>
+  Effect.map(
+    Router.outlet({
+      routes: [
+        Router.on(home, EmptyPageView),
+        Router.on(agentRoute, AgentPage),
+        Router.live(
+          orgRoute,
+          View.split(DeepLoadingView, () =>
+            import("./DeepPage.tsx").then((module) => module.OrgSegment),
+          ),
+        ),
+      ],
+      otherwise: MissingPageView,
+    }),
+    (page) => ({ page }),
+  )
+```
+
+(`apps/sidebar/src/Shell.tsx`)
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
 layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
@@ -1182,8 +1386,8 @@ sequenceDiagram
   Note over B: attach listeners
 ```
 
-`Server.render(Component, { layer })` runs the same component on a server and gives its HTML
-and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
+`Server.render(Component, { layer })` runs the same component on a server, drawn by the
+`Renderer.html` its layer gives, and gives its HTML and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
 trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the finished HTML of each component it changed, put in place between that component's marks (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
@@ -1316,11 +1520,36 @@ The devtools are not part of an app. In development the Vite plugin adds them:
 
 ```ts
 import { sparDevtools } from "spar/devtools/vite"
+import { sparJsx } from "spar/transform/vite"
+import { defineConfig } from "vite"
+
+const backend = process.env["SIDEBAR_BACKEND"]
+
+const backends = backend === undefined ? [] : [backend]
+
+const servedByBackend = {
+  name: "sidebar-backend",
+  apply: "serve",
+  transformIndexHtml: () =>
+    backends.map(() => ({
+      tag: "meta",
+      attrs: { name: "sidebar-backend", content: "/rpc" },
+      injectTo: "head",
+    })),
+} as const
 
 export default defineConfig({
-  plugins: [sparJsx, sparDevtools({ backends: ["http://127.0.0.1:4182"] })],
+  plugins: [sparJsx, sparDevtools({ backends }), servedByBackend],
+  oxc: { jsx: { runtime: "automatic", importSource: "spar" } },
+  server: {
+    host: "127.0.0.1",
+    port: 4181,
+    proxy: Object.fromEntries(backends.map((target) => ["/rpc", target])),
+  },
 })
 ```
+
+(`apps/sidebar/vite.config.ts`)
 
 It only acts on the dev server. A production build carries no devtools code at all
 (`apps/sidebar` checks its own build for that as part of `check`). `backends` are the servers
@@ -1338,7 +1567,7 @@ What the tools show, docked at the corner of the page:
   moment, and stepping opens the trace of the moment stepped to.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
-  page: a durable store's saved log is not rewritten, so a reload returns to what was saved.
+  page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
 - **Trace.** Any moment opens as a waterfall of its spans: the page's and the backends' on one
   time line, nested by parent, with how long each took and the failed ones marked.
 - **Stores.** Each store's actions and state, with Back, Forward, Live and Go to; export a log as
@@ -1384,6 +1613,57 @@ one that reported last.
 
 `App.mount(component, { target, layer })` never returns; interrupting it unmounts everything.
 `App.CrashReporter` is the reference to replace to receive crashes.
+
+#### Any renderer, chosen by a layer
+
+Where a component is drawn is a `Renderer` service. `target` is the short way of giving the page's
+own renderer, `Renderer.dom(target)`; leave `target` out and give a `Renderer` in `layer` instead.
+The component and its view do not change between them, and an update writes the same one node.
+
+| Renderer                                           | Where it draws                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `Renderer.dom(target)`                             | The page, into `target`, with overlays above it                                       |
+| `Renderer.into(target, overlays)`                  | Any document's element; `spar/renderer/memory`'s `page()` makes one outside a browser |
+| `Terminal.layer(print)` (`spar/renderer/terminal`) | A document of its own, printed as text through `print` after each change              |
+| `Renderer.html`                                    | Text, for a server: each value read once, with the markers the browser takes over by  |
+
+```ts
+const program = Effect.gen(function* () {
+  const store = yield* Layer.build(CounterStore.layer.pipe(Layer.provideMerge(State.layer)))
+  const counter = yield* Effect.provide(Effect.service(CounterStore), store)
+
+  yield* Effect.forkScoped(
+    App.mount(Counter, {
+      layer: Layer.merge(
+        Layer.succeedContext(store),
+        Terminal.layer((frame) => Console.log(`${frame}\n--`)),
+      ),
+    }),
+  )
+  yield* Effect.sleep("50 millis")
+  yield* counter.commands.incremented({ by: 1 })
+  yield* Effect.sleep("50 millis")
+  yield* counter.commands.incremented({ by: 2 })
+  yield* Effect.sleep("50 millis")
+})
+
+await Effect.runPromise(Effect.scoped(program))
+```
+
+(`apps/demo/scripts/terminal.ts`)
+
+```tsx
+export const rendered = Server.renderToString(Page, {
+  layer: Layer.merge(Table.layer, Renderer.html),
+})
+```
+
+(`apps/ssr/scripts/render-page.tsx`)
+
+(The first draws the demo's counter in a terminal, unchanged; the second renders a page as text with
+`Renderer.html`.) The first three draw into a document
+and keep it up to date, so `App.mount` takes them; `Renderer.html` writes a page once, so the
+`Server` functions take it. Given the other kind, each says which renderer it needs.
 
 ### spar/testing
 
@@ -1445,14 +1725,20 @@ by a `FiberHandle` with `onlyIfMissing`, a second press while it runs does nothi
 a key or an agent alike:
 
 ```ts
-const reset = Effect.gen(function* () {
-  yield* store.commands.resetClicked()
-  yield* Effect.sleep("2 seconds")
-  yield* store.commands.resetCompleted()
-})
+const withReset = Effect.fnUntraced(function* () {
+  const store = yield* CounterStore
+  const running = yield* FiberHandle.make()
+  const reset = Effect.gen(function* () {
+    yield* store.commands.resetClicked()
+    yield* Effect.sleep("2 seconds")
+    yield* store.commands.resetCompleted()
+  })
 
-FiberHandle.run(running, reset, { onlyIfMissing: true })
+  return { onReset: Effect.asVoid(FiberHandle.run(running, reset, { onlyIfMissing: true })) }
+})
 ```
+
+(`apps/site/src/StoreDemo.ts`)
 
 The same tools cover the other cases:
 
@@ -1480,15 +1766,19 @@ A parent reads a value from a store and passes it to a child as a prop. The chil
 query that uses the prop. That is all anybody writes:
 
 ```tsx
-class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
+export class OrdersQuery extends Query.Tag<OrdersQuery>()("shop/Orders", {
   input: Schema.Int,
   success: Schema.Array(Order),
   failure: ServerUnreachable,
-  load: (userId) => Effect.flatMap(Effect.service(Server), (server) => server.orders(userId)),
+  load: (userId: number) => Effect.flatMap(Effect.service(Server), (found) => found.orders(userId)),
   staleAfter: "30 seconds",
 }) {}
+```
 
-const Orders = compose(
+(`packages/spar/test/serverData.test.tsx`)
+
+```tsx
+export const Orders = compose(
   withProps({ userId: Props.Reactive(Schema.Int) }),
   withQuery("orders", OrdersQuery, (props) => props.userId),
 )((props) => (
@@ -1496,11 +1786,19 @@ const Orders = compose(
     {props.orders.status}: {Reactive.map(props.orders.value, (all) => all?.length ?? 0)} orders
   </p>
 ))
+```
 
-const Parent = compose(
+(`packages/spar/test/serverData.test.tsx`)
+
+```tsx
+export const Parent = compose(
   withStore(PeopleStore, (people) => ({ selected: people.select.selectedId })),
 )((props) => <Orders userId={props.selected} />)
 ```
+
+(`packages/spar/test/serverData.test.tsx`)
+
+That file mounts `Parent` and checks it shows `loaded: 3 orders`.
 
 There is no loader in another file, no fragment, no compile step and no list of dependencies.
 What makes that enough:
@@ -1520,15 +1818,835 @@ What makes that enough:
   That is the only waterfall there is, and it is visible as a state.
 
 ```ts
-const users = yield * UsersQuery.ask()
-const stock = yield * StockQuery.ask()
-const first = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
-const orders = yield * OrdersQuery.ask(first)
+const askedTogether = Effect.gen(function* () {
+  const users = yield* Users.ask()
+  const stock = yield* Stock.ask()
+  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const orders = yield* Orders.ask(firstUser)
+
+  return { users, stock, orders }
+})
+
+describe("the natural way: a value from one place feeds a query declared in another", () => {
+  it.effect(
+    "what waits for nothing starts at once, and a dependent query waits only for its input",
+    () =>
+      Effect.gen(function* () {
+        const { built, noted, whats, answer } = yield* opened
+        const declared = yield* Effect.provide(askedTogether, built)
+
+        yield* Effect.yieldNow
+        expect(yield* whats).toEqual(["users", "stock"])
+        expect(yield* readings(declared.orders)).toEqual(["waiting", null, null, false])
+
+        yield* answer("stock", 40)
+        expect(yield* declared.stock.value.get).toBe(40)
+        expect(yield* whats).toEqual(["users", "stock"])
+        expect(yield* declared.orders.status.get).toBe("waiting")
+
+        yield* answer("users", [ada, grace])
+        yield* Effect.yieldNow
+        expect(yield* whats).toEqual(["users", "stock", "orders 1"])
+        expect(yield* readings(declared.orders)).toEqual(["loading", null, null, true])
+
+        yield* answer("orders 1", ["tea", "ink"])
+        expect(yield* readings(declared.orders)).toEqual(["loaded", ["tea", "ink"], null, false])
+        expect(
+          (yield* Ref.get(noted))
+            .filter((seen) => seen.kind === "command")
+            .map((seen) => seen.name),
+        ).toEqual([
+          "test/Users/requested",
+          "test/Stock/requested",
+          "test/Stock/loaded",
+          "test/Users/loaded",
+          "test/Orders/requested",
+          "test/Orders/loaded",
+        ])
+      }),
+  )
+
+  it.effect("a patch changes what a query holds at once, before the server is asked", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const stock = yield* Effect.provide(Stock.ask(), built)
+      const restocked = Effect.provide(
+        Stock.patch(undefined, () => 9),
+        built,
+      )
+
+      yield* Effect.yieldNow
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loading", null, null, true])
+
+      yield* answer("stock", 3)
+      yield* restocked
+      yield* Effect.yieldNow
+      expect(yield* readings(stock)).toEqual(["loaded", 9, null, false])
+      expect(yield* whats).toEqual(["stock"])
+    }),
+  )
+
+  it.effect("while another input loads, the last value that was loaded can still be shown", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const page = yield* SubscriptionRef.make(1)
+      const orders = yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(page)), built)
+
+      yield* Effect.yieldNow
+      expect(yield* orders.latest.get).toBeNull()
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(page, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([null, ["tea"]])
+
+      yield* answer("orders 2", ["ink"])
+      expect([yield* orders.value.get, yield* orders.latest.get]).toEqual([["ink"], ["ink"]])
+    }),
+  )
+
+  it.effect("a new input is a new entry in the cache, and going back to one is a cache hit", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const selected = yield* SubscriptionRef.make(1)
+      const orders = yield* Effect.provide(
+        Orders.ask(Reactive.fromSubscriptionRef(selected)),
+        built,
+      )
+
+      yield* Effect.yieldNow
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(selected, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 1", "orders 2"])
+      expect(yield* readings(orders)).toEqual(["loading", null, null, true])
+
+      yield* answer("orders 2", ["ink"])
+      expect(yield* orders.value.get).toEqual(["ink"])
+
+      yield* SubscriptionRef.set(selected, 1)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 1", "orders 2"])
+      expect(yield* readings(orders)).toEqual(["loaded", ["tea"], null, false])
+      expect(yield* Effect.provide(Orders.read(2), built)).toEqual(["ink"])
+      expect(yield* Effect.provide(Orders.read(99), built)).toBeNull()
+    }),
+  )
+
+  it.effect("a plain value is an input too, and two declarations of it share one request", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const first = yield* Effect.provide(Orders.ask(7), built)
+      const second = yield* Effect.provide(Orders.ask(7), built)
+
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["orders 7"])
+      expect(yield* first.status.get).toBe("loading")
+      yield* answer("orders 7", ["pen"])
+      expect([yield* first.value.get, yield* second.value.get]).toEqual([["pen"], ["pen"]])
+    }),
+  )
+
+  it.live("a list read a page at a time: the pages so far, whether there is more, and more", () =>
+    Effect.gen(function* () {
+      const Feed = compose(
+        Effect.fnUntraced(function* () {
+          const feed = yield* Orders.pages({
+            first: 1,
+            next: (_page, input) => (input < 3 ? Option.some(input + 1) : Option.none()),
+          })
+          const state = yield* Reactive.zip(feed.loading, feed.failed)
+
+          return {
+            items: Reactive.map(feed.pages, (all) => all.flat().join(",")),
+            state: Reactive.map(state, ([loading, failed]) => `${loading} ${failed}`),
+            more: Reactive.map(feed.more, String),
+            onMore: feed.loadMore,
+          }
+        }),
+      )(FeedView)
+      const found = yield* directory
+      const answered = (count: number, exit: (waiting: Asked) => Effect.Effect<boolean>) =>
+        Effect.flatMap(
+          Effect.repeat(Ref.get(found.asked), {
+            until: (all) => all.length === count,
+            schedule: Schedule.spaced("5 millis"),
+          }),
+          (all) => Effect.forEach(all.slice(-1), exit),
+        )
+      yield* Testing.mount(Feed)
+      yield* shows("", "true false", "false")
+      yield* Testing.click("button", "More")
+      yield* answered(1, (waiting) => Deferred.succeed(waiting.answer, ["a", "b"]))
+      yield* shows("a,b", "false false", "true")
+
+      yield* Testing.click("button", "More")
+      yield* shows("a,b", "true false", "false")
+      yield* answered(2, (waiting) => Deferred.succeed(waiting.answer, ["c"]))
+      yield* shows("a,b,c", "false false", "true")
+
+      yield* Testing.click("button", "More")
+      yield* answered(3, (waiting) => Deferred.fail(waiting.answer, "down"))
+      yield* shows("a,b,c", "false true", "false")
+      yield* Testing.click("button", "More")
+      expect((yield* Ref.get(found.asked)).map((each) => each.what)).toEqual([
+        "orders 1",
+        "orders 2",
+        "orders 3",
+      ])
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+
+  it.live("a list whose next page is one it already has says there is no more", () =>
+    Effect.gen(function* () {
+      const Feed = compose(
+        Effect.fnUntraced(function* () {
+          const feed = yield* Orders.pages({ first: 1, next: () => Option.some(1) })
+
+          return {
+            items: Reactive.map(feed.pages, (all) => all.flat().join(",")),
+            state: Reactive.map(feed.loading, String),
+            more: Reactive.map(feed.more, String),
+            onMore: feed.loadMore,
+          }
+        }),
+      )(FeedView)
+      const found = yield* directory
+
+      yield* Testing.mount(Feed)
+      yield* shows("", "true", "false")
+
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, ["a"]))
+      yield* shows("a", "false", "false")
+      yield* Testing.click("button", "More")
+      yield* Effect.sleep("20 millis")
+      yield* shows("a", "false", "false")
+      expect((yield* Ref.get(found.asked)).map((each) => each.what)).toEqual(["orders 1"])
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+
+  it.live("in components: the parent passes a prop, the child declares its query with it", () =>
+    Effect.gen(function* () {
+      const OrdersOf = compose(
+        withProps({ userId: Props.Reactive(Schema.Int) }),
+        Effect.fnUntraced(function* ({ userId }) {
+          const orders = yield* Orders.ask(userId)
+
+          return {
+            status: orders.status,
+            count: Reactive.map(orders.value, (loaded) => loaded?.length ?? 0),
+          }
+        }),
+      )(OrdersView)
+      const selected = yield* SubscriptionRef.make(1)
+      const Shelf = compose(
+        Effect.fnUntraced(function* () {
+          return {
+            orders: yield* View.child(OrdersOf, {
+              userId: Reactive.fromSubscriptionRef(selected),
+            }),
+          }
+        }),
+      )(ShelfView)
+
+      yield* Testing.mount(Shelf)
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders status"]')?.textContent).toBe("loading"),
+      )
+
+      const found = yield* directory
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      expect(asked.map((each) => each.what)).toEqual(["orders 1"])
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, ["tea", "ink"]))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("2"),
+      )
+    }).pipe(
+      Effect.provide(
+        Orders.live.pipe(
+          Layer.provideMerge(Directory.layer),
+          Layer.provide(SecureRandom.layerWebCrypto),
+        ),
+      ),
+    ),
+  )
+})
+
+describe("server data in a store", () => {
+  it.effect("loads when asked for, once, and is loading, then loaded, as typed states", () =>
+    Effect.gen(function* () {
+      const { built, noted, users, whats, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* readings(shown)).toEqual(["loading", null, null, true])
+      expect(yield* whats).toEqual(["users"])
+
+      yield* TestClock.adjust("5 seconds")
+      yield* answer("users", [ada])
+
+      expect(yield* readings(shown)).toEqual(["loaded", [ada], null, false])
+      expect(Object.values(yield* users.select.entries.get)).toEqual([
+        {
+          status: "loaded",
+          value: [ada],
+          error: null,
+          loadedAt: 5000,
+          request: 1,
+          input: null,
+          traceId: "",
+          spanId: "",
+          unusedSince: null,
+        },
+      ])
+      expect((yield* Ref.get(noted)).map((seen) => [seen.kind, seen.name])).toEqual([
+        ["command", "test/Users/requested"],
+        ["data", "test/Users/served"],
+        ["command", "test/Users/loaded"],
+      ])
+    }),
+  )
+
+  it.effect("asking again while it loads is not sent twice", () =>
+    Effect.gen(function* () {
+      const { built, noted, whats } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+
+      yield* shown.refetch
+      yield* Effect.yieldNow
+
+      expect(yield* whats).toEqual(["users"])
+      expect((yield* Ref.get(noted)).map((seen) => seen.name)).toEqual(["test/Users/requested"])
+    }),
+  )
+
+  it.effect("stays fresh for its stale time, counted from when it loaded", () =>
+    Effect.gen(function* () {
+      const { built, users, whats, answer } = yield* opened
+
+      yield* TestClock.adjust("5 seconds")
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      yield* answer("users", [ada])
+      yield* TestClock.adjust("1 minute")
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users"])
+
+      yield* TestClock.adjust("1 second")
+
+      const later = yield* Effect.provide(Users.ask(), built)
+
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(later)).toEqual(["loading", [ada], null, true])
+      expect(Object.values(yield* users.select.entries.get).map((held) => held.loadedAt)).toEqual([
+        5000,
+      ])
+      yield* answer("users", [ada, grace])
+      expect(yield* later.value.get).toEqual([ada, grace])
+    }),
+  )
+
+  it.effect("what was invalidated, or failed after it had loaded, is asked for again", () =>
+    Effect.gen(function* () {
+      const { built, users, whats, answer, refuse } = yield* opened
+
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      yield* answer("users", [ada])
+      yield* users.commands.invalidated()
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users"])
+
+      yield* refuse("users", "gone")
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users", "users"])
+    }),
+  )
+
+  it.effect(
+    "everything a query does is marked as data in the trace, with where its input came from",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const spans = yield* Layer.build(Spans.layer())
+        const buffer = Context.get(spans, Spans.SpanBuffer)
+
+        yield* Effect.provide(Effect.provide(Users.ask(), built), spans)
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+
+        const recorded = buffer.recent().filter((span) => span.name.startsWith("test/Users/"))
+
+        expect(recorded.map((span) => [span.name, span.attributes["spar.kind"]])).toEqual([
+          ["test/Users/requested", "data"],
+          ["test/Users/loaded", "data"],
+        ])
+        expect(recorded[0]?.attributes["spar.query.after"]).toBe("")
+      }),
+  )
+
+  it.effect(
+    "data already there is served with a short span that points at the trace that loaded it",
+    () =>
+      Effect.gen(function* () {
+        const { built, noted, answer } = yield* opened
+        const spans = yield* Layer.build(Spans.layer())
+        const buffer = Context.get(spans, Spans.SpanBuffer)
+        const asking = (during: string) =>
+          Effect.provide(Effect.withSpan(Effect.provide(Users.ask(), built), during), spans)
+
+        yield* asking("pointing at the link")
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+        yield* asking("the click")
+
+        const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+        const [preload] = named("pointing at the link")
+        const [click] = named("the click")
+        const [served] = named("test/Users/served")
+
+        expect(preload?.traceId).not.toBe(click?.traceId)
+        expect(served?.traceId).toBe(click?.traceId)
+        expect(served?.attributes).toMatchObject({
+          "spar.kind": "data",
+          "spar.query.served_from": preload?.traceId,
+        })
+        expect((yield* Ref.get(noted)).findLast((seen) => seen.kind === "data")?.detail).toEqual({
+          key: "null",
+          from: preload?.traceId,
+        })
+      }),
+  )
+
+  it.effect(
+    "the served span links to the span that loaded the data, and to nothing when no span did",
+    () =>
+      Effect.gen(function* () {
+        const { built, answer } = yield* opened
+        const inner = yield* Effect.tracer
+        const made = MutableRef.make<ReadonlyArray<Tracer.Span>>([])
+        const watching = Tracer.make({
+          span: (options) => {
+            const span = inner.span(options)
+
+            MutableRef.update(made, (all) => [...all, span])
+
+            return span
+          },
+        })
+        const during = <A, E, R>(name: string, effect: Effect.Effect<A, E, R>) =>
+          Effect.withTracer(Effect.withSpan(Effect.provide(effect, built), name), watching)
+        const linksOf = (name: string) =>
+          MutableRef.get(made)
+            .findLast((span) => span.name === name)
+            ?.links.map((link) => [link.span.traceId, link.span.spanId, link.span.sampled])
+
+        yield* during("first", Users.ask())
+        yield* Effect.yieldNow
+        yield* answer("users", [ada])
+        yield* during("second", Users.ask())
+
+        const first = MutableRef.get(made).find((span) => span.name === "first")
+
+        expect(linksOf("test/Users/served")).toEqual([[first?.traceId, first?.spanId, true]])
+
+        yield* Effect.provide(Orders.ask(5), built)
+        yield* Effect.yieldNow
+        yield* answer("orders 5", ["tea"])
+        yield* during("third", Orders.ask(5))
+        expect(linksOf("test/Orders/served")).toEqual([])
+      }),
+  )
+
+  it.effect("data nobody is using is released, and dropped after a while", () =>
+    Effect.gen(function* () {
+      const { built, noted, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const keys = Effect.map(orders.state.get, (now) => Object.keys(now.entries))
+      const said = Effect.map(Ref.get(noted), (all) =>
+        all.filter((seen) => seen.kind !== "data").map((seen) => seen.name.split("/").at(-1)),
+      )
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Effect.provide(Orders.ask(1), built)
+          yield* Effect.provide(Orders.ask(1), built)
+          yield* Effect.yieldNow
+          yield* answer("orders 1", ["tea"])
+        }),
+      )
+      yield* Effect.yieldNow
+      expect(yield* keys).toEqual(["1"])
+      expect(yield* said).toEqual(["requested", "loaded", "released"])
+
+      yield* TestClock.adjust("5 minutes")
+      expect(yield* keys).toEqual([])
+      expect(yield* said).toEqual(["requested", "loaded", "released", "dropped"])
+    }),
+  )
+
+  it.effect("the wait before a drop does not hold on to the trace it was released in", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const spans = yield* Layer.build(Spans.layer())
+      const buffer = Context.get(spans, Spans.SpanBuffer)
+
+      yield* Effect.provide(
+        Effect.withSpan(
+          Effect.scoped(
+            Effect.gen(function* () {
+              yield* Effect.provide(Orders.ask(4), built)
+              yield* Effect.yieldNow
+              yield* answer("orders 4", ["tea"])
+            }),
+          ),
+          "the page that was left",
+        ),
+        spans,
+      )
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("5 minutes")
+
+      const named = (name: string) => buffer.recent().filter((span) => span.name === name)
+      const [page] = named("the page that was left")
+      const [released] = named("test/Orders/released")
+
+      expect(released?.traceId).toBe(page?.traceId)
+      expect(named("test/Orders/dropped")).toEqual([])
+      expect(Object.keys((yield* orders.state.get).entries)).toEqual([])
+    }),
+  )
+
+  it.effect("data that is asked for again before it is dropped is kept", () =>
+    Effect.gen(function* () {
+      const { built, noted, answer } = yield* opened
+      const orders = yield* Effect.provide(Effect.service(Orders), built)
+      const selected = yield* SubscriptionRef.make(1)
+
+      yield* Effect.scoped(Effect.provide(Orders.ask(1), built))
+      yield* Effect.yieldNow
+      yield* answer("orders 1", ["tea"])
+      yield* TestClock.adjust("1 minute")
+      yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
+      yield* TestClock.adjust("5 minutes")
+      expect(Object.keys((yield* orders.state.get).entries)).toEqual(["1"])
+      expect(
+        (yield* Ref.get(noted)).filter((seen) => seen.name === "test/Orders/held").length,
+      ).toBe(1)
+
+      yield* SubscriptionRef.set(selected, 2)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(
+        Object.values((yield* orders.state.get).entries).map((entry) => entry.unusedSince === null),
+      ).toEqual([false, true])
+    }),
+  )
+
+  it.effect("over its size, a cache drops what has been unused the longest at once", () =>
+    Effect.gen(function* () {
+      const { built, answer } = yield* opened
+      const few = yield* Effect.provide(Effect.service(Few), built)
+      const once = (id: number) =>
+        Effect.andThen(
+          Effect.scoped(
+            Effect.andThen(
+              Effect.andThen(Effect.provide(Few.ask(id), built), Effect.yieldNow),
+              answer(`orders ${id}`, ["x"]),
+            ),
+          ),
+          Effect.andThen(TestClock.adjust("1 second"), Effect.yieldNow),
+        )
+
+      yield* once(1)
+      yield* once(2)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["2"])
+      yield* once(3)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["3"])
+
+      const early = yield* Scope.make()
+
+      yield* Effect.provideService(Effect.provide(Few.ask(7), built), Scope.Scope, early)
+      yield* Effect.yieldNow
+      yield* answer("orders 7", ["x"])
+      yield* once(8)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["7"])
+      yield* once(6)
+      yield* TestClock.adjust("1 second")
+      yield* Scope.close(early, Exit.void)
+      yield* Effect.yieldNow
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["7"])
+
+      yield* Effect.provide(Few.ask(9), built)
+      yield* Effect.yieldNow
+      yield* answer("orders 9", ["x"])
+      yield* once(4)
+      expect(Object.keys((yield* few.state.get).entries)).toEqual(["9"])
+    }),
+  )
+
+  it.effect("an input that is set again to what it already was is not looked at again", () =>
+    Effect.gen(function* () {
+      const { built, noted, answer } = yield* opened
+      const selected = yield* SubscriptionRef.make(1)
+      const served = Effect.map(
+        Ref.get(noted),
+        (all) => all.filter((seen) => seen.name === "test/Orders/served").length,
+      )
+
+      yield* Effect.provide(Orders.ask(Reactive.fromSubscriptionRef(selected)), built)
+      yield* Effect.yieldNow
+      yield* answer("orders 1", ["tea"])
+      yield* SubscriptionRef.set(selected, 1)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* served).toBe(0)
+    }),
+  )
+
+  it.effect("what is asked for again by hand or by invalidation forgets which span loaded it", () =>
+    Effect.gen(function* () {
+      const { built, users, answer } = yield* opened
+      const loadedBy = Effect.map(users.state.get, (now) =>
+        Object.values(now.entries).map((entry) => [entry.traceId === "", entry.spanId === ""]),
+      )
+      const spans = yield* Layer.build(Spans.layer())
+      const handle = yield* Effect.provide(
+        Effect.withSpan(Effect.provide(Users.ask(), built), "the first ask"),
+        spans,
+      )
+
+      yield* Effect.yieldNow
+      yield* answer("users", [ada])
+      expect(yield* loadedBy).toEqual([[false, false]])
+
+      yield* handle.refetch
+      yield* Effect.yieldNow
+      expect(yield* loadedBy).toEqual([[true, true]])
+      yield* answer("users", [ada])
+
+      yield* Effect.provide(
+        Effect.withSpan(Effect.provide(Users.ask(), built), "asked again"),
+        spans,
+      )
+      yield* Effect.provide(Users.invalidate, built)
+      yield* Effect.yieldNow
+      expect(yield* loadedBy).toEqual([[true, true]])
+    }),
+  )
+
+  it.live(
+    "coming back to the tab or back online asks again for what has gone stale, and only that",
+    () =>
+      Effect.gen(function* () {
+        const { built, whats, answer } = yield* opened
+        const live = yield* Layer.build(Layer.provide(LiveStock.live, Layer.succeedContext(built)))
+        const asked = (count: number) =>
+          Effect.repeat(whats, {
+            until: (all) => all.length === count,
+            schedule: Schedule.spaced("5 millis"),
+          })
+
+        yield* Effect.provide(LiveStock.ask(), live)
+        yield* Effect.provide(Users.ask(), built)
+        yield* asked(2)
+        yield* answer("stock", 3)
+        yield* answer("users", [ada])
+        yield* Effect.sleep("10 millis")
+
+        yield* hidden("hidden")
+        yield* Effect.sleep("20 millis")
+        expect(yield* whats).toEqual(["stock", "users"])
+
+        yield* hidden("visible")
+        expect(yield* asked(3)).toEqual(["stock", "users", "stock"])
+        yield* answer("stock", 4)
+        yield* Effect.sleep("10 millis")
+
+        yield* connection("offline")
+        yield* connection("online")
+        expect(yield* asked(4)).toEqual(["stock", "users", "stock", "stock"])
+      }),
+  )
+
+  it.effect("a query given a schedule tries again by itself before it calls it a failure", () =>
+    Effect.gen(function* () {
+      const { built, whats, refuse, answer } = yield* opened
+      const patient = yield* Layer.build(Layer.provide(Patient.live, Layer.succeedContext(built)))
+      const shown = yield* Effect.provide(Patient.ask(), patient)
+
+      yield* Effect.yieldNow
+      yield* refuse("stock", "busy")
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+      expect(yield* shown.status.get).toBe("loading")
+      yield* answer("stock", 9)
+      expect(yield* readings(shown)).toEqual(["loaded", 9, null, false])
+    }),
+  )
+
+  it.effect("by default an answer stays fresh for 500 ms: asks 100 ms apart share one call", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      yield* answer("stock", 3)
+      yield* TestClock.adjust("100 millis")
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock"])
+      yield* TestClock.adjust("500 millis")
+      yield* Effect.provide(Stock.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+    }),
+  )
+
+  it.effect("with a stale time of 0 it is stale as soon as time has passed", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const live = yield* Layer.build(Layer.provide(LiveStock.live, Layer.succeedContext(built)))
+
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      yield* answer("stock", 3)
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock"])
+      yield* TestClock.adjust("1 milli")
+      yield* Effect.provide(LiveStock.ask(), live)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["stock", "stock"])
+    }),
+  )
+
+  it.effect("a failure is a typed state, and the next need tries again", () =>
+    Effect.gen(function* () {
+      const { built, whats, refuse, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+
+      yield* Effect.yieldNow
+      yield* refuse("users", "The directory is down")
+      expect(yield* readings(shown)).toEqual(["failed", null, "The directory is down", false])
+
+      yield* Effect.provide(Users.ask(), built)
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(shown)).toEqual(["loading", null, "The directory is down", true])
+      yield* answer("users", [grace])
+      expect(yield* readings(shown)).toEqual(["loaded", [grace], null, false])
+    }),
+  )
+
+  it.effect("an answer to an earlier request, or to nothing that was asked, is ignored", () =>
+    Effect.gen(function* () {
+      const { built, users } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+      const [key] = Object.keys((yield* users.state.get).entries)
+
+      yield* users.commands.loaded({ key: key ?? "", request: 0, value: [grace], at: 1 })
+      expect(yield* shown.status.get).toBe("loading")
+      yield* users.commands.failed({ key: "nothing asked this", request: 1, error: "late" })
+      expect(yield* shown.status.get).toBe("loading")
+      expect(Object.keys((yield* users.state.get).entries)).toEqual([key])
+    }),
+  )
+
+  it.effect("invalidating it loads it again at once", () =>
+    Effect.gen(function* () {
+      const { built, whats, answer } = yield* opened
+      const shown = yield* Effect.provide(Users.ask(), built)
+
+      yield* Effect.yieldNow
+      yield* answer("users", [ada])
+      yield* Effect.provide(Users.invalidate, built)
+      yield* Effect.yieldNow
+      yield* Effect.yieldNow
+      expect(yield* whats).toEqual(["users", "users"])
+      expect(yield* readings(shown)).toEqual(["loading", [ada], null, true])
+
+      yield* answer("users", [grace])
+      expect(yield* shown.value.get).toEqual([grace])
+    }),
+  )
+
+  it.live("can sit beside the view that shows it, with no layer of its own at the root", () =>
+    Effect.gen(function* () {
+      const Shown = Stock.beside(
+        compose(
+          Effect.fnUntraced(function* () {
+            const stock = yield* Stock.ask()
+
+            return {
+              status: stock.status,
+              count: Reactive.map(stock.value, (loaded) => loaded ?? 0),
+            }
+          }),
+        )(OrdersView),
+      )
+
+      yield* Testing.mount(Shown)
+
+      const found = yield* directory
+      const asked = yield* Effect.repeat(Ref.get(found.asked), {
+        until: (all) => all.length === 1,
+        schedule: Schedule.spaced("5 millis"),
+      })
+
+      yield* Effect.forEach(asked, (waiting) => Deferred.succeed(waiting.answer, 12))
+      yield* Testing.eventually(() =>
+        expect(document.querySelector('[aria-label="Orders count"]')?.textContent).toBe("12"),
+      )
+    }).pipe(Effect.provide(Directory.layer)),
+  )
+
+  it("its states are plain data with a Schema", () => {
+    expect(
+      ["waiting", "loading", "loaded", "failed", "other"].map(Schema.is(Query.Status)),
+    ).toEqual([true, true, true, true, false])
+  })
+})
 ```
 
+(`packages/spar/test/query.test.ts`)
+
 Users and stock start together. Orders starts the moment users has answered, whether or not
-stock has. The test that controls the order of the answers and checks exactly that is
-`packages/spar/test/query.test.ts`.
+stock has. The test in that file runs exactly this, controls the order of the answers, and checks
+it.
 
 The one line of the natural version that matters: the prop has to be passed as the reactive
 value it is (`Props.Reactive`), not read out into a plain number first. A plain number works as
@@ -1570,14 +2688,18 @@ const withFeed = Effect.fnUntraced(function* () {
   })
 
   return {
-    posts: Reactive.map(feed.pages, (pages) => pages.flatMap((page) => page.posts)),
+    posts: Reactive.map(feed.pages, (all) => all.flatMap((page) => page.posts)),
     loading: feed.loading,
     more: feed.more,
     onMore: feed.loadMore,
   }
 })
+```
 
-const Feed = compose(withFeed)((props) => (
+(`packages/spar/test/serverData.test.tsx`)
+
+```tsx
+export const Feed = compose(withFeed)((props) => (
   <section aria-label="Posts">
     <ul>
       <For each={props.posts} by={(post) => post.id}>
@@ -1590,6 +2712,11 @@ const Feed = compose(withFeed)((props) => (
   </section>
 ))
 ```
+
+(`packages/spar/test/serverData.test.tsx`)
+
+The same file mounts `Feed`, presses More, sees the second page, and checks that More goes away
+at the end.
 
 `next` is given a loaded page and its input and says what the following input is, or none at
 the end. `loadMore` does nothing while the last page is still loading or when there is no more.
@@ -1617,6 +2744,8 @@ export const exportCsv = Effect.fn("People.exportCsv")(function* () {
   yield* people.commands.exported(csvOf(loaded ?? [], selected))
 })
 ```
+
+(`apps/sidebar/src/People.ts`)
 
 It takes the selection from the store and the emails from the users query. No prop carries a
 user, and the view never sees an email it does not draw. The click and the result are one trace
@@ -1654,16 +2783,13 @@ answer is in the log.
 
 # Getting started
 
-Spar apps are Bun and Effect v4 projects. Every example below is taken from code in this repo that
-is type-checked and tested in CI; the file is named under each one.
+Spar apps are Bun and Effect v4 projects. Every example below is copied from code in this repo when
+the docs are built, and that code is type-checked and tested in CI; the file is named under each one.
 
 ### Set up a project
 
-In `tsconfig.json`, point JSX at Spar:
-
-```json
-{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "spar" } }
-```
+In `tsconfig.json`, point JSX at Spar: `"jsx": "react-jsx"` and `"jsxImportSource": "spar"` under
+`compilerOptions` (this repo sets them once, in `tsconfig.base.json`).
 
 In `vite.config.ts`, add the build check and the same JSX setting:
 
@@ -1674,10 +2800,13 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [sparJsx],
   oxc: { jsx: { runtime: "automatic", importSource: "spar" } },
+  server: { host: "127.0.0.1", port: 4180 },
 })
 ```
 
-(`apps/stories/vite.config.ts`. For `Bun.build` use `spar/transform/bun`, as `apps/demo/scripts/build.ts` does.)
+(`apps/stories/vite.config.ts`)
+
+For `Bun.build` use `spar/transform/bun`, as `apps/demo/scripts/build.ts` does.
 
 ### A store
 
@@ -1760,32 +2889,62 @@ export const Dropdown = compose(
     onPick: Props.Callback(Schema.String),
   }),
   withUiState("open", Schema.Boolean, false),
-)((props) => <div class="dropdown">...</div>)
+  withKey("Escape", (props) => UiState.set(props.open, false)),
+)((props) => (
+  <div class="dropdown">
+    <button aria-expanded={props.open} onClick={UiState.update(props.open, (open) => !open)}>
+      {props.label}
+    </button>
+    <Show when={props.open}>
+      <ul role="menu" aria-label={props.label}>
+        <For each={props.items} by={(item) => item}>
+          {(item, key) => (
+            <li role="menuitem" onClick={[props.onPick(key), UiState.set(props.open, false)]}>
+              {item}
+            </li>
+          )}
+        </For>
+      </ul>
+    </Show>
+  </div>
+))
+```
 
-export const Toolbar = compose(withUiState("sort", Schema.String, "Newest"))((props) => (
+(`packages/spar/test/composed.tsx`)
+
+```tsx
+export const Toolbar = compose(
+  withUiState("sort", Schema.String, "Newest"),
+  withUiState("show", Schema.String, "Everything"),
+)((props) => (
   <header>
     <Dropdown
       label="Sort by"
-      items={["Newest", "Oldest"]}
+      items={["Newest", "Oldest", "Largest"]}
       onPick={(item) => UiState.set(props.sort, item)}
     />
+    <Dropdown
+      label="Show"
+      items={["Everything", "Mine"]}
+      onPick={(item) => UiState.set(props.show, item)}
+    />
+    <output aria-label="Sort">{props.sort}</output>
+    <output aria-label="Shown">{props.show}</output>
   </header>
 ))
 ```
 
-(`packages/spar/test/composed.tsx`, which also has a query, `For`, `Show` and your own enhancer)
+(`packages/spar/test/composed.tsx`)
 
-An enhancer is a plain function from the props so far to an Effect of what it adds, so your own is
-one line: `(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`.
-A group of enhancers is `compose(...)` without a view, and is used like any other.
+That file also has a query, `For`, `Show` and an enhancer of its own. An enhancer is a plain
+function from the props so far to an Effect of what it adds, so your own is one line:
+`(props: { readonly name: string }) => Effect.succeed({ initials: props.name.slice(0, 1) })`. A
+group of enhancers is `compose(...)` without a view, and is used like any other.
 
 ### Mount it
 
-```ts
-import { Effect } from "effect"
-import { App } from "spar"
-
-const program = Effect.gen(function* () {
+```tsx
+export const program = Effect.gen(function* () {
   const target = yield* Effect.fromNullishOr(document.getElementById("root"))
 
   return yield* App.mount(Counter, {
@@ -1793,34 +2952,33 @@ const program = Effect.gen(function* () {
     layer: CounterStore.layer,
   })
 })
-
-Effect.runFork(program)
 ```
 
-A store's layer needs nothing from you: it brings its own source of ids. Leave the layer out and
-it does not compile. `App.mount` only accepts a component with no errors left and a layer that
-provides everything it needs. What a child written in JSX needs is not in its parent's type,
-because TypeScript gives every JSX expression the same type, so the Vite plugin checks it when you
-build: a child needing a service the mount's layer does not provide stops the build.
+(`packages/spar/test/gettingStarted.test.tsx`)
+
+Run it with `Effect.runFork(program)`. A store's layer needs nothing from you: `App.mount` provides
+the one state its slot lives in. Leave the layer out and it does not compile. `App.mount` only
+accepts a component with no errors left and a layer that provides everything it needs. What a child
+written in JSX needs is not in its parent's type, because TypeScript gives every JSX expression the
+same type, so the Vite plugin checks it when you build: a child needing a service the mount's layer
+does not provide stops the build.
 
 ### Test it
 
-```ts
-import { expect, it } from "@effect/vitest"
-import { Effect } from "effect"
-import * as Testing from "spar/testing"
+```tsx
+export const theCounterCounts = Effect.gen(function* () {
+  yield* Testing.mount(Counter)
+  yield* Testing.click("button", "Add one")
 
-it.live("the counter counts", () =>
-  Effect.gen(function* () {
-    yield* Testing.mount(Counter)
-    yield* Testing.click("button", "Add one")
+  const count = yield* Testing.find("status", "Count")
 
-    const count = yield* Testing.find("status", "Count")
-
-    yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
-  }).pipe(Effect.provide(CounterStore.layer)),
-)
+  yield* Testing.eventually(() => expect(count.textContent).toBe("1"))
+}).pipe(Effect.provide(CounterStore.layer))
 ```
+
+(`packages/spar/test/gettingStarted.test.tsx`)
+
+`it.live("the counter counts", () => theCounterCounts)` runs it with `@effect/vitest`.
 
 ### Where to go next
 
@@ -1837,12 +2995,10 @@ Timers are Effect schedules. Turn the stream into a reactive value in the compon
 stops when the component unmounts.
 
 ```ts
-const ticks =
-  yield *
-  Reactive.fromStream(
-    0,
-    Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.map((count) => count + 1)),
-  )
+const everySecond = Reactive.fromStream(
+  0,
+  Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.map((count) => count + 1)),
+)
 ```
 
 (`packages/spar/test/events.test.ts`)
@@ -1857,15 +3013,18 @@ Use `effect/socket`. Decode each message with a Schema, then either show it
 ### Close something on Escape or an outside press
 
 ```ts
-yield * Events.onDocument("pointerdown", UiState.set(open, false))
-yield *
-  Events.onDocument("keydown", (event) => (event.key === "Escape" ? UiState.set(open, false) : []))
+const closedOnEscapeOrOutside = Effect.fnUntraced(function* (open: UiState.UiState<boolean>) {
+  yield* Events.onDocument("pointerdown", UiState.set(open, false))
+  yield* Events.onDocument("keydown", (event) =>
+    event.key === "Escape" ? UiState.set(open, false) : [],
+  )
+})
 ```
+
+(`apps/demo/src/mail/Thread.ts`)
 
 and stop presses inside from reaching the document: `<span onPointerdown={Events.stop([])}>`.
 For a layer above the page use `View.portal` with `Overlay.dismissable`.
-
-(`apps/demo/src/mail/Thread.ts`)
 
 ### A dialog with a form
 
@@ -1873,14 +3032,43 @@ Wrap the form component with the kit's `Dialog` and mount it while some UI state
 is mounted fresh each time the dialog opens.
 
 ```ts
-yield *
-  pipe(
-    when("AddingProject"),
-    Reactive.when(
-      Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
-      closing,
+const dialogs = Effect.fnUntraced(function* (editing: UiState.UiState<Editing>) {
+  const onClose = UiState.set(editing, { _tag: "Nothing" })
+  const shared = { editing, onClose }
+  const closing = { onClose }
+  const when = (tag: Editing["_tag"]) => Reactive.map(editing, (now) => now._tag === tag)
+
+  return [
+    yield* pipe(
+      when("Starting"),
+      Reactive.when(
+        Dialog({ id: "start", title: "Start an agent" }, View.child(StartForm, shared)),
+        closing,
+      ),
     ),
-  )
+    yield* pipe(
+      when("AddingProject"),
+      Reactive.when(
+        Dialog({ id: "project", title: "New project" }, View.child(ProjectForm, shared)),
+        closing,
+      ),
+    ),
+    yield* pipe(
+      when("Tagging"),
+      Reactive.when(
+        Dialog({ id: "tags", title: "Edit tags" }, View.child(TagsForm, shared)),
+        closing,
+      ),
+    ),
+    yield* pipe(
+      when("Moving"),
+      Reactive.when(
+        Dialog({ id: "move", title: "Move to a project" }, View.child(MoveForm, shared)),
+        closing,
+      ),
+    ),
+  ]
+})
 ```
 
 (`apps/sidebar/src/Sidebar.ts`)
@@ -1916,9 +3104,9 @@ export class AgentStarts extends Context.Service<
 }
 ```
 
-Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.
-
 (`apps/sidebar/src/BoardStore.ts`)
+
+Show `outbox.pending` and `outbox.dead` so the person can see what has not been sent.
 
 ### Tracing
 
@@ -1929,10 +3117,11 @@ Every component mount is a span named after its view and every store command is 
 const telemetry = Otlp.layerJson({
   baseUrl: `${location.origin}/otlp`,
   resource: { serviceName: "spar-sidebar" },
-}).pipe(Layer.provide(FetchHttpClient.layer))
-
-Effect.runFork(Effect.provide(program, telemetry))
+  tracerExportInterval: "1 second",
+}).pipe(Layer.provide(Backend.layerTelemetry))
 ```
+
+(`apps/sidebar/src/main.ts`)
 
 Post to your own origin and forward from the server, so the browser needs no cross-origin access to
 the collector. `apps/demo/scripts/site.ts` forwards `/otlp` to `OTLP_ENDPOINT` when it is set and
@@ -1943,16 +3132,107 @@ drops traces otherwise.
 Mount the real component and provide test layers for its services.
 
 ```ts
-it.live("a failed load is shown by the view that recovers its error", () =>
-  Effect.gen(function* () {
-    const probe = yield* Probe
+const failedLoadIsShown = Effect.gen(function* () {
+  const probe = yield* Probe
 
-    yield* mount(LoaderPage)
-    yield* Deferred.fail(probe.loaded, new LoadFailed({ message: "The report is missing." }))
+  yield* mount(LoaderPage)
+  yield* Deferred.fail(probe.loaded, new LoadFailed({ message: "The report is missing." }))
 
-    expect((yield* find("alert")).textContent).toBe("The report is missing.")
-  }).pipe(Effect.provide(layer)),
-)
+  expect((yield* find("alert")).textContent).toBe("The report is missing.")
+}).pipe(Effect.provide(layer))
+
+describe("rendering", () => {
+  it.live("a component's pure view can be taken back out and shown with sample props", () =>
+    Effect.gen(function* () {
+      yield* mount(LoaderStory)
+
+      expect((yield* find("heading", "Sample title")).textContent).toBe("Sample title")
+      expect(LoaderPage.view).toBe(LoadedView)
+    }),
+  )
+
+  it.live("a store change updates the bound text and keeps the surrounding nodes", () =>
+    Effect.gen(function* () {
+      const board = yield* Board
+      const probe = yield* Probe
+
+      yield* mount(BoardPanel)
+
+      const total = yield* find("status", "Total")
+      const button = yield* find("button", "Add item")
+
+      yield* board.commands.added({ label: "From a command" })
+      yield* Effect.sync(() => button.click())
+      yield* findText("From the button")
+
+      expect(total.textContent).toBe("2")
+      expect(yield* find("status", "Total")).toBe(total)
+      expect(yield* Ref.get(probe.mounts)).toBe(1)
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a keyed list keeps each row's node through renames, reorders and removals", () =>
+    Effect.gen(function* () {
+      const board = yield* Board
+
+      yield* mount(BoardPanel)
+      yield* board.commands.added({ label: "Alpha" })
+      yield* board.commands.added({ label: "Beta" })
+
+      const alpha = yield* findText("Alpha")
+      const beta = yield* findText("Beta")
+
+      yield* board.commands.renamed({ id: "item-1", label: "Alpha, renamed" })
+      yield* board.commands.reversed()
+      yield* findText("Alpha, renamed")
+
+      expect(yield* labels).toEqual(["Beta", "Alpha, renamed"])
+      expect(screen.getAllByRole("listitem")).toEqual([beta, alpha])
+
+      yield* board.commands.removed({ id: "item-2" })
+      yield* eventually(() => expect(screen.getAllByRole("listitem")).toEqual([alpha]))
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a conditional mounts its component when shown and cancels its scope when hidden", () =>
+    Effect.gen(function* () {
+      const probe = yield* Probe
+
+      yield* mount(Disclosure)
+
+      const toggle = yield* find("button", "Toggle details")
+
+      expect(screen.queryByRole("note")).toBeNull()
+
+      yield* Effect.sync(() => toggle.click())
+
+      expect((yield* find("note")).textContent).toBe("Now you see me")
+
+      yield* Effect.sync(() => toggle.click())
+      yield* gone("note")
+
+      expect(yield* Ref.get(probe.mounts)).toBe(1)
+      expect(yield* Ref.get(probe.unmounts)).toBe(1)
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a pending component shows its placeholder until the load succeeds", () =>
+    Effect.gen(function* () {
+      const probe = yield* Probe
+
+      yield* mount(LoaderPage)
+
+      expect((yield* find("status")).textContent).toBe("Loading report")
+
+      yield* Deferred.succeed(probe.loaded, "Quarterly report")
+
+      expect((yield* find("heading", "Quarterly report")).textContent).toBe("Quarterly report")
+      expect(screen.queryByRole("status")).toBeNull()
+    }).pipe(Effect.provide(layer)),
+  )
+
+  it.live("a failed load is shown by the view that recovers its error", () => failedLoadIsShown)
+})
 ```
 
 (`packages/spar/test/render.test.ts`)
@@ -1960,8 +3240,9 @@ it.live("a failed load is shown by the view that recovers its error", () =>
 ### A long action
 
 A handler's actions start in event order and may overlap if they wait on something. Keep handlers
-short: a store command, a UI state change, a navigation. Put slow work in a store reaction, the
-outbox, or a form's submit (which ignores a second submit while the first is running).
+short: a store command, a UI state change, a navigation. Put slow work in an Effect on a service,
+run by a `FiberHandle` so a repeat is ignored while it runs, or on an outbox channel for what must
+reach the server. A form's submit already ignores a second submit while the first is running.
 
 
 # Coming from React
@@ -2005,20 +3286,20 @@ outbox, or a form's submit (which ignores a second submit while the first is run
 
 Both are built on Effect and both keep app state changes explicit and replayable. The differences:
 
-| Foldkit                                              | Spar                                                                                     |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| One Model for the whole app, described by a Schema   | Stores for app state, `UiState` for a component's own state (open menus, what was typed) |
-| Messages and one `update`                            | Store actions with a reducer each; commands are `store.commands.<name>(payload)`         |
-| Commands returned from `update`                      | An Effect on a service that sends commands, and `Outbox.channel` for what must be sent   |
-| `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                    |
-| `h.div([...], [...])`                                | JSX                                                                                      |
-| Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                  |
-| Submodels and OutMessages                            | Components and props; a child's handlers are Effects the parent passes in                |
-| Routes from parser combinators                       | `Router.route(path, Schema)` values and `Router.outlet`                                  |
-| `foldkit/story` and `foldkit/scene`                  | Stores tested as services; components tested with `spar/testing` by role                 |
-| Crash view                                           | `View.crash` per part, plus `App.CrashReporter`                                          |
-| DevTools overlay and MCP server                      | Devtools from the Vite plugin, an MCP server and a CLI (`docs/devtools-compared.md`)     |
-| Server rendering and hydration                       | `Server.render` and `App.hydrate`, the same components chosen by layers                  |
+| Foldkit                                              | Spar                                                                                                                |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| One Model for the whole app, described by a Schema   | One state tree: stores for app data and `UiState` for a component's own state are slots in it, each with its Schema |
+| Messages and one `update`                            | Store actions with a reducer each; commands are `store.commands.<name>(payload)`                                    |
+| Commands returned from `update`                      | An Effect on a service that sends commands, and `Outbox.channel` for what must be sent                              |
+| `view(model, h)` re-runs and a virtual DOM is diffed | A view runs once; reactive values update single nodes                                                               |
+| `h.div([...], [...])`                                | JSX                                                                                                                 |
+| Subscriptions as a function of the Model             | Streams in a `withEffect` enhancer, released on unmount                                                             |
+| Submodels and OutMessages                            | Components and props; a child's handlers are Effects the parent passes in                                           |
+| Routes from parser combinators                       | `Router.route(path, Schema)` values and `Router.outlet`                                                             |
+| `foldkit/story` and `foldkit/scene`                  | Stores tested as services; components tested with `spar/testing` by role                                            |
+| Crash view                                           | `View.crash` per part, plus `App.CrashReporter`                                                                     |
+| DevTools overlay and MCP server                      | Devtools from the Vite plugin, an MCP server and a CLI (`docs/devtools-compared.md`)                                |
+| Server rendering and hydration                       | `Server.render` and `App.hydrate`, the same components chosen by layers                                             |
 
 ### Porting a screen
 
@@ -2026,16 +3307,17 @@ Both are built on Effect and both keep app state changes explicit and replayable
 
 - Model fields that were only about the screen (`menu`, `tagging`, `naming`, the filter text) became
   `UiState` or form state inside the component that owns them. They are no longer saved or replayed.
-- Model fields that are real data (agents, projects, which sections are collapsed) became a durable
-  store.
+- Model fields that are real data (agents, projects, which sections are collapsed) became a saved
+  store (`layerSaved`).
 - Each Message that changed data became a store action. Messages that only changed screen state
   became `UiState.set` in a handler.
 - The pure functions that turned data into sections moved over unchanged in spirit
   (`src/domain.ts`) and are tested the same way.
 - `update` tests became store tests; scene tests became `spar/testing` or browser scenarios.
 
-What you give up: one Model value holding everything. The one log, time travel over stores and
-screen state together, forking and server rendering are all there.
+What you give up: declaring the whole Model in one file. The app's state is still one value, one
+tree of slots, and the one log, time travel over stores and screen state together, forking and
+server rendering are all there.
 What you get: rows that update without re-running a view, local state without ceremony, and errors
 and services checked at the mount.
 
@@ -2056,7 +3338,7 @@ Model. These follow from that shape, not from how well it is built:
 
 - **State and server data beside the component that uses them.** A Spar component asks for its
   data in its own Effect (`TheQuery.ask(input)`), and a store can ship with a view
-  (`Store.with`, `Query.beside`). In the Elm architecture a child's data is a field in the
+  (`SomeStore.with(Component)`, `SomeQuery.beside(Component)`). In the Elm architecture a child's data is a field in the
   Model, a Message for its answer and a branch in `update`, wired in by each parent. In the
   five-segment navigation written in Foldkit, the click's branch of `update` lists the five
   lookups, and the branch that handles an answer starts the sixth
@@ -2078,16 +3360,18 @@ and the backend (`docs/devtools-compared.md`).
 
 ### What Foldkit does better
 
-- **One value holds everything.** The whole app's state is one Model with one Schema. Spar has
-  several stores and UI state, joined by a log; no single value is the app.
+- **The one value is declared in one place.** Both hold the whole app's state in one value: Spar's
+  stores, components' own state and query caches are slots in one tree, read whole with
+  `State.current.snapshot` and rewound together. Foldkit declares that value as one Model with one
+  Schema in one file; in Spar each slot declares its own Schema where it is used.
 - **Every Message is handled in one place,** one `update` with a match over the Messages. Spar
   does not check that every action has considered every state of a store.
 - **Loading states are states.** `AsyncData` has `Refreshing(data)` and `Stale(error, data)`
   as cases of their own. In Spar you read `status` and `value` together.
 - **Speed on a few list operations, depending on the run.** In the latest run of this repo's
-  benchmark Foldkit is ahead of Spar only at removing a row. In earlier runs it was also ahead at
-  swapping two rows and at changing one row among 10,000 timed to the next frame, so differences
-  of a few milliseconds here are within the noise. Spar uses less memory and ships less
+  benchmark Foldkit is ahead of Spar at swapping two rows (12.6 ms against 17.1) and at removing
+  one (15.2 ms against 16.2), and the two tie at changing one row among 10,000 timed to the next
+  frame. Earlier runs ordered these differently, so a few milliseconds here are within the noise. Spar uses less memory and ships less
   JavaScript (`docs/benchmarks.md`).
 - **Tools for testing a whole screen as data** (`foldkit/story`, `foldkit/scene`). Spar tests
   stores as services and components by role.
@@ -2122,17 +3406,17 @@ follows is what Solid says it does, not what was seen it do, except where the be
 
 ### Data that arrives later
 
-|                                   | Solid 2.0                                                                                           | Spar                                                                                                                                     |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Declaring it                      | Any computation that returns a promise: `createMemo(() => fetchUser(id()))`                         | A query class with Schemas, then `yield* TheQuery.ask(input)` in the component                                                           |
-| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `status`                                                              |
-| One piece that needs another      | A computation reads the other's value, so it runs when that value is ready                          | The second query's input is made from the first one's value; it is `waiting` until then                                                  |
-| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `status` is `loading`; `latest` keeps the last loaded value                                                                              |
-| A request that is superseded      | The earlier run is cleaned up, and an AbortController registered in it can cancel the request       | The earlier answer is refused when it lands (`SPAR_LATE_ANSWER`). The request is not cancelled                                           |
-| A cache by input, a stale time    | Not in the core: a computation holds the value for its current inputs                               | Yes: entries keyed by the encoded input, `staleAfter`, refetch on focus and reconnect                                                    |
-| A change shown before it is saved | `action` with `createOptimisticStore`; the optimistic value reverts by itself when the work settles | `patchedBy` with `Store.outbox`; the send survives a reload and is retried, and if it fails for good the query loads what the server has |
-| Failure                           | `<Errored>`, or an effect's `error` option                                                          | The handle's `error`, typed by the query's failure Schema; `retry` takes a schedule                                                      |
-| Asking again                      | `refresh(user)`, with `affects(user)` to show it as pending                                         | The handle's `refetch`, `TheQuery.invalidate`, `invalidatedBy(action)`                                                                   |
+|                                   | Solid 2.0                                                                                           | Spar                                                                                                                                                               |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Declaring it                      | Any computation that returns a promise: `createMemo(() => fetchUser(id()))`                         | A query class with Schemas, then `yield* TheQuery.ask(input)` in the component                                                                                     |
+| Reading it before it is there     | The read is "not ready" and the nearest `<Loading>` shows its fallback                              | Nothing waits: the handle is there at once, and the view shows its `status`                                                                                        |
+| One piece that needs another      | A computation reads the other's value, so it runs when that value is ready                          | The second query's input is made from the first one's value; it is `waiting` until then                                                                            |
+| While the input changes           | `isPending(() => user())`, `latest(id)`, and `createDeferred` to keep the last value on screen      | `status` is `loading`; `latest` keeps the last loaded value                                                                                                        |
+| A request that is superseded      | The earlier run is cleaned up, and an AbortController registered in it can cancel the request       | The earlier answer is ignored when it lands, because it is not for the newest request. The request is not cancelled                                                |
+| A cache by input, a stale time    | Not in the core: a computation holds the value for its current inputs                               | Yes: entries keyed by the encoded input, `staleAfter`, refetch on focus and reconnect                                                                              |
+| A change shown before it is saved | `action` with `createOptimisticStore`; the optimistic value reverts by itself when the work settles | `TheQuery.patch(input, f)` beside an `Outbox.channel` send; the send survives a reload and is retried, and on `Outbox.givenUp` the query loads what the server has |
+| Failure                           | `<Errored>`, or an effect's `error` option                                                          | The handle's `error`, typed by the query's failure Schema; `retry` takes a schedule                                                                                |
+| Asking again                      | `refresh(user)`, with `affects(user)` to show it as pending                                         | The handle's `refetch`, or `TheQuery.invalidate` from any Effect                                                                                                   |
 
 **The same idea in both.** Data that arrives later is a reactive value. What depends on it is
 known from what reads it, so nobody lists dependencies or writes a loader beside the route, and
@@ -2144,10 +3428,11 @@ independent pieces load side by side.
 - A change in flight is a first-class thing: the screen holds what it showed, `isPending` says a
   change is on the way, and an optimistic value reverts by itself.
 - A superseded request can be cancelled, not only ignored.
-- It is small and quick to start. In this repo's benchmark the Solid 2 table ships 23.7 kB of
-  JavaScript (gzip) against Spar's 70.0 kB, starts in 4.5 ms against 9.3 ms, and changes one row
-  among 10,000 in 0.5 ms against 1.2 ms. Spar is ahead of it at updating, selecting, swapping and
-  removing rows among 1,000 (`docs/benchmarks.md`).
+- It is smaller, quicker to start and quicker at most table work. In this repo's benchmark the
+  Solid 2 table ships 23.7 kB of JavaScript (gzip) against Spar's 60.6 kB, starts in 6.5 ms
+  against 11.0 ms, changes one row among 10,000 in 0.8 ms against 1.0 ms, and selects, swaps and
+  removes rows among 1,000 faster. Spar is ahead of it only at updating every 10th row
+  (`docs/benchmarks.md`).
 - Its run-time diagnostics go much further: 75 codes in `diagnostics.json` against Spar's 34,
   among them slow scopes, effects that write their own source, and requests thrown away.
 
@@ -2210,7 +3495,7 @@ Read from the README of Solid Router's main branch, whose 1.0 line targets Solid
 | What preloading runs                    | The target route's `preload` functions and lazy components                                        | A rehearsal that mounts the app at the target without drawing it, which reaches every `ask`                                                     |
 | How long preloaded data counts as fresh | 5 seconds, so the preload and the route's own read share one fetch                                | Data a preload or the server loaded is used once by the first real read, whatever `staleAfter` is; after that, `staleAfter` (500 ms unless set) |
 | Going back                              | A back and forward cache for up to 5 minutes                                                      | The query's cache, by `staleAfter`; scroll position is restored                                                                                 |
-| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `invalidatedBy(action)`, `patchedBy(action)`; the refetch is a second request                                                                   |
+| After a mutation                        | `revalidate` by key; single flight returns the refreshed route data in the mutation's response    | `TheQuery.invalidate` or `TheQuery.patch` in the Effect that made the change; the refetch is a second request                                   |
 
 Two things Solid Router does that bear on Spar's list of open cases. Preloaded data is fresh for
 a few seconds by itself; Spar uses data loaded ahead once whatever the stale time, and keeps any
@@ -2603,10 +3888,10 @@ Built since, and smaller than they sound, but not done:
 - **Generated ids in `@spar/ui` come from a counter, not a store.** A tooltip or a listbox asks
   for an id when it mounts. Decided to leave it: an id is not state anyone would rewind to, and an
   action for every id would bury the log. Toasts did move to a store.
-- **A fork lives in the page.** A durable store's saved log is not rewritten by a fork, so a reload
+- **A fork lives in the page.** A saved store's saved state is not rewritten by a fork, so a reload
   returns to what was saved. Decided not to build keeping forks on the device as a leftover: a
   parked branch holds each store's state in memory as a way to resume it, and to save it the
-  branches would have to become plain data that every kind of store can be loaded from, durable
+  branches would have to become plain data that every kind of store can be loaded from, saved
   ones and ones with an outbox included. A store's log can be exported and loaded again, which is
   the way to keep one today.
 - **The showcase is not drawn on the server.** `apps/ssr` shows server rendering, with a routed
@@ -2620,9 +3905,8 @@ Built since, and smaller than they sound, but not done:
   everything code can do: a layer built by a function declaration, a component from a package, or
   a service reached only through `Effect.service` is not seen, and such a child still fails when
   it mounts. The Bun plugin checks one file at a time.
-- **The bundle is large and starts slower than Solid's.** The benchmark app loads 58.4 kB gzipped
-  at start (Solid 6.1 kB, React 68.0 kB), down from 68.6 kB once the router, the device journal
-  and diagnostic text for builds stopped shipping to apps that do not use them. About 35 kB is the floor
+- **The bundle is large and starts slower than Solid's.** In the published benchmark the app loads
+  60.6 kB gzipped at start (Solid 6.1 kB, React 68.0 kB). About 35 kB is the floor
   any Effect front end pays; the start-up time is the browser parsing and running that bundle, not
   any one slow function (`docs/benchmarks.md`). `bun run --cwd apps/bench startup` profiles it:
   on sthdev, Spar waits about 4.7 ms longer than Solid while its 200 kB bundle (minified) loads and
@@ -3678,25 +4962,22 @@ const hidden = (state: string) =>
 
 const connection = (type: string) => Effect.sync(() => window.dispatchEvent(new Event(type)))
 
+const askedTogether = Effect.gen(function* () {
+  const users = yield* Users.ask()
+  const stock = yield* Stock.ask()
+  const firstUser = Reactive.map(users.value, (loaded) => Option.fromNullishOr(loaded?.[0]?.id))
+  const orders = yield* Orders.ask(firstUser)
+
+  return { users, stock, orders }
+})
+
 describe("the natural way: a value from one place feeds a query declared in another", () => {
   it.effect(
     "what waits for nothing starts at once, and a dependent query waits only for its input",
     () =>
       Effect.gen(function* () {
         const { built, noted, whats, answer } = yield* opened
-        const declared = yield* Effect.provide(
-          Effect.gen(function* () {
-            const users = yield* Users.ask()
-            const stock = yield* Stock.ask()
-            const firstUser = Reactive.map(users.value, (loaded) =>
-              Option.fromNullishOr(loaded?.[0]?.id),
-            )
-            const orders = yield* Orders.ask(firstUser)
-
-            return { users, stock, orders }
-          }),
-          built,
-        )
+        const declared = yield* Effect.provide(askedTogether, built)
 
         yield* Effect.yieldNow
         expect(yield* whats).toEqual(["users", "stock"])

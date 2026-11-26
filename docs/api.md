@@ -33,31 +33,9 @@ The build names each component after the constant it is
 given to. A named view can stand at the end instead of an inline one:
 `compose(withHover)(CardView)`.
 
-```tsx
-export const withHover = compose(
-  withUiState("hovered", Schema.Boolean, false),
-  withHandlers((props) => ({
-    onEnter: UiState.set(props.hovered, true),
-    onLeave: UiState.set(props.hovered, false),
-  })),
-)
+<<< packages/spar/test/composed.tsx#withHover
 
-export const Card = compose(
-  withProps({ title: Schema.String }),
-  withHover,
-)((props) => (
-  <article
-    aria-label={props.title}
-    class={{ card: true, raised: props.hovered }}
-    onPointerenter={props.onEnter}
-    onPointerleave={props.onLeave}
-  >
-    {props.title}
-  </article>
-))
-```
-
-(`packages/spar/test/composed.tsx`)
+<<< packages/spar/test/composed.tsx#Card
 
 ### A component that draws itself
 
@@ -66,49 +44,11 @@ Write the component's type out (`View.Component<Props>`), because TypeScript can
 type that refers to itself. Each row has its own UI state, kept under its key, so closing a
 folder and opening it again starts its children closed.
 
-```tsx
-export const FolderRow: View.Component<{ readonly folder: Reactive.Reactive<Folder> }> = compose(
-  withProps({ folder: Props.Reactive(Folder) }),
-  withUiState("open", Schema.Boolean, false),
-  withHandlers((props) => ({
-    name: Reactive.map(props.folder, nameOf),
-    folders: Reactive.map(props.folder, (folder) => folder.folders),
-    empty: Reactive.map(props.folder, (folder) => folder.folders.length === 0),
-    onToggle: UiState.update(props.open, (open) => !open),
-  })),
-)((props) => (
-  <li>
-    <button
-      type="button"
-      aria-expanded={props.open}
-      disabled={props.empty}
-      onClick={props.onToggle}
-    >
-      {props.name}
-    </button>
-    <Show when={props.open}>
-      <ul>
-        <For each={props.folders} by={nameOf}>
-          {(folder) => <FolderRow folder={folder} />}
-        </For>
-      </ul>
-    </Show>
-  </li>
-))
-```
-
-(`packages/spar/test/folderTree.tsx`)
+<<< packages/spar/test/folderTree.tsx#FolderRow
 
 The Schema of a tree refers to itself too: `Schema.suspend` and a written-out type.
 
-```tsx
-export const Folder: Schema.Codec<Folder> = Schema.Struct({
-  name: Schema.String,
-  folders: Schema.Array(Schema.suspend((): Schema.Codec<Folder> => Folder)),
-})
-```
-
-(`packages/spar/test/folderTree.tsx`)
+<<< packages/spar/test/folderTree.tsx#Folder
 
 ## View
 
@@ -129,41 +69,25 @@ as `.view` and the inspector shows its name.
 | `View.branch(test, Other)`             | Mounts `Other` instead when `test(props)` holds.                                                                                                                                                   |
 | `View.portal`                          | Mounts the component in a layer above the app.                                                                                                                                                     |
 
-```tsx
-export const AgentPage = pipe(
-  compose(
-    withProps({ id: Schema.String }),
-    withAgent,
-    withStore(Router.Router, (router) => ({ home: router.link(home, {}) })),
-  )((props) => (
-
-    ...
-
-  )),
-  View.recover(AgentNotFound, AgentMissingView),
-  View.pending(AgentLoadingView),
-)
-```
-
-(`apps/sidebar/src/AgentPage.tsx`)
+<<< apps/sidebar/src/AgentPage.tsx#AgentPage
 
 ## Props
 
 A view's props are declared as a record of Schemas. Plain data uses `Schema` as it is; what is
 not data has a Schema of its own kind:
 
-| Schema                                                           | A prop that is                                       |
-| ---------------------------------------------------------------- | ---------------------------------------------------- |
-| `Props.Reactive(schema)`                                         | a reactive value of that type                        |
-| `Props.State(schema)`                                            | UI state the view may also set                       |
-| `Props.Action`                                                   | something to run from a handler                      |
-| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named |
-| `Props.Callback(schema)`                                         | a function from a value to an action                 |
-| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element          |
-| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits          |
+| Schema                                                           | A prop that is                                                                                              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Props.Reactive(schema)`                                         | a reactive value of that type                                                                               |
+| `Props.State(schema)`                                            | UI state the view may also set                                                                              |
+| `Props.Action`                                                   | something to run from a handler: an Effect (which may return the action to run next), a UI write, or a list |
+| `Props.Handler("keydown")`, `Props.Handler("input", "textarea")` | a handler for that event, on that element when named                                                        |
+| `Props.Callback(schema)`                                         | a function from a value to an action                                                                        |
+| `Props.Element`, `Props.Handle`                                  | an element to place, a handle to an element                                                                 |
+| `Form.Field(schema)`, `Router.Link`, `Overlay.Placement`         | a form field, a link, where an overlay sits                                                                 |
 
-`Props.kind(guard, show)` makes one for a type of your own. `Props.allShown(fields, props)` gives a
-view's props as plain values, which is what the inspector and the MCP tools read.
+For a type of your own, `Schema.declare(guard)` is a prop kind like any other. The inspector and
+the MCP tools show each prop as plain JSON where its Schema can encode it.
 
 ## Markup
 
@@ -188,20 +112,7 @@ the current value.
 | `Reactive.fromStream(initial, stream)`                                                        | Any stream as a reactive value, owned by the scope.                   |
 | `Reactive.fromSubscriptionRef(ref)`, `Reactive.succeed(value)`, `Reactive.make(get, changes)` | Other ways to make one.                                               |
 
-```ts
-const rows =
-  yield *
-  pipe(
-    Reactive.map(props.section, (section) => section.rows),
-    Reactive.mapBy(
-      (agent: Agent) => agent.id,
-      AgentRow,
-      (agent, id) => ({ agent, id, editing: props.editing, dragging: props.dragging }),
-    ),
-  )
-```
-
-(`apps/sidebar/src/Sidebar.ts`)
+<<< apps/sidebar/src/Sidebar.ts#agentRows
 
 ## UiState
 
@@ -213,10 +124,7 @@ down, with a row's key in brackets (`Board / Note[a]`), and a number when two sh
 (`Panel#2`). It is there while the component is mounted and gone when it leaves. The tree is
 the same one state that stores live in, so the devtools and agents read, set and rewind UI state
 through it. Give an app or a test its own with `State.layer`; a server render always has its own.
-
-```tsx
-<button onClick={UiState.update(open, (shown) => !shown)}>Options</button>
-```
+A handler that flips one is `onClick={UiState.update(open, (shown) => !shown)}`.
 
 ## Store
 
@@ -247,15 +155,7 @@ is sent (`apps/sidebar/src/ResetCounter.tsx`, `docs/state-and-server-data.md`).
 
 ### A store beside its view
 
-```tsx
-export class NotesStore extends Store.Tag<NotesStore>()("sidebar/Notes", { ... }) {}
-
-const NotesPanel = compose(withProps({ id: Schema.String, title: Schema.String }), ...)(
-  (props) => <section aria-label={props.title}>...</section>,
-)
-
-export const Notes = NotesStore.with(NotesPanel)
-```
+<<< apps/sidebar/src/Notes.tsx
 
 `Notes` is one unit: mount it anywhere with `<Notes id="..." title="..." />` and nothing is wired at the
 app root. The store is made when the unit mounts and closed when it unmounts. Its key is the
@@ -271,28 +171,13 @@ folder is not page state and is left alone.
 
 ### Several tabs
 
-```mermaid
-sequenceDiagram
-  participant A as Tab A
-  participant D as Device
-  participant B as Tab B
-  A->>D: save request
-  A->>D: take lock
-  D-->>A: news from B
-  A->>D: append entry
-  A-)B: announce
-  B->>D: read news
-  Note over B: same state
-```
-
-Provide `Tabs.layerBrowser` in a browser and a durable store is one store across every open tab.
-A command takes a cross-tab lock, first applies whatever other tabs have recorded since, then
-records its own entry, so two tabs never write the same slot and a reducer always sees the latest
-state. Idle tabs hear about new entries and follow. A tab that fell behind a fold of old entries
-starts again from the saved state. Each command is written to the device before the lock is taken, so
-one made just before a reload or a close is carried out by the next tab to open (and reported as
-`Store.Abandoned` if that version no longer has the action). Without the layer a store behaves as if
-it were the only tab.
+A store placed with `TheStore.layerSaved` saves its state on the device in the same step as each
+command, so a reload or a close straight after a click loses nothing, and it starts from what was
+saved. Provide `Tabs.layerBrowser` in a browser and every open tab shows the same saved store: after
+saving, a tab tells the others, and each reads the saved state again (on the broadcast message and
+on the browser's own storage event, whichever arrives once the new value is visible). Two tabs that
+write at the same moment end on whichever saved last. Without the layer a store behaves as if it
+were the only tab.
 
 ## Outbox
 
@@ -320,15 +205,7 @@ Event props are `on` plus the DOM event name capitalised: `onClick`, `onKeydown`
 
 ## Form
 
-```ts
-const form = yield * Form.make(Named, { name: "" })
-
-return {
-  field: form.field("name"),
-  busy: form.submitting,
-  onSubmit: form.submit(({ name }) => store.commands.spaceAdded({ name })),
-}
-```
+<<< apps/sidebar/src/Sidebar.ts#ProjectForm
 
 A form's values, which fields have been left, whether a submit was tried and what the server
 rejected are the component's UI state, under a name such as `form (name)`. So typing, leaving a
@@ -351,16 +228,9 @@ the submit has worked, and not when the input was invalid or the server refused 
 
 ## Router
 
-```ts
-export const home = Router.route("/")
-export const agentRoute = Router.route("/agents/:id", Schema.Struct({ id: Schema.String }))
+<<< apps/sidebar/src/routes.ts
 
-page: yield *
-  Router.outlet({
-    routes: [Router.on(home, EmptyPageView), Router.on(agentRoute, AgentPage)],
-    otherwise: MissingPageView,
-  })
-```
+<<< apps/sidebar/src/Shell.tsx#withPage
 
 `Router.route(path, Schema)` decodes path and query params with a Schema. A path with `:params` cannot be declared without one, and the Schema must have every param the path names. A path ending in `/*` is a
 layout that stays mounted while inner pages change. `Router.under(parent, path, Schema)` declares a route inside such a layout: the path is added to the parent's, and the Schema must carry every param of the whole path. The service has `location`, `go(route, params)`,
@@ -400,8 +270,8 @@ sequenceDiagram
   Note over B: attach listeners
 ```
 
-`Server.render(Component, { layer })` runs the same component on a server and gives its HTML
-and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
+`Server.render(Component, { layer })` runs the same component on a server, drawn by the
+`Renderer.html` its layer gives, and gives its HTML and the state it drew from: each store's state encoded by its Schema, the UI state tree, and the
 trace of the render. `Server.renderToString` gives only the HTML. `Server.renderInPieces` sends the page as first drawn and then, as each query's data lands, that data and the finished HTML of each component it changed, put in place between that component's marks (`docs/routing-and-data.md`). Loading parts (`View.pending`)
 are waited for, so the page arrives complete; overlays are left out; `Events` values take their
 resting values (online, visible, no media query matching) and window listeners are not attached.
@@ -532,13 +402,7 @@ code.
 
 The devtools are not part of an app. In development the Vite plugin adds them:
 
-```ts
-import { sparDevtools } from "spar/devtools/vite"
-
-export default defineConfig({
-  plugins: [sparJsx, sparDevtools({ backends: ["http://127.0.0.1:4182"] })],
-})
-```
+<<< apps/sidebar/vite.config.ts
 
 It only acts on the dev server. A production build carries no devtools code at all
 (`apps/sidebar` checks its own build for that as part of `check`). `backends` are the servers
@@ -556,7 +420,7 @@ What the tools show, docked at the corner of the page:
   moment, and stepping opens the trace of the moment stepped to.
 - **Fork.** "Fork from here" carries the running program on from the moment being shown, in a new
   branch, and keeps the original. The Branches list switches between them. A fork lives in the
-  page: a durable store's saved log is not rewritten, so a reload returns to what was saved.
+  page: a saved store's saved state is not rewritten, so a reload returns to what was saved.
 - **Trace.** Any moment opens as a waterfall of its spans: the page's and the backends' on one
   time line, nested by parent, with how long each took and the failed ones marked.
 - **Stores.** Each store's actions and state, with Back, Forward, Live and Go to; export a log as
@@ -602,6 +466,28 @@ one that reported last.
 
 `App.mount(component, { target, layer })` never returns; interrupting it unmounts everything.
 `App.CrashReporter` is the reference to replace to receive crashes.
+
+### Any renderer, chosen by a layer
+
+Where a component is drawn is a `Renderer` service. `target` is the short way of giving the page's
+own renderer, `Renderer.dom(target)`; leave `target` out and give a `Renderer` in `layer` instead.
+The component and its view do not change between them, and an update writes the same one node.
+
+| Renderer                                           | Where it draws                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `Renderer.dom(target)`                             | The page, into `target`, with overlays above it                                       |
+| `Renderer.into(target, overlays)`                  | Any document's element; `spar/renderer/memory`'s `page()` makes one outside a browser |
+| `Terminal.layer(print)` (`spar/renderer/terminal`) | A document of its own, printed as text through `print` after each change              |
+| `Renderer.html`                                    | Text, for a server: each value read once, with the markers the browser takes over by  |
+
+<<< apps/demo/scripts/terminal.ts#program
+
+<<< apps/ssr/scripts/render-page.tsx#rendered
+
+(The first draws the demo's counter in a terminal, unchanged; the second renders a page as text with
+`Renderer.html`.) The first three draw into a document
+and keep it up to date, so `App.mount` takes them; `Renderer.html` writes a page once, so the
+`Server` functions take it. Given the other kind, each says which renderer it needs.
 
 ## spar/testing
 
