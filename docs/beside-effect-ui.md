@@ -92,5 +92,10 @@ docs show.
 
 ## Speed and size
 
-Both are in `docs/benchmarks.md`, measured on the same CI box as the others. The table app is
-57.0 kB gzipped in Spar and 60.5 kB in Effect UI at 6f86af8.
+Both are in `docs/benchmarks.md`, measured on the same CI box as the others. In the run at
+2fc0a51, Effect UI was ahead of Spar at selecting a row (5.3 ms against 7.2), clearing 1,000 rows
+(7.3 against 13.0) and starting up (26.9 against 34.5). Spar was ahead at swapping (12.9 against
+18.4), removing one row (16.4 against 23.2), replacing all rows (70.0 against 81.8) and changing
+one row among 10,000 (70.2 ms against 98.0 to the next frame, 1.4 against 8.3 until the DOM
+changed). Creating rows and memory were close. The table app ships 55.9 kB gzipped in Spar and
+59.1 kB in Effect UI. A few milliseconds move between runs, so read the ratios, not single cells.
